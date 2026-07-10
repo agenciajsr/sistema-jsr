@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-10T22:30:30.647Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-07-10T22:57:24.726Z"
 last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
-Plan: 2 of 9 in current phase
+Plan: 3 of 9 in current phase
 Status: Ready to execute
 Last activity: 2026-07-10
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 25min | 3 tasks | 34 files |
 | Phase 01 P02 | 35 | 3 tasks | 6 files |
+| Phase 01 P04 | 15min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,7 @@ Recent decisions affecting current work:
 - Roadmap: Painel Geral Unificado (Fase 6) é a última fase por ser um rollup que depende de tráfego, contratos e financeiro já existirem com dados reais.
 - [Phase 01]: shadcn CLI 4.13.x substituiu style/baseColor por presets nomeados; components.json escrito manualmente com valores legados new-york/neutral, validado funcionando com shadcn add
 - [Phase 01]: DIRECT_URL usa o host do connection pooler na porta 5432 (session mode), nao o host classico db.<ref>.supabase.co — Host classico de conexao direta nao resolveu (ENOTFOUND) neste ambiente - limitacao conhecida do Supabase quando o endpoint direto e IPv6-only sem add-on IPv4. Host do pooler na porta 5432 suporta os mesmos recursos de sessao.
+- [Phase 01]: contratoSchema usa z.coerce.number().positive() para valorMensal e refine() sobre strings YYYY-MM-DD para validar dataVencimento > dataInicio (evita ambiguidade de timezone com Date)
 
 ### Pending Todos
 
@@ -81,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T22:30:30.642Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-07-10T22:57:24.722Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
