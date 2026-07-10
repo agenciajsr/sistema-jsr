@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-06-PLAN.md and 01-07-PLAN.md
-last_updated: "2026-07-10T23:11:59.275Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-07-10T23:24:18.010Z"
 last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 78
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
-Plan: 7 of 9 in current phase
+Plan: 8 of 9 in current phase
 Status: Ready to execute
 Last activity: 2026-07-10
 
@@ -59,6 +59,7 @@ Progress: [███████░░░] 78%
 | Phase 01 P05 | 10min | 2 tasks | 4 files |
 | Phase 01 P06 | 15min | 2 tasks | 5 files |
 | Phase 01 P07 | 6min | 2 tasks | 2 files |
+| Phase 01 P08 | 12min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 01]: createClienteComContrato usa db.transaction e .returning({ id }) para obter o id do cliente recem-criado antes de inserir o primeiro contrato
 - [Phase 01]: criarUsuario chama requireAdmin() antes de validar/chamar a Admin API, bloqueando Membro o mais cedo possível na Server Action
 - [Phase 01]: Tela de usuário dividida em page.tsx (Server, gate de Admin) + formulario-usuario.tsx (Client, hooks) — limite obrigatório do App Router
+- [Phase 01]: z.input/z.output no useForm (3 generics do zodResolver) para resolver incompatibilidade de tipo quando o schema Zod usa .default() em um campo
+- [Phase 01]: Exclusao de cliente/contrato usa Server Actions inline (form action) definidas dentro do proprio Server Component de detalhe, mantendo a checagem role === admin e a copy exata no mesmo arquivo
+- [Phase 01]: ContratoForm evita o componente Dialog do shadcn (fora do Registry Safety do UI-SPEC), controlando visibilidade com useState
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T23:11:59.270Z
-Stopped at: Completed 01-06-PLAN.md and 01-07-PLAN.md
+Last session: 2026-07-10T23:24:18.006Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
