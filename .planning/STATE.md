@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-04-PLAN.md and 01-05-PLAN.md
-last_updated: "2026-07-10T22:57:24.726Z"
+stopped_at: Completed 01-03-PLAN.md, 01-04-PLAN.md and 01-05-PLAN.md
+last_updated: "2026-07-10T23:00:59.227Z"
 last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
-  percent: 44
+  completed_plans: 5
+  percent: 56
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
-Plan: 4 of 9 in current phase
+Plan: 5 of 9 in current phase
 Status: Ready to execute
 Last activity: 2026-07-10
 
-Progress: [████░░░░░░] 44%
+Progress: [█████░░░░░] 56%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [████░░░░░░] 44%
 *Updated after each plan completion*
 | Phase 01 P01 | 25min | 3 tasks | 34 files |
 | Phase 01 P02 | 35 | 3 tasks | 6 files |
+| Phase 01 P03 | 29min | 3 tasks | 10 files |
 | Phase 01 P04 | 15min | 2 tasks | 4 files |
 | Phase 01 P05 | 10min | 2 tasks | 4 files |
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01]: contratoSchema usa z.coerce.number().positive() para valorMensal e refine() sobre strings YYYY-MM-DD para validar dataVencimento > dataInicio (evita ambiguidade de timezone com Date)
 - [Phase 01]: Contrato vigente derivado por dataInicio (nunca por flag is_current armazenada), conforme 01-RESEARCH.md
 - [Phase 01]: construirRegistroRenovacao não importa de @/lib/validations/contrato, evitando acoplamento cruzado com Plan 01-04
+- [Phase 01]: tsx precisa de --env-file=.env.local para scripts standalone (nao carrega .env.local como o Next.js)
+- [Phase 01]: Login usa React Hook Form + useTransition chamando a Server Action diretamente, nao useActionState, para permitir validacao client-side com Zod antes do round-trip
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T22:57:24.722Z
-Stopped at: Completed 01-04-PLAN.md and 01-05-PLAN.md
+Last session: 2026-07-10T23:00:59.216Z
+Stopped at: Completed 01-03-PLAN.md, 01-04-PLAN.md and 01-05-PLAN.md
 Resume file: None

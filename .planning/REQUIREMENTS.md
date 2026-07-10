@@ -9,9 +9,9 @@ Requisitos da primeira versão. Cada um será mapeado para uma fase do roadmap.
 
 ### Acesso (ACES)
 
-- [ ] **ACES-01**: Usuário pode fazer login no sistema com email e senha
-- [ ] **ACES-02**: Sistema suporta múltiplos usuários internos da equipe da JSR
-- [ ] **ACES-03**: Sessão do usuário permanece ativa entre acessos
+- [x] **ACES-01**: Usuário pode fazer login no sistema com email e senha
+- [x] **ACES-02**: Sistema suporta múltiplos usuários internos da equipe da JSR
+- [x] **ACES-03**: Sessão do usuário permanece ativa entre acessos
 
 ### Clientes e Contratos (CLI)
 
