@@ -39,7 +39,7 @@ Plans:
 - [x] 01-03-PLAN.md — Supabase Auth SSR (proxy.ts, login, sessão) + bootstrap do primeiro Admin
 - [x] 01-04-PLAN.md — TDD: validação Zod de cliente e contrato (CLI-01, CLI-02)
 - [x] 01-05-PLAN.md — TDD: derivação do contrato atual + histórico de renovação (CLI-02, CLI-03, CLI-04)
-- [ ] 01-06-PLAN.md — Provisionamento de usuários (Admin-only) (ACES-02)
+- [x] 01-06-PLAN.md — Provisionamento de usuários (Admin-only) (ACES-02)
 - [ ] 01-07-PLAN.md — Server Actions de Cliente e Contrato
 - [ ] 01-08-PLAN.md — UI: formulários, lista em cards, detalhe do cliente
 - [ ] 01-09-PLAN.md — Checkpoint de verificação manual final da fase
