@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-07-10T23:08:18.604Z"
+stopped_at: Completed 01-06-PLAN.md and 01-07-PLAN.md
+last_updated: "2026-07-10T23:11:59.275Z"
 last_activity: 2026-07-10
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
-  percent: 56
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
-Plan: 6 of 9 in current phase
+Plan: 7 of 9 in current phase
 Status: Ready to execute
 Last activity: 2026-07-10
 
-Progress: [█████░░░░░] 56%
+Progress: [███████░░░] 78%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [█████░░░░░] 56%
 | Phase 01 P03 | 29min | 3 tasks | 10 files |
 | Phase 01 P04 | 15min | 2 tasks | 4 files |
 | Phase 01 P05 | 10min | 2 tasks | 4 files |
+| Phase 01 P06 | 15min | 2 tasks | 5 files |
 | Phase 01 P07 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 01]: tsx precisa de --env-file=.env.local para scripts standalone (nao carrega .env.local como o Next.js)
 - [Phase 01]: Login usa React Hook Form + useTransition chamando a Server Action diretamente, nao useActionState, para permitir validacao client-side com Zod antes do round-trip
 - [Phase 01]: createClienteComContrato usa db.transaction e .returning({ id }) para obter o id do cliente recem-criado antes de inserir o primeiro contrato
+- [Phase 01]: criarUsuario chama requireAdmin() antes de validar/chamar a Admin API, bloqueando Membro o mais cedo possível na Server Action
+- [Phase 01]: Tela de usuário dividida em page.tsx (Server, gate de Admin) + formulario-usuario.tsx (Client, hooks) — limite obrigatório do App Router
 
 ### Pending Todos
 
@@ -91,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T23:08:18.598Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-07-10T23:11:59.270Z
+Stopped at: Completed 01-06-PLAN.md and 01-07-PLAN.md
 Resume file: None
