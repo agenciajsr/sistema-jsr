@@ -91,19 +91,21 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 
 | Requisito | Fase | Status |
 |---|---|---|
-| ACES-01 a ACES-03 | — | Pendente |
-| CLI-01 a CLI-04 | — | Pendente |
-| TRAF-01 a TRAF-06 | — | Pendente |
-| ALRT-01 a ALRT-05 | — | Pendente |
-| REL-01 a REL-04 | — | Pendente |
-| FIN-01 a FIN-03 | — | Pendente |
-| DASH-01 a DASH-02 | — | Pendente |
+| ACES-01, ACES-02, ACES-03 | Fase 1 | Pendente |
+| CLI-01, CLI-02, CLI-03, CLI-04 | Fase 1 | Pendente |
+| TRAF-01, TRAF-02, TRAF-06 | Fase 2 | Pendente |
+| TRAF-03, TRAF-04, TRAF-05 | Fase 3 | Pendente |
+| ALRT-01, ALRT-02, ALRT-05 | Fase 3 | Pendente |
+| ALRT-03, ALRT-04 | Fase 4 | Pendente |
+| FIN-01, FIN-02, FIN-03 | Fase 4 | Pendente |
+| REL-01, REL-02, REL-03, REL-04 | Fase 5 | Pendente |
+| DASH-01, DASH-02 | Fase 6 | Pendente |
 
 **Cobertura:**
-- Requisitos v1: 26 no total
-- Mapeados para fases: 0
-- Não mapeados: 26 ⚠️ (roadmap ainda não criado)
+- Requisitos v1: 27 no total (correção: contagem anterior de 26 estava incorreta — TRAF possui 6 itens, não 5)
+- Mapeados para fases: 27
+- Não mapeados: 0 ✓
 
 ---
 *Requisitos definidos em: 2026-07-10*
-*Última atualização: 2026-07-10 após definição inicial*
+*Última atualização: 2026-07-10 após criação do roadmap*
