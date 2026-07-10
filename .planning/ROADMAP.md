@@ -31,7 +31,18 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Usuário cadastra um cliente com nome e objetivo/nicho (e-commerce, negócio local, infoproduto)
   4. Usuário registra e edita o contrato de um cliente (data de início, vencimento, valor)
   5. Usuário vê a lista de todos os clientes ativos com status resumido
-**Plans**: TBD
+**Plans**: 9 plans (5 waves)
+
+Plans:
+- [ ] 01-01-PLAN.md — Scaffold Next.js 16 + shadcn/ui + Vitest
+- [ ] 01-02-PLAN.md — Schema Drizzle (profiles/clientes/contratos) + projeto Supabase + migração
+- [ ] 01-03-PLAN.md — Supabase Auth SSR (proxy.ts, login, sessão) + bootstrap do primeiro Admin
+- [ ] 01-04-PLAN.md — TDD: validação Zod de cliente e contrato (CLI-01, CLI-02)
+- [ ] 01-05-PLAN.md — TDD: derivação do contrato atual + histórico de renovação (CLI-02, CLI-03, CLI-04)
+- [ ] 01-06-PLAN.md — Provisionamento de usuários (Admin-only) (ACES-02)
+- [ ] 01-07-PLAN.md — Server Actions de Cliente e Contrato
+- [ ] 01-08-PLAN.md — UI: formulários, lista em cards, detalhe do cliente
+- [ ] 01-09-PLAN.md — Checkpoint de verificação manual final da fase
 **UI hint**: yes
 
 ### Phase 2: Integração com Meta Ads e Google Ads
@@ -99,7 +110,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundação — Acesso, Clientes e Contratos | 0/TBD | Not started | - |
+| 1. Fundação — Acesso, Clientes e Contratos | 0/9 | Not started | - |
 | 2. Integração com Meta Ads e Google Ads | 0/TBD | Not started | - |
 | 3. Painel de Tráfego Pago e Alertas de Verba | 0/TBD | Not started | - |
 | 4. Contratos e Financeiro | 0/TBD | Not started | - |
