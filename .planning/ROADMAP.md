@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Usuário cadastra um cliente com nome e objetivo/nicho (e-commerce, negócio local, infoproduto)
   4. Usuário registra e edita o contrato de um cliente (data de início, vencimento, valor)
   5. Usuário vê a lista de todos os clientes ativos com status resumido
-**Plans**: 9 plans (5 waves)
+**Plans**: 9 plans (6 waves)
 
 Plans:
 - [ ] 01-01-PLAN.md — Scaffold Next.js 16 + shadcn/ui + Vitest
