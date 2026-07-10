@@ -17,8 +17,8 @@ Requisitos da primeira versão. Cada um será mapeado para uma fase do roadmap.
 
 - [x] **CLI-01**: Usuário pode cadastrar um cliente com nome e objetivo/nicho (e-commerce, negócio local, infoproduto)
 - [x] **CLI-02**: Usuário pode registrar o contrato do cliente (data de início, data de vencimento/renovação, valor)
-- [ ] **CLI-03**: Usuário pode editar dados de cliente e contrato
-- [ ] **CLI-04**: Usuário pode ver lista de todos os clientes ativos com status resumido
+- [x] **CLI-03**: Usuário pode editar dados de cliente e contrato
+- [x] **CLI-04**: Usuário pode ver lista de todos os clientes ativos com status resumido
 
 ### Tráfego Pago (TRAF)
 
