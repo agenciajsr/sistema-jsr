@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Scaffold Next.js 16 + shadcn/ui + Vitest
-- [ ] 01-02-PLAN.md — Schema Drizzle (profiles/clientes/contratos) + projeto Supabase + migração
+- [x] 01-02-PLAN.md — Schema Drizzle (profiles/clientes/contratos) + projeto Supabase + migração
 - [ ] 01-03-PLAN.md — Supabase Auth SSR (proxy.ts, login, sessão) + bootstrap do primeiro Admin
 - [ ] 01-04-PLAN.md — TDD: validação Zod de cliente e contrato (CLI-01, CLI-02)
 - [ ] 01-05-PLAN.md — TDD: derivação do contrato atual + histórico de renovação (CLI-02, CLI-03, CLI-04)
