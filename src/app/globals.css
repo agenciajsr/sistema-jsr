@@ -41,6 +41,8 @@
   --color-chart-warning: var(--chart-warning);
   --color-chart-danger: var(--chart-danger);
   --color-chart-info: var(--chart-info);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-whatsapp: var(--chart-whatsapp);
   --color-alert-danger-soft: var(--alert-danger-soft);
   --color-alert-warning-soft: var(--alert-warning-soft);
 }
@@ -85,6 +87,10 @@
   --chart-warning: #d97706;
   --chart-danger: #dc2626;
   --chart-info: #1e76c4;
+  /* Roxo do KPI Lucro Líquido e do mini-gráfico roxo (quick-260711-f7m) */
+  --chart-purple: #7c3aed;
+  /* Verde WhatsApp do KPI Conversas (quick-260711-f7m) */
+  --chart-whatsapp: #25d366;
 
   /* Fundos suaves por severidade (alertas do Painel) */
   --alert-danger-soft: #fef2f2;
@@ -127,6 +133,10 @@
   /* Fundos suaves por severidade (alertas do Painel) — variação escura */
   --alert-danger-soft: #2a1416;
   --alert-warning-soft: #2a2110;
+
+  /* Roxo e WhatsApp — variação clara para contraste no fundo escuro (quick-260711-f7m) */
+  --chart-purple: #a78bfa;
+  --chart-whatsapp: #22c35e;
 
   /* Gradientes premium — variação escura (ainda sutil) */
   --gradient-brand: linear-gradient(135deg, #2a86d6 0%, #1e76c4 55%, #16588f 100%);
