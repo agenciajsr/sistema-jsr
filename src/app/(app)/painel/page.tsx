@@ -1,27 +1,62 @@
-import { AlertTriangle, Bell, TrendingUp, Users, Wallet } from 'lucide-react'
+'use client'
+
+import { AlertTriangle, CalendarClock, TrendingUp, Wallet } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart'
 import { MockNotice } from '@/components/mock-notice'
 import { StatCard } from '@/components/stat-card'
-import { alertasMock, clientesTrafegoMock, financeiroMock } from '@/lib/mock/dashboard'
+import {
+  alertasMock,
+  clientesTrafegoMock,
+  financeiroMock,
+  verbaDiariaMock,
+} from '@/lib/mock/dashboard'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
 
+const chartConfig = {
+  verba: {
+    label: 'Verba',
+    color: 'var(--primary)',
+  },
+} satisfies ChartConfig
+
+const CORES_STATUS_CONTA: Record<'ativa' | 'atencao' | 'problema', string> = {
+  ativa: 'bg-chart-success',
+  atencao: 'bg-chart-warning',
+  problema: 'bg-chart-danger',
+}
+
 export default function PainelPage() {
   const mrrTotal = financeiroMock.reduce((acc, c) => acc + c.mrr, 0)
+  const aReceber7Dias = financeiroMock
+    .filter((c) => c.status === 'próximo')
+    .reduce((acc, c) => acc + c.mrr, 0)
+  const verbaRodando = clientesTrafegoMock.reduce((acc, c) => acc + c.verbaTotal, 0)
+  const contasComProblema = clientesTrafegoMock.filter(
+    (c) => c.contaStatus === 'problema',
+  ).length
+
   const clientesAtivos = clientesTrafegoMock.length
-  const contasComProblema = clientesTrafegoMock.filter((c) => c.contaStatus === 'problema').length
+  const pontosDeAtencao = alertasMock.length
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Visão Geral</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Bom dia, JSR 👋</h1>
         <p className="text-sm text-muted-foreground">
-          Painel consolidado de todos os clientes ativos.
+          {clientesAtivos} clientes ativos · {pontosDeAtencao} pontos precisam de você hoje
         </p>
       </div>
 
@@ -41,38 +76,43 @@ export default function PainelPage() {
           helper="soma dos contratos ativos"
         />
         <StatCard
-          label="Clientes Ativos"
-          value={String(clientesAtivos)}
-          icon={Users}
+          label="A receber (7 dias)"
+          value={formatadorMoeda.format(aReceber7Dias)}
+          icon={CalendarClock}
           color="primary"
-          helper="com conta de anúncio monitorada"
+          helper="próximos vencimentos"
         />
         <StatCard
-          label="Contas com Problema"
+          label="Verba rodando"
+          value={formatadorMoeda.format(verbaRodando)}
+          icon={TrendingUp}
+          color="warning"
+          helper="somando as contas de ads"
+        />
+        <StatCard
+          label="Contas com problema"
           value={String(contasComProblema)}
           icon={AlertTriangle}
           color="danger"
           helper="precisam de atenção imediata"
         />
-        <StatCard
-          label="Alertas Abertos"
-          value={String(alertasMock.length)}
-          icon={Bell}
-          color="warning"
-          helper="verba, contrato e performance"
-        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">O que precisa de atenção</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {alertasMock.map((alerta) => (
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base">🚩 Precisa de você hoje</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {alertasMock.map((alerta) => {
+            const critico = alerta.severidade === 'critico'
+            return (
               <div
                 key={alerta.id}
-                className="flex items-start justify-between gap-3 rounded-lg border bg-background p-3"
+                className={`flex items-start justify-between gap-3 rounded-lg border-l-4 p-3 ${
+                  critico
+                    ? 'border-chart-danger bg-alert-danger-soft'
+                    : 'border-chart-warning bg-alert-warning-soft'
+                }`}
               >
                 <div>
                   <p className="text-sm font-medium">{alerta.titulo}</p>
@@ -80,9 +120,44 @@ export default function PainelPage() {
                     {alerta.cliente} · {alerta.detalhe}
                   </p>
                 </div>
-                <Badge variant={alerta.severidade === 'critico' ? 'destructive' : 'secondary'}>
-                  {alerta.severidade === 'critico' ? 'Crítico' : 'Atenção'}
-                </Badge>
+                {critico ? (
+                  <Badge variant="destructive">Crítico</Badge>
+                ) : (
+                  <Badge className="bg-chart-warning/15 text-chart-warning" variant="secondary">
+                    Atenção
+                  </Badge>
+                )}
+              </div>
+            )
+          })}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">📊 Saúde das contas de anúncio</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {clientesTrafegoMock.map((cliente) => (
+              <div
+                key={cliente.id}
+                className="flex items-center gap-3 rounded-lg border bg-background p-3"
+              >
+                <span
+                  className={`size-2.5 shrink-0 rounded-full ${
+                    CORES_STATUS_CONTA[cliente.contaStatus]
+                  }`}
+                  aria-hidden
+                />
+                <div>
+                  <p className="text-sm font-medium">{cliente.nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {cliente.contas} {cliente.contas === 1 ? 'conta' : 'contas'} ·{' '}
+                    {formatadorMoeda.format(cliente.verbaGasta)} de{' '}
+                    {formatadorMoeda.format(cliente.verbaTotal)} · sync {cliente.ultimaSync}
+                  </p>
+                </div>
               </div>
             ))}
           </CardContent>
@@ -90,34 +165,17 @@ export default function PainelPage() {
 
         <Card className="border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-base">Status das contas de anúncio</CardTitle>
+            <CardTitle className="text-base">📈 Verba dos últimos 7 dias</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {clientesTrafegoMock.map((cliente) => (
-              <div
-                key={cliente.id}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{cliente.nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatadorMoeda.format(cliente.verbaGasta)} de{' '}
-                    {formatadorMoeda.format(cliente.verbaTotal)} · sync {cliente.ultimaSync}
-                  </p>
-                </div>
-                <Badge
-                  variant={cliente.contaStatus === 'ativa' ? 'secondary' : 'destructive'}
-                  className="gap-1"
-                >
-                  {cliente.contaStatus === 'ativa' ? (
-                    <TrendingUp className="size-3" />
-                  ) : (
-                    <AlertTriangle className="size-3" />
-                  )}
-                  {cliente.contaStatus === 'ativa' ? 'Ativa' : 'Com problema'}
-                </Badge>
-              </div>
-            ))}
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-[220px] w-full">
+              <BarChart data={verbaDiariaMock}>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="dia" tickLine={false} axisLine={false} tickMargin={8} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="valor" fill="var(--color-verba)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       </div>
