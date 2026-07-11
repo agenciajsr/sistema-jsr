@@ -1,138 +1,92 @@
-'use client'
+import { DollarSign, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import { eq } from 'drizzle-orm'
 
-import { Calendar, TrendingUp, Users, Wallet } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
-
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
-import { MockNotice } from '@/components/mock-notice'
 import { StatCard } from '@/components/stat-card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { financeiroMock, mrrHistoricoMock } from '@/lib/mock/dashboard'
+import { db } from '@/lib/db'
+import { clientes } from '@/lib/db/schema'
+import { getResumoFinanceiro, calcularMrr, listTransacoes } from '@/actions/financeiro'
+
+import { TransacaoForm } from './transacao-form'
+import { TransacoesTable } from './transacoes-table'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
 
-const chartConfig = {
-  mrr: {
-    label: 'MRR',
-    color: 'var(--primary)',
-  },
-} satisfies ChartConfig
+export default async function FinanceiroPage() {
+  const [resumo, mrr, transacoes, clientesAtivos] = await Promise.all([
+    getResumoFinanceiro(),
+    calcularMrr(),
+    listTransacoes(),
+    db
+      .select({ id: clientes.id, nome: clientes.nome })
+      .from(clientes)
+      .where(eq(clientes.status, 'ativo')),
+  ])
 
-export default function FinanceiroPage() {
-  const mrrTotal = financeiroMock.reduce((acc, c) => acc + c.mrr, 0)
+  const transacoesParaTabela = transacoes.map((t) => ({
+    id: t.id,
+    tipo: t.tipo,
+    categoria: t.categoria,
+    clienteNome: t.clienteNome,
+    descricao: t.descricao,
+    valor: t.valor,
+    data: t.data,
+    status: t.status,
+  }))
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Financeiro</h1>
         <p className="text-sm text-muted-foreground">
-          MRR, datas de cobrança e saúde financeira consolidada.
+          Receitas, despesas, lucro e MRR da agencia em tempo real.
         </p>
       </div>
 
-      <MockNotice>
-        Esta tela usa dados de exemplo. Alertas de vencimento de contrato e
-        cálculo automático de MRR a partir dos contratos reais entram na Fase 4
-        do roadmap.
-      </MockNotice>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="MRR Total"
-          value={formatadorMoeda.format(mrrTotal)}
-          icon={Wallet}
+          label="Receita do Mes"
+          value={formatadorMoeda.format(resumo.receita)}
+          icon={TrendingUp}
           color="success"
-          trend={{ value: '4,5%', direction: 'up' }}
         />
         <StatCard
-          label="Clientes Ativos"
-          value={String(financeiroMock.length)}
-          icon={Users}
+          label="Despesas do Mes"
+          value={formatadorMoeda.format(resumo.despesa)}
+          icon={TrendingDown}
+          color="warning"
+        />
+        <StatCard
+          label="Lucro do Mes"
+          value={formatadorMoeda.format(resumo.lucro)}
+          icon={DollarSign}
           color="primary"
         />
         <StatCard
-          label="Cobranças Próximas (7 dias)"
-          value={String(financeiroMock.filter((c) => c.status === 'próximo').length)}
-          icon={Calendar}
-          color="warning"
+          label="MRR"
+          value={formatadorMoeda.format(mrr)}
+          icon={Wallet}
+          color="success"
         />
       </div>
 
-      <Card className="border-none shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Evolução do MRR</CardTitle>
-          <span className="flex items-center gap-1 text-xs font-medium text-chart-success">
-            <TrendingUp className="size-3" />
-            +36,5% em 6 meses
-          </span>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[220px] w-full">
-            <AreaChart data={mrrHistoricoMock}>
-              <CartesianGrid vertical={false} stroke="var(--border)" />
-              <XAxis dataKey="mes" tickLine={false} axisLine={false} tickMargin={8} />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Area
-                dataKey="mrr"
-                type="monotone"
-                fill="var(--color-mrr)"
-                fillOpacity={0.15}
-                stroke="var(--color-mrr)"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      <TransacaoForm clientes={clientesAtivos} />
 
       <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Clientes e Cobrança</CardTitle>
+          <CardTitle className="text-base">Transacoes do Mes</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Dia de Cobrança</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">MRR</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {financeiroMock.map((c) => (
-                <TableRow key={c.cliente}>
-                  <TableCell className="font-medium">{c.cliente}</TableCell>
-                  <TableCell>Dia {c.diaCobranca}</TableCell>
-                  <TableCell>
-                    <Badge variant={c.status === 'em dia' ? 'secondary' : 'outline'}>
-                      {c.status === 'em dia' ? 'Em dia' : 'Próximo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{formatadorMoeda.format(c.mrr)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <TransacoesParaTabela transacoes={transacoesParaTabela} />
         </CardContent>
       </Card>
     </div>
   )
+}
+
+function TransacoesParaTabela({ transacoes }: { transacoes: Parameters<typeof TransacoesTable>[0]['transacoes'] }) {
+  return <TransacoesTable transacoes={transacoes} />
 }
