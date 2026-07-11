@@ -107,9 +107,10 @@ None yet.
 | 260711-gi1 | Chat com IA (Copilot conversacional OpenAI via Vercel AI SDK) — streaming, rota protegida, chave server-only, degradação graciosa (incremento 5) | 2026-07-11 | 89f4e89 | [260711-gi1-chat-com-ia-copilot-openai-incremento-5-](./quick/260711-gi1-chat-com-ia-copilot-openai-incremento-5-/) |
 | 260711-hik | Insights automáticos no dashboard via IA — rota GET /api/insights com streaming OpenAI, AiInsightFloat com fetch+ReadableStream reader e fallback silencioso | 2026-07-11 | d7d5a12 | [260711-hik-insights-automaticos-no-dashboard-via-ia](./quick/260711-hik-insights-automaticos-no-dashboard-via-ia/) |
 | 260711-hts | Financeiro da agencia — tabela transacoes, CRUD Server Actions, MRR de contratos, tela /financeiro com dados reais | 2026-07-11 | cab8489 | [260711-hts-financeiro-da-agencia-tabelas-crud-mrr-p](./quick/260711-hts-financeiro-da-agencia-tabelas-crud-mrr-p/) |
+| 260711-i9j | Alertas da agencia — alertas derivados on-demand (contratos, transacoes, clientes), tela /alertas real, dashboard real | 2026-07-11 | fa8a3ca | [260711-i9j-alertas-da-agencia-tabela-logica-avaliac](./quick/260711-i9j-alertas-da-agencia-tabela-logica-avaliac/) |
 
 ## Session Continuity
 
-Last session: 2026-07-11T16:00:00Z
-Stopped at: Completed quick-260711-hts-PLAN.md (Financeiro da agencia — tabela transacoes, CRUD, MRR, tela real)
+Last session: 2026-07-11T16:15:00Z
+Stopped at: Completed quick-260711-i9j-PLAN.md (Alertas da agencia — derivados on-demand, tela real, dashboard real)
 Resume file: None
