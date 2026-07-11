@@ -78,14 +78,19 @@ export async function fetchMetaAdAccounts() {
 }
 
 /**
- * Busca insights de campanhas de uma conta de anuncio (yesterday).
+ * Busca insights de campanhas de uma conta de anuncio (historico diario, ultimos 30 dias).
+ * Com time_increment '1', a Meta retorna UMA linha por dia por campanha,
+ * cada uma com date_start === date_stop = o dia. O sync (sync-meta-ads.ts) usa
+ * insight.date_start como date e faz upsert por (adAccountId, date, campaignId),
+ * lidando corretamente com o historico sem alteracao no schema.
  * @param adAccountId ID numerico da conta (sem prefixo act_)
  */
 export async function fetchCampaignInsights(adAccountId: string) {
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'campaign',
     fields: 'campaign_id,campaign_name,spend,impressions,clicks,reach,cpc,cpm,ctr,actions',
-    date_preset: 'yesterday',
+    date_preset: 'last_30d',
+    time_increment: '1',
   })
 
   const parsed = metaInsightsResponseSchema.parse(raw)

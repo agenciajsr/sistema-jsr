@@ -25,7 +25,9 @@ export const metaAdAccountsResponseSchema = z.object({
   }).optional(),
 })
 
-// Schema para um insight de campanha
+// Schema para um insight de campanha.
+// Com time_increment '1' na requisicao (ver fetchCampaignInsights), cada item
+// representa UM dia: date_start === date_stop = a data daquela linha diaria.
 export const metaInsightSchema = z.object({
   campaign_id: z.string(),
   campaign_name: z.string(),
