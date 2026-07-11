@@ -1,14 +1,58 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Brain, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { aiInsightMock } from '@/lib/mock/dashboard-ref'
 
 // Card flutuante de Insights da IA (canto inferior direito), fechável.
+// Ao montar, busca insight gerado pela OpenAI via /api/insights (streaming).
+// Fallback silencioso: exibe aiInsightMock.texto em caso de erro/sem chave.
 export function AiInsightFloat() {
   const [aberto, setAberto] = useState(true)
+  const [texto, setTexto] = useState<string>('')
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    let cancelado = false
+
+    async function buscarInsight() {
+      try {
+        const res = await fetch('/api/insights')
+        if (!res.ok || !res.body) {
+          // Fallback silencioso: usar mock
+          if (!cancelado) {
+            setTexto(aiInsightMock.texto)
+            setCarregando(false)
+          }
+          return
+        }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let acumulado = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          acumulado += decoder.decode(value, { stream: true })
+          if (!cancelado) setTexto(acumulado)
+        }
+        if (!cancelado) setCarregando(false)
+      } catch {
+        // Erro de rede — fallback silencioso
+        if (!cancelado) {
+          setTexto(aiInsightMock.texto)
+          setCarregando(false)
+        }
+      }
+    }
+
+    void buscarInsight()
+    return () => {
+      cancelado = true
+    }
+  }, [])
 
   if (!aberto) return null
 
@@ -45,11 +89,19 @@ export function AiInsightFloat() {
           </div>
         </div>
 
-        <p className="mt-3 text-sm leading-relaxed text-white/90">{aiInsightMock.texto}</p>
+        <p className="mt-3 text-sm leading-relaxed text-white/90">
+          {carregando ? (
+            <span className="italic text-white/50">Analisando dados da agência...</span>
+          ) : (
+            texto
+          )}
+        </p>
 
-        <Button className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90">
-          Ver análise completa
-        </Button>
+        <Link href="/chat-ia">
+          <Button className="mt-4 w-full bg-primary text-primary-foreground hover:bg-primary/90">
+            Ver análise completa
+          </Button>
+        </Link>
       </div>
     </div>
   )
