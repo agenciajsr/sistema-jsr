@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -79,8 +80,15 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2.5 px-2 py-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-[image:var(--gradient-brand)] text-sm font-bold text-primary-foreground shadow-[var(--shadow-sm)]">
-            JSR
+          <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+            <Image
+              src="/logo-jsr.png"
+              alt="JSR Agência"
+              width={32}
+              height={32}
+              className="size-8 scale-[1.4] object-contain"
+              priority
+            />
           </div>
           <div className="group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold leading-none">Sistema JSR</p>
