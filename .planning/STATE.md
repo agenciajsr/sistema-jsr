@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Executado quick-260711-f7m (Tasks 1-6); Task 7 aguardando verificação visual
-last_updated: "2026-07-11T14:42:52.635Z"
-last_activity: "2026-07-11 - Completed quick task 260711-ejq: Elevar o design ao padrão premium (fundação de tokens + primitivos + Painel Mission Control)"
+stopped_at: Completed quick-260711-gi1 (Chat com IA — Copilot conversacional OpenAI)
+last_updated: "2026-07-11T15:15:04Z"
+last_activity: "2026-07-11 - Completed quick task 260711-gi1: Chat com IA (Copilot conversacional OpenAI via Vercel AI SDK) — streaming, rota protegida, chave server-only, degradação graciosa"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -104,9 +104,10 @@ None yet.
 | 260710-v65 | Redesenho da Ficha do Cliente como hub com abas (incremento visual) | 2026-07-11 | 7cb6edb | [260710-v65-redesenho-da-ficha-do-cliente-incremento](./quick/260710-v65-redesenho-da-ficha-do-cliente-incremento/) |
 | 260711-ejq | Elevar o design ao padrão premium (fundação + primitivos + Painel Mission Control) | 2026-07-11 | 5fe4f19 | [260711-ejq-elevar-design-ao-padrao-premium-incremen](./quick/260711-ejq-elevar-design-ao-padrao-premium-incremen/) |
 | 260711-f7m | Reproduzir fielmente o dashboard de referência (sidebar+plano+perfil, 6 KPIs, painéis, tabela, card IA, 7 rotas placeholder) | 2026-07-11 | d1d86ed | [260711-f7m-reproduzir-fielmente-o-dashboard-de-refe](./quick/260711-f7m-reproduzir-fielmente-o-dashboard-de-refe/) |
+| 260711-gi1 | Chat com IA (Copilot conversacional OpenAI via Vercel AI SDK) — streaming, rota protegida, chave server-only, degradação graciosa (incremento 5) | 2026-07-11 | 89f4e89 | [260711-gi1-chat-com-ia-copilot-openai-incremento-5-](./quick/260711-gi1-chat-com-ia-copilot-openai-incremento-5-/) |
 
 ## Session Continuity
 
-Last session: 2026-07-11T14:42:52.627Z
-Stopped at: Executado quick-260711-f7m (Tasks 1-6); Task 7 aguardando verificação visual
+Last session: 2026-07-11T15:15:04Z
+Stopped at: Completed quick-260711-gi1-PLAN.md (Chat com IA — Copilot conversacional)
 Resume file: None
