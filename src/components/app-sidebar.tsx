@@ -3,13 +3,21 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard,
-  Users,
-  TrendingUp,
-  Wallet,
+  Bot,
+  CheckSquare,
+  ChevronDown,
+  FileSignature,
   FileText,
+  Folder,
+  LayoutDashboard,
+  ListChecks,
+  Megaphone,
+  Plug,
   ShieldCheck,
-  Filter,
+  Users,
+  Users2,
+  Wallet,
+  Wrench,
 } from 'lucide-react'
 
 import {
@@ -21,59 +29,50 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
+import { PlanCard } from '@/components/premium/plan-card'
+import { UserProfile } from '@/components/premium/user-profile'
+import { planoAtualMock } from '@/lib/mock/dashboard-ref'
 
 type NavItem = {
   title: string
   url: string
   icon: React.ComponentType<{ className?: string }>
+  /** Chevron indicando submenu (apenas visual nesta entrega). */
+  submenu?: boolean
+  /** Rótulo à direita (ex.: "Beta"). */
+  badge?: string
 }
 
-const principalNav: NavItem[] = [
-  { title: 'Painel', url: '/painel', icon: LayoutDashboard },
+// Nav da referência, na mesma ordem da imagem aprovada.
+const nav: NavItem[] = [
+  { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
   { title: 'Clientes', url: '/clientes', icon: Users },
-  { title: 'Tráfego & Performance', url: '/trafego', icon: TrendingUp },
-  { title: 'Financeiro da Agência', url: '/financeiro', icon: Wallet },
+  { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'Relatórios', url: '/relatorios', icon: FileText },
-  { title: 'Funil', url: '/funil', icon: Filter },
+  { title: 'Financeiro', url: '/financeiro', icon: Wallet, submenu: true },
+  { title: 'Contratos', url: '/contratos', icon: FileSignature },
+  { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
+  { title: 'Checklists', url: '/checklist', icon: CheckSquare },
+  { title: 'Documentos', url: '/documentos', icon: Folder },
+  { title: 'Equipe', url: '/equipe', icon: Users2 },
+  { title: 'Ferramentas', url: '/ferramentas', icon: Wrench },
+  { title: 'Integrações', url: '/integracoes', icon: Plug },
+  { title: 'Chat com IA', url: '/chat-ia', icon: Bot, badge: 'Beta' },
 ]
 
-function NavGroup({
-  label,
-  items,
-  pathname,
+export function AppSidebar({
+  isAdmin,
+  nome,
+  cargo,
 }: {
-  label: string
-  items: NavItem[]
-  pathname: string
+  isAdmin: boolean
+  nome: string
+  cargo: string
 }) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => {
-            const active = pathname === item.url || pathname.startsWith(`${item.url}/`)
-            return (
-              <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
-                  <Link href={item.url}>
-                    <item.icon className="size-4" />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  )
-}
-
-export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname()
 
   return (
@@ -89,8 +88,36 @@ export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
       </SidebarHeader>
+
       <SidebarContent>
-        <NavGroup label="Principal" items={principalNav} pathname={pathname} />
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {nav.map((item) => {
+                const active =
+                  pathname === item.url || pathname.startsWith(`${item.url}/`)
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
+                      <Link href={item.url}>
+                        <item.icon className="size-4" />
+                        <span>{item.title}</span>
+                        {item.submenu && (
+                          <ChevronDown className="ml-auto size-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                    {item.badge && (
+                      <SidebarMenuBadge className="bg-primary/10 text-primary">
+                        {item.badge}
+                      </SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         {isAdmin && (
           <SidebarGroup>
@@ -114,7 +141,15 @@ export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter />
+
+      <SidebarFooter className="gap-3">
+        <PlanCard
+          nome={planoAtualMock.nome}
+          vence={planoAtualMock.vence}
+          percentUtilizado={planoAtualMock.percentUtilizado}
+        />
+        <UserProfile nome={nome} cargo={cargo} />
+      </SidebarFooter>
     </Sidebar>
   )
 }
