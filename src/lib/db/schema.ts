@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, index } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
@@ -37,9 +37,34 @@ export const contratos = pgTable('contratos', {
   clienteIdx: index('contratos_cliente_id_idx').on(table.clienteId, table.dataInicio),
 }))
 
+export const tipoTransacaoEnum = pgEnum('tipo_transacao', ['receita', 'despesa'])
+export const categoriaTransacaoEnum = pgEnum('categoria_transacao', ['mensalidade', 'projeto', 'outro', 'ferramenta', 'ads_agencia', 'salario'])
+export const statusTransacaoEnum = pgEnum('status_transacao', ['pago', 'pendente', 'vencido'])
+
+export const transacoes = pgTable('transacoes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tipo: tipoTransacaoEnum('tipo').notNull(),
+  categoria: categoriaTransacaoEnum('categoria').notNull(),
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
+  descricao: text('descricao').notNull(),
+  valor: numeric('valor', { precision: 10, scale: 2 }).notNull(),
+  data: date('data').notNull(),
+  status: statusTransacaoEnum('status').notNull().default('pendente'),
+  diaVencto: integer('dia_vencto'),
+  notas: text('notas'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  dataIdx: index('transacoes_data_idx').on(table.data, table.tipo),
+}))
+
 export const clientesRelations = relations(clientes, ({ many }) => ({
   contratos: many(contratos),
+  transacoes: many(transacoes),
 }))
 export const contratosRelations = relations(contratos, ({ one }) => ({
   cliente: one(clientes, { fields: [contratos.clienteId], references: [clientes.id] }),
+}))
+export const transacoesRelations = relations(transacoes, ({ one }) => ({
+  cliente: one(clientes, { fields: [transacoes.clienteId], references: [clientes.id] }),
 }))
