@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Bell } from 'lucide-react'
 
 import { signOut } from '@/actions/auth'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -7,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { getCurrentUser } from '@/lib/auth/session'
+import { alertasMock } from '@/lib/mock/dashboard'
 
 export default async function AppLayout({
   children,
@@ -28,6 +31,19 @@ export default async function AppLayout({
         <header className="flex items-center justify-between border-b bg-card/60 px-4 py-3 backdrop-blur-sm">
           <SidebarTrigger />
           <div className="flex items-center gap-3">
+            <Link
+              href="/alertas"
+              aria-label="Alertas"
+              className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Bell className="size-5" />
+              {alertasMock.length > 0 && (
+                <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold leading-none text-destructive-foreground">
+                  {alertasMock.length}
+                </span>
+              )}
+            </Link>
+            <Separator orientation="vertical" className="h-6" />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium leading-none">{currentUser.nome}</p>
               <p className="text-xs text-muted-foreground">{currentUser.email}</p>

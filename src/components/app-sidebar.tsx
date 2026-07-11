@@ -5,15 +5,10 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
-  FileSignature,
   TrendingUp,
   Wallet,
   FileText,
-  Bell,
   ShieldCheck,
-  ListChecks,
-  Radar,
-  CircleDollarSign,
   Filter,
 } from 'lucide-react'
 
@@ -36,24 +31,13 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>
 }
 
-const clientesNav: NavItem[] = [
-  { title: 'Visão Geral', url: '/painel', icon: LayoutDashboard },
+const principalNav: NavItem[] = [
+  { title: 'Painel', url: '/painel', icon: LayoutDashboard },
   { title: 'Clientes', url: '/clientes', icon: Users },
-  { title: 'Contratos', url: '/contratos', icon: FileSignature },
-]
-
-const operacaoNav: NavItem[] = [
-  { title: 'Tráfego Pago', url: '/trafego', icon: TrendingUp },
-  { title: 'Verbas Ads', url: '/verbas-ads', icon: CircleDollarSign },
-  { title: 'Funil', url: '/funil', icon: Filter },
-  { title: 'Checklist', url: '/checklist', icon: ListChecks },
-  { title: 'Acompanhamento', url: '/acompanhamento', icon: Radar },
-]
-
-const gestaoNav: NavItem[] = [
-  { title: 'Financeiro', url: '/financeiro', icon: Wallet },
+  { title: 'Tráfego & Performance', url: '/trafego', icon: TrendingUp },
+  { title: 'Financeiro da Agência', url: '/financeiro', icon: Wallet },
   { title: 'Relatórios', url: '/relatorios', icon: FileText },
-  { title: 'Alertas', url: '/alertas', icon: Bell },
+  { title: 'Funil', url: '/funil', icon: Filter },
 ]
 
 function NavGroup({
@@ -106,9 +90,7 @@ export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavGroup label="Clientes" items={clientesNav} pathname={pathname} />
-        <NavGroup label="Operação" items={operacaoNav} pathname={pathname} />
-        <NavGroup label="Gestão" items={gestaoNav} pathname={pathname} />
+        <NavGroup label="Principal" items={principalNav} pathname={pathname} />
 
         {isAdmin && (
           <SidebarGroup>
