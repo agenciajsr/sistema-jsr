@@ -55,6 +55,26 @@ Requisitos da primeira versão. Cada um será mapeado para uma fase do roadmap.
 - [ ] **DASH-01**: Usuário vê painel geral com visão consolidada de todos os clientes ativos (verba, contrato, performance) em uma única tela
 - [ ] **DASH-02**: Painel geral destaca o que precisa de atenção imediata (verba baixa, contrato vencendo, queda de performance)
 
+### Contratos (CONT) — adicionado em 2026-07-10 (feedback do usuário)
+
+- [ ] **CONT-01**: Usuário vê aba própria "Contratos" com todos os contratos de todos os clientes numa lista/tabela única (não só dentro do detalhe do cliente)
+
+### Checklist (CHK) — adicionado em 2026-07-10 (feedback do usuário)
+
+- [ ] **CHK-01**: Usuário vê e gerencia checklist operacional recorrente por cliente (ex: tarefas de rotina de gestão de tráfego)
+
+### Acompanhamento (ACOMP) — adicionado em 2026-07-10 (feedback do usuário)
+
+- [ ] **ACOMP-01**: Usuário vê tela de acompanhamento consolidado do relacionamento com cada cliente (histórico de interações/observações)
+
+### Verbas Ads (VBA) — adicionado em 2026-07-10 (feedback do usuário)
+
+- [ ] **VBA-01**: Usuário vê tela dedicada de controle de verbas de anúncio por cliente (complementar ao TRAF-04, com foco em gestão/ajuste de orçamento, não só visualização)
+
+### Funil (FUN) — adicionado em 2026-07-10 (feedback do usuário; reverte exclusão original)
+
+- [ ] **FUN-01**: Usuário vê funil/pipeline simples de clientes ou oportunidades
+
 ## Requisitos v2
 
 Adiados para versão futura. Não fazem parte do roadmap atual.
@@ -80,7 +100,6 @@ Exclusões explícitas. Documentadas para evitar retrabalho e discussões repeti
 | Portal de acesso para os clientes finais | v1 é uso interno da equipe JSR apenas; sem demanda validada de cliente pedindo autoatendimento |
 | Otimização de campanhas dentro do sistema (pausar, ajustar verba direto pela ferramenta) | Exigiria acesso de escrita nas contas de anúncio e trava de segurança extra; sistema é de visibilidade, não de operação — otimização continua no gerenciador nativo |
 | Processamento de pagamentos/faturamento automatizado | Traria complexidade de compliance e integração com gateway de pagamento; v1 é apenas visibilidade de datas e valores |
-| CRM de pipeline de vendas completo (funil de leads, etapas de negociação) | Todos os clientes já são contas ativas e assinadas; não há necessidade de pipeline de novos negócios hoje |
 | Integração com dezenas de fontes de dados (SEO, email, social orgânico) | Necessidade real hoje é só Meta Ads e Google Ads; cada fonte extra é manutenção sem demanda validada |
 | Decisão sobre substituir ou complementar o ClickUp | Ainda em aberto; revisar depois que o core do sistema estiver validado |
 | Inteligência artificial para insights preditivos | Com poucos clientes, alertas de limiar simples resolvem o mesmo problema com muito menos complexidade |
@@ -100,12 +119,15 @@ Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
 | FIN-01, FIN-02, FIN-03 | Fase 4 | Pendente |
 | REL-01, REL-02, REL-03, REL-04 | Fase 5 | Pendente |
 | DASH-01, DASH-02 | Fase 6 | Pendente |
+| CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01 | Não mapeado (fora do processo GSD) | Scaffold visual criado com dados de exemplo em 2026-07-10, a pedido explícito do usuário — construção fora do fluxo padrão de pesquisa/plano/verificação para acelerar entrega. Falta implementação funcional real e planejamento formal de fase. |
 
 **Cobertura:**
-- Requisitos v1: 27 no total (correção: contagem anterior de 26 estava incorreta — TRAF possui 6 itens, não 5)
+- Requisitos v1: 32 no total (27 originais + 5 adicionados em 2026-07-10: CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01)
 - Mapeados para fases: 27
-- Não mapeados: 0 ✓
+- Não mapeados: 5 (CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01 — aguardando fase própria)
+
+**Decisão (2026-07-10):** Integração com Google Ads (TRAF-02) despriorizada — nenhum cliente ativo hoje usa Google Ads, todos usam apenas Meta Ads. Implementar Meta Ads primeiro; Google Ads só quando houver cliente real que precise.
 
 ---
 *Requisitos definidos em: 2026-07-10*
-*Última atualização: 2026-07-10 após criação do roadmap*
+*Última atualização: 2026-07-10 — scope expandido (Contratos/Checklist/Acompanhamento/Verbas Ads/Funil) e priorização Meta-first, a pedido do usuário*

@@ -1,39 +1,52 @@
 import { redirect } from 'next/navigation'
 
 import { signOut } from '@/actions/auth'
+import { AppSidebar } from '@/components/app-sidebar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { createClient } from '@/lib/supabase/server'
+import { Separator } from '@/components/ui/separator'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { getCurrentUser } from '@/lib/auth/session'
 
 export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const currentUser = await getCurrentUser()
 
   // Defesa em profundidade — proxy.ts já protege a rota, isto cobre casos de
   // navegação direta/refresh onde o proxy não interceptou por algum motivo.
-  if (!user) {
+  if (!currentUser) {
     redirect('/login')
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-4">
-        <span className="font-semibold">Sistema JSR</span>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">{user.email}</span>
-          <form action={signOut}>
-            <Button type="submit" variant="outline" size="sm">
-              Sair
-            </Button>
-          </form>
-        </div>
-      </header>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <SidebarProvider>
+      <AppSidebar isAdmin={currentUser.role === 'admin'} />
+      <SidebarInset>
+        <header className="flex items-center justify-between border-b bg-card/60 px-4 py-3 backdrop-blur-sm">
+          <SidebarTrigger />
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-sm font-medium leading-none">{currentUser.nome}</p>
+              <p className="text-xs text-muted-foreground">{currentUser.email}</p>
+            </div>
+            <Avatar className="size-8">
+              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                {currentUser.nome.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <Separator orientation="vertical" className="h-6" />
+            <form action={signOut}>
+              <Button type="submit" variant="outline" size="sm">
+                Sair
+              </Button>
+            </form>
+          </div>
+        </header>
+        <main className="flex-1 bg-background p-6">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
