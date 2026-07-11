@@ -1,9 +1,9 @@
 import { AlertTriangle, CheckCircle2, Megaphone, Radio, Wallet } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale/pt-BR'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { MockNotice } from '@/components/mock-notice'
-import { Progress } from '@/components/ui/progress'
 import { StatCard } from '@/components/stat-card'
 import {
   Table,
@@ -13,127 +13,209 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { clientesTrafegoMock } from '@/lib/mock/dashboard'
+import { SyncButton } from '@/components/trafego/sync-button'
+import { getTrafegoData, getUltimaSync } from '@/actions/trafego'
+import type { TrafegoAccount } from '@/actions/trafego'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
 
-export default function TrafegoPage() {
-  const verbaTotal = clientesTrafegoMock.reduce((acc, c) => acc + c.verbaTotal, 0)
-  const verbaGasta = clientesTrafegoMock.reduce((acc, c) => acc + c.verbaGasta, 0)
-  const campanhasAtivas = clientesTrafegoMock
-    .flatMap((c) => c.campanhas)
-    .filter((c) => c.status === 'ativa').length
+const formatadorNumero = new Intl.NumberFormat('pt-BR')
+
+const formatadorPct = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+/** Agrega campanhas por campaignId: soma spend/impressions/clicks/reach dos ultimos 7 dias */
+function agregarCampanhas(conta: TrafegoAccount) {
+  const mapa = new Map<string, {
+    campaignId: string
+    campaignName: string
+    spend: number
+    impressions: number
+    clicks: number
+    reach: number
+    ctr: number | null
+  }>()
+
+  for (const c of conta.campanhas) {
+    const existing = mapa.get(c.campaignId)
+    if (existing) {
+      existing.spend += Number(c.spend)
+      existing.impressions += c.impressions
+      existing.clicks += c.clicks
+      existing.reach += c.reach
+    } else {
+      mapa.set(c.campaignId, {
+        campaignId: c.campaignId,
+        campaignName: c.campaignName,
+        spend: Number(c.spend),
+        impressions: c.impressions,
+        clicks: c.clicks,
+        reach: c.reach,
+        ctr: c.ctr ? Number(c.ctr) : null,
+      })
+    }
+  }
+
+  // Recalcular CTR apos agregacao
+  return Array.from(mapa.values()).map((item) => ({
+    ...item,
+    ctr: item.clicks > 0 && item.impressions > 0
+      ? (item.clicks / item.impressions) * 100
+      : item.ctr,
+  }))
+}
+
+export default async function TrafegoPage() {
+  const [contas, ultimaSync] = await Promise.all([
+    getTrafegoData(),
+    getUltimaSync(),
+  ])
+
+  const gastoTotal = contas.reduce((acc, c) => acc + c.spendTotal, 0)
+  const contasAtivas = contas.filter((c) => c.accountStatus === 1).length
+
+  // Campanhas unicas nos ultimos 7 dias
+  const campanhasUnicas = new Set<string>()
+  for (const conta of contas) {
+    for (const c of conta.campanhas) {
+      campanhasUnicas.add(c.campaignId)
+    }
+  }
+
+  const temDados = contas.length > 0
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Tráfego Pago</h1>
-        <p className="text-sm text-muted-foreground">
-          Status das contas de anúncio e campanhas por cliente.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Trafego Pago</h1>
+          <p className="text-sm text-muted-foreground">
+            Status das contas de anuncio e campanhas por cliente.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {ultimaSync && (
+            <span className="text-xs text-muted-foreground">
+              Ultima sync: {formatDistanceToNow(ultimaSync, { addSuffix: true, locale: ptBR })}
+            </span>
+          )}
+          <SyncButton />
+        </div>
       </div>
 
-      <MockNotice>
-        Esta tela usa dados de exemplo. A sincronização real com Meta Ads é
-        implementada na Fase 2 do roadmap (Google Ads despriorizado — nenhum
-        cliente ativo usa hoje); os alertas de verba (limiar configurável)
-        entram na Fase 3.
-      </MockNotice>
+      {!temDados ? (
+        <Card className="border-none p-12 text-center shadow-sm">
+          <div className="mx-auto max-w-md space-y-4">
+            <Radio className="mx-auto size-12 text-muted-foreground/50" />
+            <h2 className="text-lg font-medium">Nenhuma conta de anuncio sincronizada</h2>
+            <p className="text-sm text-muted-foreground">
+              Clique em Sincronizar para buscar as contas da sua Business Manager.
+            </p>
+            <div className="flex justify-center">
+              <SyncButton />
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard
+              label="Gasto Total (7d)"
+              value={formatadorMoeda.format(gastoTotal)}
+              icon={Wallet}
+              color="primary"
+            />
+            <StatCard
+              label="Contas Ativas"
+              value={String(contasAtivas)}
+              icon={Radio}
+              color="success"
+            />
+            <StatCard
+              label="Campanhas (7d)"
+              value={String(campanhasUnicas.size)}
+              icon={Megaphone}
+              color="warning"
+            />
+          </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Verba Total do Mês"
-          value={formatadorMoeda.format(verbaTotal)}
-          icon={Wallet}
-          color="primary"
-        />
-        <StatCard
-          label="Verba Consumida"
-          value={formatadorMoeda.format(verbaGasta)}
-          icon={Radio}
-          color="success"
-          helper={`${Math.round((verbaGasta / verbaTotal) * 100)}% do total`}
-        />
-        <StatCard
-          label="Campanhas Ativas"
-          value={String(campanhasAtivas)}
-          icon={Megaphone}
-          color="warning"
-        />
-      </div>
+          <div className="space-y-4">
+            {contas.map((conta) => {
+              const campanhasAgregadas = agregarCampanhas(conta)
 
-      <div className="space-y-4">
-        {clientesTrafegoMock.map((cliente) => {
-          const percentualVerba = Math.round((cliente.verbaGasta / cliente.verbaTotal) * 100)
-          return (
-            <Card key={cliente.id} className="border-none shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <div>
-                  <CardTitle className="text-base">{cliente.nome}</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {cliente.nicho} · última sincronização {cliente.ultimaSync}
-                  </p>
-                </div>
-                <Badge
-                  variant={cliente.contaStatus === 'ativa' ? 'secondary' : 'destructive'}
-                  className="gap-1"
-                >
-                  {cliente.contaStatus === 'ativa' ? (
-                    <CheckCircle2 className="size-3" />
-                  ) : (
-                    <AlertTriangle className="size-3" />
-                  )}
-                  {cliente.contaStatus === 'ativa' ? 'Conta ativa' : 'Conta com problema'}
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      Verba: {formatadorMoeda.format(cliente.verbaGasta)} de{' '}
-                      {formatadorMoeda.format(cliente.verbaTotal)}
-                    </span>
-                    <span>{percentualVerba}%</span>
-                  </div>
-                  <Progress value={percentualVerba} />
-                </div>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campanha</TableHead>
-                      <TableHead>Plataforma</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Gasto</TableHead>
-                      <TableHead className="text-right">Resultado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cliente.campanhas.map((campanha) => (
-                      <TableRow key={campanha.nome}>
-                        <TableCell className="font-medium">{campanha.nome}</TableCell>
-                        <TableCell>{campanha.plataforma}</TableCell>
-                        <TableCell>
-                          <Badge variant={campanha.status === 'ativa' ? 'secondary' : 'outline'}>
-                            {campanha.status === 'ativa' ? 'Ativa' : 'Pausada'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatadorMoeda.format(campanha.gasto)}
-                        </TableCell>
-                        <TableCell className="text-right">{campanha.resultado}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+              return (
+                <Card key={conta.id} className="border-none shadow-sm">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <div>
+                      <CardTitle className="text-base">{conta.nome}</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {conta.clienteNome ?? 'Sem cliente associado'}
+                        {conta.ultimaSync && (
+                          <> · sync {formatDistanceToNow(conta.ultimaSync, { addSuffix: true, locale: ptBR })}</>
+                        )}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={conta.accountStatus === 1 ? 'secondary' : 'destructive'}
+                      className="gap-1"
+                    >
+                      {conta.accountStatus === 1 ? (
+                        <CheckCircle2 className="size-3" />
+                      ) : (
+                        <AlertTriangle className="size-3" />
+                      )}
+                      {conta.accountStatus === 1 ? 'Conta ativa' : 'Conta com problema'}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent>
+                    {campanhasAgregadas.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-muted-foreground">
+                        Nenhum dado de campanha. Clique em Sincronizar para buscar dados.
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Campanha</TableHead>
+                            <TableHead className="text-right">Gasto (7d)</TableHead>
+                            <TableHead className="text-right">Impressoes</TableHead>
+                            <TableHead className="text-right">Cliques</TableHead>
+                            <TableHead className="text-right">CTR</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {campanhasAgregadas.map((campanha) => (
+                            <TableRow key={campanha.campaignId}>
+                              <TableCell className="font-medium">{campanha.campaignName}</TableCell>
+                              <TableCell className="text-right">
+                                {formatadorMoeda.format(campanha.spend)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatadorNumero.format(campanha.impressions)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatadorNumero.format(campanha.clicks)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {campanha.ctr !== null ? `${formatadorPct.format(campanha.ctr)}%` : '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
