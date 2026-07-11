@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index, boolean, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
@@ -58,13 +58,57 @@ export const transacoes = pgTable('transacoes', {
   dataIdx: index('transacoes_data_idx').on(table.data, table.tipo),
 }))
 
+export const plataformaEnum = pgEnum('plataforma', ['meta', 'google'])
+
+export const adAccounts = pgTable('ad_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
+  plataforma: plataformaEnum('plataforma').notNull(),
+  metaAccountId: text('meta_account_id').notNull(),
+  nome: text('nome').notNull(),
+  accountStatus: integer('account_status'),
+  currency: text('currency').default('BRL'),
+  ativo: boolean('ativo').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  metaAccountIdIdx: uniqueIndex('ad_accounts_meta_account_id_idx').on(table.metaAccountId),
+}))
+
+export const campaignInsights = pgTable('campaign_insights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  campaignId: text('campaign_id').notNull(),
+  campaignName: text('campaign_name').notNull(),
+  date: date('date').notNull(),
+  spend: numeric('spend', { precision: 10, scale: 2 }).notNull().default('0'),
+  impressions: integer('impressions').default(0),
+  clicks: integer('clicks').default(0),
+  reach: integer('reach').default(0),
+  cpc: numeric('cpc', { precision: 10, scale: 4 }),
+  cpm: numeric('cpm', { precision: 10, scale: 4 }),
+  ctr: numeric('ctr', { precision: 8, scale: 4 }),
+  actions: jsonb('actions'),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  accountDateCampaignIdx: index('ci_account_date_campaign_idx').on(table.adAccountId, table.date, table.campaignId),
+}))
+
 export const clientesRelations = relations(clientes, ({ many }) => ({
   contratos: many(contratos),
   transacoes: many(transacoes),
+  adAccounts: many(adAccounts),
 }))
 export const contratosRelations = relations(contratos, ({ one }) => ({
   cliente: one(clientes, { fields: [contratos.clienteId], references: [clientes.id] }),
 }))
 export const transacoesRelations = relations(transacoes, ({ one }) => ({
   cliente: one(clientes, { fields: [transacoes.clienteId], references: [clientes.id] }),
+}))
+export const adAccountsRelations = relations(adAccounts, ({ one, many }) => ({
+  cliente: one(clientes, { fields: [adAccounts.clienteId], references: [clientes.id] }),
+  campaignInsights: many(campaignInsights),
+}))
+export const campaignInsightsRelations = relations(campaignInsights, ({ one }) => ({
+  adAccount: one(adAccounts, { fields: [campaignInsights.adAccountId], references: [adAccounts.id] }),
 }))
