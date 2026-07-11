@@ -28,7 +28,7 @@ export default async function AppLayout({
     <SidebarProvider>
       <AppSidebar isAdmin={currentUser.role === 'admin'} />
       <SidebarInset>
-        <header className="flex items-center justify-between border-b bg-card/60 px-4 py-3 backdrop-blur-sm">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border/70 bg-card/70 px-4 backdrop-blur-md sm:px-6">
           <SidebarTrigger />
           <div className="flex items-center gap-3">
             <Link
@@ -61,7 +61,7 @@ export default async function AppLayout({
             </form>
           </div>
         </header>
-        <main className="flex-1 bg-background p-6">{children}</main>
+        <main className="flex-1 bg-background p-6 lg:p-8">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

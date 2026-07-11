@@ -79,13 +79,13 @@ export function AppSidebar({ isAdmin }: { isAdmin: boolean }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-sm">
+        <div className="flex items-center gap-2.5 px-2 py-2.5">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-[image:var(--gradient-brand)] text-sm font-bold text-primary-foreground shadow-[var(--shadow-sm)]">
             JSR
           </div>
           <div className="group-data-[collapsible=icon]:hidden">
             <p className="text-sm font-semibold leading-none">Sistema JSR</p>
-            <p className="text-xs text-muted-foreground">Agência JSR</p>
+            <p className="mt-1 text-xs text-muted-foreground">Agência JSR</p>
           </div>
         </div>
       </SidebarHeader>

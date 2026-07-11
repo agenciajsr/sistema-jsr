@@ -151,3 +151,43 @@ export const mrrHistoricoMock = [
   { mes: 'Jun', mrr: 6900 },
   { mes: 'Jul', mrr: 7100 },
 ]
+
+// Saúde geral da agência — número-assinatura do Painel (Mission Control).
+// Score plausível derivado no espírito de: contas ok vs. alertas vs. MRR
+// (3 clientes, 1 com conta em problema, 3 alertas ativos) → ~78.
+export type AgencyHealthMock = {
+  score: number
+  clientesAtivos: number
+  clientesEmRisco: number
+}
+
+export const agencyHealthMock: AgencyHealthMock = {
+  score: 78,
+  clientesAtivos: 3,
+  clientesEmRisco: 1,
+}
+
+// Insights da IA (placeholder mock) — análise + sugestão de ação, no espírito
+// do brief. Usa os mesmos clientes dos demais mocks para manter consistência.
+export type InsightIaMock = {
+  titulo: string
+  texto: string
+}
+
+export const insightsIaMock: InsightIaMock[] = [
+  {
+    titulo: 'Loja Aurora Moda: verba prestes a esgotar',
+    texto:
+      'Gastou 96% da verba mensal (R$ 4.820 de R$ 5.000) faltando ainda 8 dias no ciclo. Sugiro redistribuir cerca de R$ 300/dia ou pausar a campanha Advantage+ Catálogo para não estourar o orçamento antes do fim do mês.',
+  },
+  {
+    titulo: 'Método Cresce+: custo por lead subindo',
+    texto:
+      'O custo por lead do Webinar cresceu 34% frente à semana anterior. Vale revisar a criação/segmentação ou testar um novo público antes que a captação fique cara demais.',
+  },
+  {
+    titulo: 'Clínica Vitalis: contrato a renovar',
+    texto:
+      'Contrato vence em 12 dias, com R$ 1.800 de MRR em risco. Sugiro agendar a conversa de renovação esta semana, aproveitando os 38 leads gerados na campanha de avaliação.',
+  },
+]
