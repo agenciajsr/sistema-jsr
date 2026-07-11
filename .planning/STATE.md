@@ -105,9 +105,10 @@ None yet.
 | 260711-ejq | Elevar o design ao padrão premium (fundação + primitivos + Painel Mission Control) | 2026-07-11 | 5fe4f19 | [260711-ejq-elevar-design-ao-padrao-premium-incremen](./quick/260711-ejq-elevar-design-ao-padrao-premium-incremen/) |
 | 260711-f7m | Reproduzir fielmente o dashboard de referência (sidebar+plano+perfil, 6 KPIs, painéis, tabela, card IA, 7 rotas placeholder) | 2026-07-11 | d1d86ed | [260711-f7m-reproduzir-fielmente-o-dashboard-de-refe](./quick/260711-f7m-reproduzir-fielmente-o-dashboard-de-refe/) |
 | 260711-gi1 | Chat com IA (Copilot conversacional OpenAI via Vercel AI SDK) — streaming, rota protegida, chave server-only, degradação graciosa (incremento 5) | 2026-07-11 | 89f4e89 | [260711-gi1-chat-com-ia-copilot-openai-incremento-5-](./quick/260711-gi1-chat-com-ia-copilot-openai-incremento-5-/) |
+| 260711-hik | Insights automáticos no dashboard via IA — rota GET /api/insights com streaming OpenAI, AiInsightFloat com fetch+ReadableStream reader e fallback silencioso | 2026-07-11 | d7d5a12 | [260711-hik-insights-automaticos-no-dashboard-via-ia](./quick/260711-hik-insights-automaticos-no-dashboard-via-ia/) |
 
 ## Session Continuity
 
-Last session: 2026-07-11T15:15:04Z
-Stopped at: Completed quick-260711-gi1-PLAN.md (Chat com IA — Copilot conversacional)
+Last session: 2026-07-11T15:30:00Z
+Stopped at: Completed quick-260711-hik-PLAN.md (Insights automáticos no dashboard via IA)
 Resume file: None
