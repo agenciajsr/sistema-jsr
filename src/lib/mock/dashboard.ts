@@ -7,7 +7,8 @@ export type ClienteTrafego = {
   id: string
   nome: string
   nicho: 'E-commerce' | 'Negócio Local' | 'Infoproduto'
-  contaStatus: 'ativa' | 'problema'
+  contaStatus: 'ativa' | 'atencao' | 'problema'
+  contas: number
   verbaGasta: number
   verbaTotal: number
   ultimaSync: string
@@ -26,6 +27,7 @@ export const clientesTrafegoMock: ClienteTrafego[] = [
     nome: 'Clínica Vitalis',
     nicho: 'Negócio Local',
     contaStatus: 'ativa',
+    contas: 2,
     verbaGasta: 2140,
     verbaTotal: 3000,
     ultimaSync: 'há 12 min',
@@ -39,6 +41,7 @@ export const clientesTrafegoMock: ClienteTrafego[] = [
     nome: 'Loja Aurora Moda',
     nicho: 'E-commerce',
     contaStatus: 'problema',
+    contas: 2,
     verbaGasta: 4820,
     verbaTotal: 5000,
     ultimaSync: 'há 3 horas',
@@ -51,7 +54,8 @@ export const clientesTrafegoMock: ClienteTrafego[] = [
     id: '3',
     nome: 'Método Cresce+',
     nicho: 'Infoproduto',
-    contaStatus: 'ativa',
+    contaStatus: 'atencao',
+    contas: 1,
     verbaGasta: 1580,
     verbaTotal: 2500,
     ultimaSync: 'há 40 min',
@@ -59,6 +63,18 @@ export const clientesTrafegoMock: ClienteTrafego[] = [
       { nome: 'Webinar — Captação de Leads', plataforma: 'Meta Ads', status: 'ativa', gasto: 1580, resultado: 312 },
     ],
   },
+]
+
+// Verba investida por dia (soma das contas de anúncio) nos últimos 7 dias —
+// alimenta o gráfico de barras do Painel.
+export const verbaDiariaMock = [
+  { dia: 'Qui', valor: 980 },
+  { dia: 'Sex', valor: 1120 },
+  { dia: 'Sáb', valor: 640 },
+  { dia: 'Dom', valor: 590 },
+  { dia: 'Seg', valor: 1340 },
+  { dia: 'Ter', valor: 1210 },
+  { dia: 'Qua', valor: 1080 },
 ]
 
 export type AlertaMock = {
