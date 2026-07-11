@@ -13,10 +13,14 @@ import {
 } from '@/components/ui/chart'
 import { MockNotice } from '@/components/mock-notice'
 import { StatCard } from '@/components/stat-card'
+import { AiInsightCard } from '@/components/premium/ai-insight-card'
+import { ScoreRing } from '@/components/premium/score-ring'
 import {
+  agencyHealthMock,
   alertasMock,
   clientesTrafegoMock,
   financeiroMock,
+  insightsIaMock,
   verbaDiariaMock,
 } from '@/lib/mock/dashboard'
 
@@ -38,6 +42,10 @@ const CORES_STATUS_CONTA: Record<'ativa' | 'atencao' | 'problema', string> = {
   problema: 'bg-chart-danger',
 }
 
+// Seletor de período — placeholder visual (sem lógica) até os filtros globais
+// serem conectados aos dados reais.
+const PERIODOS = ['Hoje', '7 dias', '30 dias'] as const
+
 export default function PainelPage() {
   const mrrTotal = financeiroMock.reduce((acc, c) => acc + c.mrr, 0)
   const aReceber7Dias = financeiroMock
@@ -48,16 +56,34 @@ export default function PainelPage() {
     (c) => c.contaStatus === 'problema',
   ).length
 
-  const clientesAtivos = clientesTrafegoMock.length
+  const clientesAtivos = agencyHealthMock.clientesAtivos
+  const clientesEmRisco = agencyHealthMock.clientesEmRisco
   const pontosDeAtencao = alertasMock.length
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Bom dia, JSR 👋</h1>
-        <p className="text-sm text-muted-foreground">
-          {clientesAtivos} clientes ativos · {pontosDeAtencao} pontos precisam de você hoje
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Bom dia, JSR 👋</h1>
+          <p className="text-sm text-muted-foreground">
+            {clientesAtivos} clientes ativos · {pontosDeAtencao} pontos precisam de você hoje
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-border bg-card p-0.5 shadow-[var(--shadow-xs)]">
+          {PERIODOS.map((periodo, i) => (
+            <button
+              key={periodo}
+              type="button"
+              className={
+                i === 1
+                  ? 'rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground'
+                  : 'rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground'
+              }
+            >
+              {periodo}
+            </button>
+          ))}
+        </div>
       </div>
 
       <MockNotice>
@@ -66,6 +92,51 @@ export default function PainelPage() {
         (Fase 2) e o painel de tráfego (Fase 3) forem implementados.
       </MockNotice>
 
+      {/* HERO — Saúde da Agência (peça-assinatura Mission Control) */}
+      <Card className="bg-[image:var(--gradient-surface)]">
+        <CardContent className="flex flex-col items-center gap-8 sm:flex-row sm:gap-10">
+          <ScoreRing
+            score={agencyHealthMock.score}
+            size={168}
+            label="Saúde da Agência"
+            className="shrink-0"
+          />
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Receita do mês (MRR)</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight">
+                {formatadorMoeda.format(mrrTotal)}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                soma dos contratos ativos
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Clientes ativos</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight">
+                {clientesAtivos}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                com contrato vigente
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Clientes em risco</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-chart-danger">
+                {clientesEmRisco}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                precisam de atenção
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Insights da IA (IA como protagonista) */}
+      <AiInsightCard insights={insightsIaMock} />
+
+      {/* Faixa de KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="MRR Total"
@@ -98,7 +169,7 @@ export default function PainelPage() {
         />
       </div>
 
-      <Card className="border-none shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">🚩 Precisa de você hoje</CardTitle>
         </CardHeader>
@@ -108,7 +179,7 @@ export default function PainelPage() {
             return (
               <div
                 key={alerta.id}
-                className={`flex items-start justify-between gap-3 rounded-lg border-l-4 p-3 ${
+                className={`flex items-start justify-between gap-3 rounded-xl border-l-4 p-4 ${
                   critico
                     ? 'border-chart-danger bg-alert-danger-soft'
                     : 'border-chart-warning bg-alert-warning-soft'
@@ -134,7 +205,7 @@ export default function PainelPage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="border-none shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">📊 Saúde das contas de anúncio</CardTitle>
           </CardHeader>
@@ -142,7 +213,7 @@ export default function PainelPage() {
             {clientesTrafegoMock.map((cliente) => (
               <div
                 key={cliente.id}
-                className="flex items-center gap-3 rounded-lg border bg-background p-3"
+                className="flex items-center gap-3 rounded-xl border border-border bg-background p-4"
               >
                 <span
                   className={`size-2.5 shrink-0 rounded-full ${
@@ -163,7 +234,7 @@ export default function PainelPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">📈 Verba dos últimos 7 dias</CardTitle>
           </CardHeader>
