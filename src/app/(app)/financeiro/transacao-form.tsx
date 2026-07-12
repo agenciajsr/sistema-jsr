@@ -15,6 +15,9 @@ import { Label } from '@/components/ui/label'
 import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transacao'
 
 type ClienteOption = { id: string; nome: string }
+type ResponsavelOption = { id: string; nome: string }
+
+const SELECT_CLASS = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
 const CATEGORIAS_RECEITA = [
   { value: 'mensalidade', label: 'Mensalidade' },
@@ -41,11 +44,21 @@ const VALORES_PADRAO = {
   status: 'pendente' as const,
   diaVencto: '' as unknown as undefined,
   notas: '',
+  centroCusto: '' as const,
+  recorrencia: 'avulsa' as const,
+  formaPagamento: '' as const,
+  responsavelId: '',
 }
 
 const ERRO_PADRAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
 
-export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
+export function TransacaoForm({
+  clientes,
+  responsaveis,
+}: {
+  clientes: ClienteOption[]
+  responsaveis: ResponsavelOption[]
+}) {
   const router = useRouter()
   const [aberto, setAberto] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -97,11 +110,10 @@ export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
             id="tipo"
             {...register('tipo', {
               onChange: () => {
-                // Reset categoria ao trocar tipo
                 setValue('categoria', tipoAtual === 'despesa' ? 'mensalidade' : 'ferramenta')
               },
             })}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className={SELECT_CLASS}
           >
             <option value="receita">Receita</option>
             <option value="despesa">Despesa</option>
@@ -110,15 +122,9 @@ export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
 
         <div className="space-y-2">
           <Label htmlFor="categoria">Categoria</Label>
-          <select
-            id="categoria"
-            {...register('categoria')}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
+          <select id="categoria" {...register('categoria')} className={SELECT_CLASS}>
             {categorias.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
           {errors.categoria && (
@@ -128,16 +134,10 @@ export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
 
         <div className="space-y-2">
           <Label htmlFor="clienteId">Cliente (opcional)</Label>
-          <select
-            id="clienteId"
-            {...register('clienteId')}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
+          <select id="clienteId" {...register('clienteId')} className={SELECT_CLASS}>
             <option value="">Agencia (sem cliente)</option>
             {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
+              <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </select>
         </div>
@@ -172,11 +172,7 @@ export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
 
         <div className="space-y-2">
           <Label htmlFor="status">Status</Label>
-          <select
-            id="status"
-            {...register('status')}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
+          <select id="status" {...register('status')} className={SELECT_CLASS}>
             <option value="pendente">Pendente</option>
             <option value="pago">Pago</option>
             <option value="vencido">Vencido</option>
@@ -189,6 +185,56 @@ export function TransacaoForm({ clientes }: { clientes: ClienteOption[] }) {
           {errors.diaVencto && (
             <p className="text-sm text-destructive">{errors.diaVencto.message}</p>
           )}
+        </div>
+      </div>
+
+      {/* Novos campos */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor="centroCusto">Centro de Custo (opcional)</Label>
+          <select id="centroCusto" {...register('centroCusto')} className={SELECT_CLASS}>
+            <option value="">Sem centro de custo</option>
+            <option value="operacao">Operacao</option>
+            <option value="midia">Midia</option>
+            <option value="infraestrutura">Infraestrutura</option>
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="recorrencia">Recorrencia</Label>
+          <select id="recorrencia" {...register('recorrencia')} className={SELECT_CLASS}>
+            <option value="avulsa">Avulsa</option>
+            <option value="mensal">Mensal</option>
+            <option value="trimestral">Trimestral</option>
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="formaPagamento">Forma de Pagamento (opcional)</Label>
+          <select id="formaPagamento" {...register('formaPagamento')} className={SELECT_CLASS}>
+            <option value="">Nao informada</option>
+            <option value="pix">Pix</option>
+            <option value="boleto">Boleto</option>
+            <option value="cartao">Cartao</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="responsavelId">Responsavel (opcional)</Label>
+          <select id="responsavelId" {...register('responsavelId')} className={SELECT_CLASS}>
+            <option value="">Nao atribuido</option>
+            {responsaveis.map((r) => (
+              <option key={r.id} value={r.id}>{r.nome}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="comprovanteUrl">URL do Comprovante (opcional)</Label>
+          <Input id="comprovanteUrl" placeholder="https://..." disabled={isPending} />
         </div>
       </div>
 

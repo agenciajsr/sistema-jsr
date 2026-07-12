@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2 } from 'lucide-react'
+import { Trash2, FileCheck, FileX } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { deleteTransacao } from '@/actions/financeiro'
@@ -26,6 +26,10 @@ type Transacao = {
   valor: string
   data: string
   status: 'pago' | 'pendente' | 'vencido'
+  centroCusto?: string | null
+  formaPagamento?: string | null
+  responsavelNome?: string | null
+  comprovanteUrl?: string | null
 }
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
@@ -57,6 +61,19 @@ const CATEGORIA_LABEL: Record<string, string> = {
   ferramenta: 'Ferramenta',
   ads_agencia: 'Ads Agencia',
   salario: 'Salario',
+}
+
+const CENTRO_CUSTO_LABEL: Record<string, string> = {
+  operacao: 'Operacao',
+  midia: 'Midia',
+  infraestrutura: 'Infraestrutura',
+}
+
+const FORMA_PGTO_LABEL: Record<string, string> = {
+  pix: 'Pix',
+  boleto: 'Boleto',
+  cartao: 'Cartao',
+  transferencia: 'Transferencia',
 }
 
 export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
@@ -91,8 +108,12 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
           <TableHead>Descricao</TableHead>
           <TableHead>Cliente</TableHead>
           <TableHead>Categoria</TableHead>
+          <TableHead>Centro de Custo</TableHead>
+          <TableHead>Forma Pgto</TableHead>
+          <TableHead>Responsavel</TableHead>
           <TableHead className="text-right">Valor</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Comprovante</TableHead>
           <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
@@ -105,6 +126,9 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
             <TableCell>
               <Badge variant="outline">{CATEGORIA_LABEL[t.categoria] ?? t.categoria}</Badge>
             </TableCell>
+            <TableCell>{t.centroCusto ? CENTRO_CUSTO_LABEL[t.centroCusto] ?? t.centroCusto : '-'}</TableCell>
+            <TableCell>{t.formaPagamento ? FORMA_PGTO_LABEL[t.formaPagamento] ?? t.formaPagamento : '-'}</TableCell>
+            <TableCell>{t.responsavelNome ?? '-'}</TableCell>
             <TableCell
               className={`text-right tabular-nums font-medium ${
                 t.tipo === 'receita' ? 'text-chart-success' : 'text-destructive'
@@ -117,6 +141,15 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
               <Badge variant={STATUS_VARIANT[t.status] ?? 'secondary'}>
                 {STATUS_LABEL[t.status] ?? t.status}
               </Badge>
+            </TableCell>
+            <TableCell>
+              {t.comprovanteUrl ? (
+                <a href={t.comprovanteUrl} target="_blank" rel="noopener noreferrer" className="text-chart-success hover:text-chart-success/80">
+                  <FileCheck className="size-4" />
+                </a>
+              ) : (
+                <FileX className="size-4 text-muted-foreground" />
+              )}
             </TableCell>
             <TableCell>
               <Button
