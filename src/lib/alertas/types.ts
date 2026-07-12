@@ -7,6 +7,8 @@ export type TipoAlerta =
   | 'performance_caindo'
   | 'ctr_caindo'
   | 'sem_conversao'
+  | 'criativo_rejeitado'
+  | 'fadiga_criativo'
 
 export type SeveridadeAlerta = 'critico' | 'atencao' | 'info'
 

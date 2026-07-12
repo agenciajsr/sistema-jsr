@@ -27,6 +27,8 @@ const TIPO_HREF: Record<TipoAlerta, string> = {
   performance_caindo: '/campanhas',
   ctr_caindo: '/campanhas',
   sem_conversao: '/campanhas',
+  criativo_rejeitado: '/campanhas',
+  fadiga_criativo: '/campanhas',
 }
 
 // Lista de alertas importantes com link por linha. Client component (painel e 'use client').

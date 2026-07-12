@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, UserX, Wallet, AlertTriangle, Info, DollarSign, TrendingDown, Target, MousePointerClick, Ban } from 'lucide-react'
+import { Calendar, CheckCircle, UserX, Wallet, AlertTriangle, Info, DollarSign, TrendingDown, Target, MousePointerClick, Ban, ImageOff, Repeat } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +14,8 @@ const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>>
   performance_caindo: TrendingDown,
   ctr_caindo: MousePointerClick,
   sem_conversao: Ban,
+  criativo_rejeitado: ImageOff,
+  fadiga_criativo: Repeat,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
@@ -25,6 +27,8 @@ const TIPO_LABEL: Record<TipoAlerta, string> = {
   performance_caindo: 'Performance',
   ctr_caindo: 'CTR',
   sem_conversao: 'Sem conversão',
+  criativo_rejeitado: 'Criativo',
+  fadiga_criativo: 'Fadiga',
 }
 
 const SEVERIDADE_CONFIG: Record<
