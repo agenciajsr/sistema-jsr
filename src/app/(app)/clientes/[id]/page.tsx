@@ -192,6 +192,13 @@ export default async function ClienteDetalhePage({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {cliente.linkDrive && (
+            <Button asChild variant="outline">
+              <a href={cliente.linkDrive} target="_blank" rel="noopener noreferrer">
+                Pasta do Drive
+              </a>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link href={`/clientes/${id}/editar`}>Editar</Link>
           </Button>

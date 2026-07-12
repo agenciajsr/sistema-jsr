@@ -42,6 +42,7 @@ export const clienteSchema = z.object({
   notas: z.string().optional(),
   origemCliente: z.string().optional(),
   objetivoPrincipal: z.string().optional(),
+  linkDrive: z.string().url('Link inválido').optional().or(z.literal('')),
 })
 
 export type ClienteInput = z.infer<typeof clienteSchema>

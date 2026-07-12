@@ -30,13 +30,24 @@ export default async function PainelPage() {
 
   const primeiroNome = user?.nome?.split(' ')[0] ?? 'Usuário'
 
+  // Horário de Brasília (UTC-3) para saudação correta
+  const horaBrasilia = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+  ).getHours()
+  const saudacao =
+    horaBrasilia >= 6 && horaBrasilia < 12
+      ? 'Bom dia'
+      : horaBrasilia >= 12 && horaBrasilia < 18
+        ? 'Boa tarde'
+        : 'Boa noite'
+
   return (
     <div className="space-y-6">
       {/* Header da página */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Bom dia, {primeiroNome}!
+            {saudacao}, {primeiroNome}!
           </h1>
           <p className="text-sm text-muted-foreground">
             Aqui está o resumo completo da sua agência hoje.

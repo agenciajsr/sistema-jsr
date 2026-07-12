@@ -99,6 +99,7 @@ const valoresPadraoCliente: z.input<typeof clienteSchema> = {
   notas: '',
   origemCliente: '',
   objetivoPrincipal: '',
+  linkDrive: '',
 }
 
 const valoresPadraoContrato: ContratoInput = {
@@ -505,6 +506,14 @@ function ClienteFormCriar() {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="cliente.linkDrive">Pasta do Google Drive</Label>
+            <Input id="cliente.linkDrive" placeholder="https://drive.google.com/drive/folders/..." {...register('cliente.linkDrive')} />
+            {errors.cliente?.linkDrive && (
+              <p className="text-sm text-destructive">{errors.cliente.linkDrive.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="cliente.notas">Notas internas</Label>
             <Textarea id="cliente.notas" {...register('cliente.notas')} />
           </div>
@@ -890,6 +899,14 @@ function ClienteFormEditar({
           <div className="space-y-2">
             <Label htmlFor="objetivoPrincipal">Objetivo principal</Label>
             <Textarea id="objetivoPrincipal" {...register('objetivoPrincipal')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="linkDrive">Pasta do Google Drive</Label>
+            <Input id="linkDrive" placeholder="https://drive.google.com/drive/folders/..." {...register('linkDrive')} />
+            {errors.linkDrive && (
+              <p className="text-sm text-destructive">{errors.linkDrive.message}</p>
+            )}
           </div>
 
           <div className="space-y-2">

@@ -51,6 +51,7 @@ export const clientes = pgTable('clientes', {
   frequenciaPosts: text('frequencia_posts'),
   origemCliente: text('origem_cliente'),
   objetivoPrincipal: text('objetivo_principal'),
+  linkDrive: text('link_drive'),
   // Metas de performance alvo por cliente (nullable). Nulo = sem meta manual →
   // a avaliação de saúde cai no baseline automático por histórico.
   metaCpa: numeric('meta_cpa', { precision: 10, scale: 2 }),

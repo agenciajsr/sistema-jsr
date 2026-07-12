@@ -86,10 +86,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         sql`${contratos.dataVencimento} >= ${hoje}`,
       )),
 
-    // Financeiro do mês
+    // Financeiro do mês — só transações com status 'pago' contam como recebimento
     db.select({
-      receita: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'receita' then ${transacoes.valor} else 0 end), '0')`,
-      despesa: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'despesa' then ${transacoes.valor} else 0 end), '0')`,
+      receita: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'receita' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
+      despesa: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'despesa' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
     })
       .from(transacoes)
       .where(and(
