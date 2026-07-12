@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed quick-260711-tg5 (Ficha do Cliente real — migration aditiva NÃO aplicada)
-last_updated: "2026-07-12T00:33:00Z"
-last_activity: "2026-07-12 - Completed quick task 260711-tg5: Ficha do Cliente real (tabelas checklist_items/acompanhamentos + usa_asaas, cobrança/checklist/acompanhamento persistidos, alertas do cliente; migration 0001 gerada mas NÃO aplicada)"
+last_updated: "2026-07-12T14:05:00Z"
+last_activity: "2026-07-12 - Completed quick task 260712-f82: Reformular cadastro de clientes completo (7 secoes, ~25 campos, migration 0007 NAO aplicada)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -116,9 +116,10 @@ None yet.
 | 260712-2vk | Monitoramento de Saúde de Campanhas Parte 1 — metas por cliente (meta_cpa/cpl/roas, migration 0005 aplicada), avaliação de anomalias (CPA acima da meta/subindo, queda de resultados/CTR, gastando sem converter) + Health Score 0-100, novos alertas integrados em getAlertas | 2026-07-12 | db88a2d | [260712-2vk-monitoramento-de-saude-de-campanhas-part](./quick/260712-2vk-monitoramento-de-saude-de-campanhas-part/) |
 | (fast) | Sync Meta a cada 6h em horário de Brasília (00/06/12/18h) — antes 1x/dia às 06:00 UTC | 2026-07-12 | 82f06b7 | — (gsd:fast) |
 | 260712-efy | Saúde de Campanhas Parte 2 — criativo rejeitado (effective_status DISAPPROVED/WITH_ISSUES) + fadiga de criativo (frequency), colunas em ad_insights (migration 0006 aplicada), sinais no health score e alertas; degradação graciosa sem os dados | 2026-07-12 | e92a38f | [260712-efy-saude-de-campanhas-parte-2-criativo-reje](./quick/260712-efy-saude-de-campanhas-parte-2-criativo-reje/) |
+| 260712-f82 | Reformular cadastro de clientes completo — 7 secoes visuais, ~25 campos, 2 enums, getProfiles, checkboxes JSONB, migration 0007 (NAO aplicada) | 2026-07-12 | a46d6d1 | [260712-f82-reformular-cadastro-de-clientes-completo](./quick/260712-f82-reformular-cadastro-de-clientes-completo/) |
 
 ## Session Continuity
 
-Last session: 2026-07-12T00:33:00Z
-Stopped at: Completed quick-260711-tg5-PLAN.md (Ficha do Cliente real — migration aditiva gerada mas NÃO aplicada; orquestrador deve aplicar drizzle/0001_short_vindicator.sql)
+Last session: 2026-07-12T14:05:00Z
+Stopped at: Completed quick-260712-f82 (cadastro completo de clientes — migration 0007 gerada mas NAO aplicada)
 Resume file: None
