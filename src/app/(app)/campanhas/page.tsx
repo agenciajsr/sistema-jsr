@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import {
   DollarSign,
   Eye,
@@ -29,6 +30,9 @@ import { GraficoVerba } from '@/components/trafego/grafico-verba'
 import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
 import { ConjuntosPerformam } from '@/components/trafego/conjuntos-performam'
 import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
+import { AbasCampanhas } from '@/components/trafego/abas-campanhas'
+import { PainelVerbas } from '@/components/trafego/painel-verbas'
+import { VerbaDetalhe } from '@/components/trafego/verba-detalhe'
 import {
   getContasNaoVinculadas,
   getUltimaSync,
@@ -36,6 +40,7 @@ import {
 } from '@/actions/trafego'
 import { getResumoCliente, listarClientesComContas, type Periodo } from '@/lib/trafego/aggregate'
 import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
+import { getVerbasTodosClientes, getVerbaCliente } from '@/lib/trafego/verbas'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -68,13 +73,14 @@ const PERIODO_LABELS: Record<Periodo, string> = {
 export default async function CampanhasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; periodo?: string }>
+  searchParams: Promise<{ cliente?: string; periodo?: string; tab?: string }>
 }) {
   const sp = await searchParams
   const cliente = sp.cliente ?? null
   const periodo: Periodo = PERIODOS_VALIDOS.includes(sp.periodo as Periodo)
     ? (sp.periodo as Periodo)
     : '30d'
+  const abaAtual = sp.tab === 'verbas' ? 'verbas' : 'performance'
 
   const [clientesComContas, contasNaoVinculadas, clientesParaVinculo, ultimaSync] =
     await Promise.all([
@@ -90,6 +96,13 @@ export default async function CampanhasPage({
 
   // Health score do cliente selecionado (só quando há dados reais no período).
   const saude = cliente && resumo?.temDados ? await getSaudeDoCliente(cliente) : null
+
+  // Dados de verbas (apenas quando aba verbas está ativa)
+  const verbasData = abaAtual === 'verbas'
+    ? cliente
+      ? await getVerbaCliente(cliente)
+      : await getVerbasTodosClientes()
+    : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
@@ -118,6 +131,39 @@ export default async function CampanhasPage({
         </div>
       </div>
 
+      {/* Abas: Performance | Verbas */}
+      <Suspense fallback={null}>
+        <AbasCampanhas abaAtual={abaAtual} />
+      </Suspense>
+
+      {/* ═══ ABA VERBAS ═══ */}
+      {abaAtual === 'verbas' && (
+        <div className="space-y-6">
+          {cliente && verbasData && 'serieDiaria' in verbasData ? (
+            <VerbaDetalhe dados={verbasData} />
+          ) : !cliente && Array.isArray(verbasData) ? (
+            <PainelVerbas verbas={verbasData} />
+          ) : (
+            <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
+              <div className="mx-auto max-w-md space-y-2">
+                <Wallet className="mx-auto size-12 text-muted-foreground/50" />
+                <h2 className="text-lg font-medium">
+                  {cliente ? 'Cliente sem verba configurada' : 'Selecione um cliente ou veja a visão geral'}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {cliente
+                    ? 'Configure a verba mensal na ficha do cliente para acompanhar aqui.'
+                    : 'A visão geral mostra todos os clientes com verba configurada.'
+                  }
+                </p>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ═══ ABA PERFORMANCE (conteúdo original) ═══ */}
+      {abaAtual === 'performance' && <>
       {/* Estado vazio total: nada sincronizado */}
       {semNada && (
         <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
@@ -312,6 +358,7 @@ export default async function CampanhasPage({
 
       {/* Sempre ao final: contas soltas (o componente se esconde se vazio) */}
       <ContasNaoVinculadas contas={contasNaoVinculadas} clientes={clientesParaVinculo} />
+      </>}
     </div>
   )
 }
