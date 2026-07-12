@@ -220,7 +220,7 @@ export async function buildSnapshot(): Promise<string> {
       const linhasPerf = await Promise.all(
         clientesComContas.map(async (c) => {
           try {
-            const resumo = await getResumoCliente(c.id, 30)
+            const resumo = await getResumoCliente(c.id, '30d')
             if (!resumo || !resumo.temDados) {
               return `- ${c.nome} (${rotuloNicho(c.nicho)}): sem dados de campanha ainda.`
             }
@@ -242,6 +242,9 @@ export async function buildSnapshot(): Promise<string> {
               partes.push(
                 `custo por ${heroi.label.toLowerCase()} ${brl(derivadas.custoPorResultadoHeroi)}`,
               )
+            }
+            if (resumo.roas != null) {
+              partes.push(`ROAS ${resumo.roas.toFixed(2)}x (receita ${brl(resumo.receita)})`)
             }
             return `- ${c.nome} (${rotuloNicho(c.nicho)}): ${partes.join(', ')}.`
           } catch {
