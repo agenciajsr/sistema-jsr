@@ -4,13 +4,25 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { clientes, contratos } from '@/lib/db/schema'
+import { clientes, contratos, profiles } from '@/lib/db/schema'
 import { clienteSchema, type ClienteInput } from '@/lib/validations/cliente'
 import { contratoSchema, type ContratoInput } from '@/lib/validations/contrato'
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
+
+/** Converte ClienteInput para o formato esperado pelo Drizzle (numeric como string, undefined como null). */
+function clienteParaDb(data: ClienteInput) {
+  return {
+    ...data,
+    diaPagamento: data.diaPagamento ?? null,
+    gestorId: data.gestorId ?? null,
+    verbaMensal: data.verbaMensal != null ? String(data.verbaMensal) : null,
+    ticketMedio: data.ticketMedio != null ? String(data.ticketMedio) : null,
+    servicosContratados: data.servicosContratados ?? [],
+  }
+}
 
 export async function createClienteComContrato(
   clienteInput: ClienteInput,
@@ -26,7 +38,7 @@ export async function createClienteComContrato(
   const clienteId = await db.transaction(async (tx) => {
     const [novoCliente] = await tx
       .insert(clientes)
-      .values(clienteParsed.data)
+      .values(clienteParaDb(clienteParsed.data))
       .returning({ id: clientes.id })
 
     const registro = construirRegistroRenovacao(novoCliente.id, {
@@ -56,7 +68,7 @@ export async function updateCliente(id: string, input: ClienteInput) {
 
   await db
     .update(clientes)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...clienteParaDb(parsed.data), updatedAt: new Date() })
     .where(eq(clientes.id, id))
 
   return { data: { id } }
@@ -114,4 +126,9 @@ export async function deleteCliente(id: string) {
   await db.delete(clientes).where(eq(clientes.id, id))
 
   return { data: { id } }
+}
+
+export async function getProfiles() {
+  const rows = await db.select({ id: profiles.id, nome: profiles.nome }).from(profiles)
+  return rows
 }

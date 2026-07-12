@@ -4,6 +4,8 @@ import { relations } from 'drizzle-orm'
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
 export const nichoEnum = pgEnum('nicho', ['ecommerce', 'negocio_local', 'infoproduto'])
 export const clienteStatusEnum = pgEnum('cliente_status', ['ativo', 'pausado', 'encerrado'])
+export const tipoPessoaEnum = pgEnum('tipo_pessoa', ['fisica', 'juridica'])
+export const formaPagamentoEnum = pgEnum('forma_pagamento', ['pix', 'boleto', 'cartao', 'transferencia'])
 
 // Estende auth.users (gerenciado pelo Supabase) — NÃO redefinir auth.users aqui.
 export const profiles = pgTable('profiles', {
@@ -23,6 +25,32 @@ export const clientes = pgTable('clientes', {
   contatoEmail: text('contato_email'),
   notas: text('notas'),
   usaAsaas: boolean('usa_asaas').notNull().default(false),
+  // Dados fiscais / pessoa
+  tipoPessoa: tipoPessoaEnum('tipo_pessoa').default('juridica'),
+  documento: text('documento'),
+  razaoSocial: text('razao_social'),
+  nomeFantasia: text('nome_fantasia'),
+  // Endereço
+  endereco: text('endereco'),
+  cidade: text('cidade'),
+  estado: text('estado'),
+  cep: text('cep'),
+  // Online
+  instagram: text('instagram'),
+  siteUrl: text('site_url'),
+  // Pagamento
+  formaPagamento: formaPagamentoEnum('forma_pagamento'),
+  diaPagamento: integer('dia_pagamento'),
+  // Serviços
+  servicosContratados: jsonb('servicos_contratados'),
+  // Operação
+  gestorId: uuid('gestor_id').references(() => profiles.id, { onDelete: 'set null' }),
+  verbaMensal: numeric('verba_mensal', { precision: 10, scale: 2 }),
+  ticketMedio: numeric('ticket_medio', { precision: 10, scale: 2 }),
+  agendamentoPosts: boolean('agendamento_posts').notNull().default(false),
+  frequenciaPosts: text('frequencia_posts'),
+  origemCliente: text('origem_cliente'),
+  objetivoPrincipal: text('objetivo_principal'),
   // Metas de performance alvo por cliente (nullable). Nulo = sem meta manual →
   // a avaliação de saúde cai no baseline automático por histórico.
   metaCpa: numeric('meta_cpa', { precision: 10, scale: 2 }),
@@ -127,7 +155,8 @@ export const acompanhamentos = pgTable('acompanhamentos', {
   clienteCreatedIdx: index('acompanhamentos_cliente_created_idx').on(table.clienteId, table.createdAt),
 }))
 
-export const clientesRelations = relations(clientes, ({ many }) => ({
+export const clientesRelations = relations(clientes, ({ one, many }) => ({
+  gestor: one(profiles, { fields: [clientes.gestorId], references: [profiles.id] }),
   contratos: many(contratos),
   transacoes: many(transacoes),
   adAccounts: many(adAccounts),
