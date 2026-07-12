@@ -5,7 +5,7 @@ milestone_name: milestone
 status: executing
 stopped_at: Completed quick-260711-tg5 (Ficha do Cliente real — migration aditiva NÃO aplicada)
 last_updated: "2026-07-12T14:05:00Z"
-last_activity: "2026-07-12 - Completed quick task 260712-h4y: Melhorar dashboard (evolucao, atividade, filtro, saude, mobile)"
+last_activity: "2026-07-12 - Completed quick task 260712-mro: Verbas como aba em campanhas, removido /verbas-ads"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -120,6 +120,7 @@ None yet.
 | 260712-fq8 | Fix: saudacao dinamica horario Brasilia, bug financeiro so contar status pago, campo linkDrive + botao Drive na ficha, migration 0008 | 2026-07-12 | 17c37ab | [260712-fq8-corrigir-saudacao-dashboard-bug-financei](./quick/260712-fq8-corrigir-saudacao-dashboard-bug-financei/) |
 | 260712-g1c | Reformular modulo financeiro completo — centro de custo, recorrencia com parcelas automaticas, previsao de caixa 30 dias, 4 abas (Visao Geral/A Receber/A Pagar/Previsao), 6 KPIs, migration 0009 (NAO aplicada) | 2026-07-12 | 0a93766 | [260712-g1c-reformular-modulo-financeiro-completo-ce](./quick/260712-g1c-reformular-modulo-financeiro-completo-ce/) |
 | 260712-h4y | Melhorar dashboard: grafico evolucao, atividade recente expandida, filtro periodo, campanhas saude com metas, responsividade mobile | 2026-07-12 | 200bf5c | [260712-h4y-melhorar-dashboard-grafico-evolucao-ativ](./quick/260712-h4y-melhorar-dashboard-grafico-evolucao-ativ/) |
+| 260712-mro | Incorporar controle de verbas como aba em /campanhas, remover /verbas-ads placeholder | 2026-07-12 | b0cef77 | [260712-mro-incorporar-controle-de-verbas-como-aba-e](./quick/260712-mro-incorporar-controle-de-verbas-como-aba-e/) |
 
 ## Session Continuity
 
