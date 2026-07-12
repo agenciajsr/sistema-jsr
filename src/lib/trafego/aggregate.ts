@@ -1,9 +1,9 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
-import { format, subDays } from 'date-fns'
 
 import { db } from '@/lib/db'
 import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
+import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 
 export type Nicho = 'ecommerce' | 'negocio_local' | 'infoproduto'
 
@@ -245,8 +245,9 @@ export async function getResumoCliente(
 
   if (contas.length === 0) return resumoVazio(clienteId, heroi, 0)
 
-  const hoje = new Date()
-  const hojeStr = format(hoje, 'yyyy-MM-dd')
+  // Base "hoje" no fuso de Brasília (fuso da conta = data gravada em campaign_insights.date),
+  // não no fuso do servidor (UTC na Vercel), para os filtros Hoje/Ontem baterem com o dado.
+  const hojeStr = hojeBrasilia()
   let dataMinima: string
   let dataMaxima: string | null = null // null = sem limite superior (ate hoje)
   switch (periodo) {
@@ -254,17 +255,17 @@ export async function getResumoCliente(
       dataMinima = hojeStr
       break
     case 'ontem': {
-      const ontemStr = format(subDays(hoje, 1), 'yyyy-MM-dd')
+      const ontemStr = dataMenosDias(1, hojeStr)
       dataMinima = ontemStr
       dataMaxima = ontemStr
       break
     }
     case '7d':
-      dataMinima = format(subDays(hoje, 7), 'yyyy-MM-dd')
+      dataMinima = dataMenosDias(7, hojeStr)
       break
     case '30d':
     default:
-      dataMinima = format(subDays(hoje, 30), 'yyyy-MM-dd')
+      dataMinima = dataMenosDias(30, hojeStr)
       break
   }
 
