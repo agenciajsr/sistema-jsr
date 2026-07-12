@@ -13,6 +13,7 @@ import {
   avaliarSaldoContas,
   ordenarPorSeveridade,
 } from '@/lib/alertas/avaliar'
+import { getAlertasCampanhas } from '@/lib/saude/avaliar-campanhas'
 import type { Alerta } from '@/lib/alertas/types'
 
 export async function getAlertas(): Promise<Alerta[]> {
@@ -95,12 +96,24 @@ export async function getAlertas(): Promise<Alerta[]> {
   const alertasClientes = avaliarClientesInativos(todosClientes)
   const alertasSaldo = avaliarSaldoContas(contasRows)
 
+  // Alertas de saúde de campanha (Meta): comparação de períodos sobre insights.
+  // Envolvido em try/catch — uma falha aqui (ex.: sem dados Meta) NÃO pode
+  // derrubar os demais alertas, que sempre precisam retornar.
+  let alertasCampanhas: Alerta[] = []
+  try {
+    alertasCampanhas = await getAlertasCampanhas()
+  } catch (erro) {
+    console.error('[getAlertas] falha ao avaliar saúde de campanhas — ignorando', erro)
+    alertasCampanhas = []
+  }
+
   // Unificar e ordenar
   return ordenarPorSeveridade([
     ...alertasContratos,
     ...alertasTransacoes,
     ...alertasClientes,
     ...alertasSaldo,
+    ...alertasCampanhas,
   ])
 }
 
