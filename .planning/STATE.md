@@ -5,7 +5,7 @@ milestone_name: milestone
 status: executing
 stopped_at: Completed quick-260711-tg5 (Ficha do Cliente real — migration aditiva NÃO aplicada)
 last_updated: "2026-07-12T14:05:00Z"
-last_activity: "2026-07-12 - Completed quick task 260712-f82: Reformular cadastro de clientes completo (7 secoes, ~25 campos, migration 0007 NAO aplicada)"
+last_activity: "2026-07-12 - Completed quick task 260712-fq8: Fix saudacao, bug financeiro pendente, campo linkDrive"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -117,9 +117,10 @@ None yet.
 | (fast) | Sync Meta a cada 6h em horário de Brasília (00/06/12/18h) — antes 1x/dia às 06:00 UTC | 2026-07-12 | 82f06b7 | — (gsd:fast) |
 | 260712-efy | Saúde de Campanhas Parte 2 — criativo rejeitado (effective_status DISAPPROVED/WITH_ISSUES) + fadiga de criativo (frequency), colunas em ad_insights (migration 0006 aplicada), sinais no health score e alertas; degradação graciosa sem os dados | 2026-07-12 | e92a38f | [260712-efy-saude-de-campanhas-parte-2-criativo-reje](./quick/260712-efy-saude-de-campanhas-parte-2-criativo-reje/) |
 | 260712-f82 | Reformular cadastro de clientes completo — 7 secoes visuais, ~25 campos, 2 enums, getProfiles, checkboxes JSONB, migration 0007 (NAO aplicada) | 2026-07-12 | a46d6d1 | [260712-f82-reformular-cadastro-de-clientes-completo](./quick/260712-f82-reformular-cadastro-de-clientes-completo/) |
+| 260712-fq8 | Fix: saudacao dinamica horario Brasilia, bug financeiro so contar status pago, campo linkDrive + botao Drive na ficha, migration 0008 | 2026-07-12 | 17c37ab | [260712-fq8-corrigir-saudacao-dashboard-bug-financei](./quick/260712-fq8-corrigir-saudacao-dashboard-bug-financei/) |
 
 ## Session Continuity
 
-Last session: 2026-07-12T14:05:00Z
-Stopped at: Completed quick-260712-f82 (cadastro completo de clientes — migration 0007 gerada mas NAO aplicada)
+Last session: 2026-07-12T14:19:29Z
+Stopped at: Completed quick-260712-fq8 (saudacao, bug financeiro, linkDrive)
 Resume file: None
