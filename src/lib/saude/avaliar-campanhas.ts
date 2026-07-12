@@ -1,8 +1,8 @@
 import { format, subDays } from 'date-fns'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { clientes } from '@/lib/db/schema'
+import { adAccounts, adInsights, clientes } from '@/lib/db/schema'
 import {
   getMetricasIntervalo,
   listarClientesComContas,
@@ -23,6 +23,10 @@ const VOLUME_MINIMO_RESULTADO = 5
 const SPEND_SEM_CONVERSAO = 100
 /** Abaixo deste gasto no período atual, não geramos sinais comparativos. */
 const SPEND_MINIMO_AVALIACAO = 50
+/** Frequência (impressões/pessoa) a partir da qual sinalizamos fadiga de criativo. */
+const FREQ_FADIGA = 3.5
+/** Volume mínimo de impressões para o sinal de fadiga (evita ruído em baixa entrega). */
+const FADIGA_MIN_IMPRESSIONS = 1000
 
 // --- Pesos de penalidade no health score ---
 const PESO_SEM_CONVERSAO = 30
@@ -39,6 +43,16 @@ export type HealthScore = {
   rotulo: 'Saudável' | 'Atenção' | 'Crítico'
 }
 
+/** Linha de status por anúncio usada nos sinais de criativo (rejeição/fadiga). */
+export type AdStatusRow = {
+  adId: string
+  adName: string
+  effectiveStatus: string | null
+  frequency: number | null
+  impressions: number
+  spend: number
+}
+
 export type EntradaSaude = {
   clienteId: string
   clienteNome: string
@@ -46,6 +60,8 @@ export type EntradaSaude = {
   metaCpl: number | null
   atual: MetricasIntervalo
   anterior: MetricasIntervalo
+  /** Anúncios do cliente (status/frequência). Opcional → [] mantém comportamento anterior. */
+  ads?: AdStatusRow[]
 }
 
 // --- Formatação (pt-BR) ---
@@ -84,16 +100,74 @@ function criarAlerta(
 }
 
 /**
+ * FUNÇÃO PURA — sinal de criativo rejeitado. Prioriza DISAPPROVED (crítico) sobre
+ * WITH_ISSUES (atenção). Ignora demais status e linhas com effectiveStatus null
+ * (degradação graciosa). Emite no máximo 1 alerta por cliente.
+ */
+function avaliarCriativoRejeitado(ads: AdStatusRow[], e: EntradaSaude, hoje: string): Alerta | null {
+  const reprovados = ads.filter((a) => a.effectiveStatus === 'DISAPPROVED')
+  const comPendencias = ads.filter((a) => a.effectiveStatus === 'WITH_ISSUES')
+  const grupo = reprovados.length > 0 ? reprovados : comPendencias
+  if (grupo.length === 0) return null
+
+  const critico = reprovados.length > 0
+  const extras = grupo.length - 1
+  const sufixo = extras > 0 ? ` (+${extras} outro${extras > 1 ? 's' : ''})` : ''
+  const verbo = critico ? 'reprovado' : 'com pendências'
+  return criarAlerta(
+    'saude-criativo-rejeitado',
+    'criativo_rejeitado',
+    critico ? 'critico' : 'atencao',
+    critico ? 'Criativo reprovado' : 'Criativo com pendências',
+    `Anúncio "${grupo[0].adName}" ${verbo} pela Meta${sufixo}.`,
+    e,
+    hoje,
+  )
+}
+
+/**
+ * FUNÇÃO PURA — sinal de fadiga de criativo. Considera anúncios com
+ * frequency >= FREQ_FADIGA e impressions >= FADIGA_MIN_IMPRESSIONS. Escolhe o de
+ * maior frequência. Ignora frequency null (degradação graciosa). Máx. 1 por cliente.
+ */
+function avaliarFadigaCriativo(ads: AdStatusRow[], e: EntradaSaude, hoje: string): Alerta | null {
+  const candidatos = ads.filter(
+    (a) => a.frequency != null && a.frequency >= FREQ_FADIGA && a.impressions >= FADIGA_MIN_IMPRESSIONS,
+  )
+  if (candidatos.length === 0) return null
+
+  const pior = candidatos.reduce((max, a) => ((a.frequency ?? 0) > (max.frequency ?? 0) ? a : max))
+  return criarAlerta(
+    'saude-fadiga',
+    'fadiga_criativo',
+    'atencao',
+    'Fadiga de criativo',
+    `Frequência ${(pior.frequency ?? 0).toFixed(1)} no anúncio "${pior.adName}" — público pode estar saturado.`,
+    e,
+    hoje,
+  )
+}
+
+/**
  * FUNÇÃO PURA — avalia os sinais de saúde de um cliente comparando o período
  * atual com o anterior. Retorna alertas no MESMO formato do motor existente.
- * Não faz I/O. Cliente sem dados no período atual (spend 0) → nenhum alerta.
+ * Não faz I/O. Cliente sem dados no período atual (spend 0) → nenhum alerta
+ * comparativo, mas sinais de criativo (rejeição/fadiga) ainda valem — um criativo
+ * reprovado pode ser justamente a causa da verba parada.
  */
 export function avaliarSaudeCliente(e: EntradaSaude): Alerta[] {
   const alertas: Alerta[] = []
   const hoje = format(new Date(), 'yyyy-MM-dd')
   const { atual, anterior, metaCpa, metaCpl } = e
 
-  // Sem dados no período atual → não penalizar ausência de dados.
+  // Sinais de criativo — independentes do gasto agregado (avaliados sobre e.ads).
+  const ads = e.ads ?? []
+  const rejeitado = avaliarCriativoRejeitado(ads, e, hoje)
+  if (rejeitado) alertas.push(rejeitado)
+  const fadiga = avaliarFadigaCriativo(ads, e, hoje)
+  if (fadiga) alertas.push(fadiga)
+
+  // Sem dados no período atual → não penalizar ausência de dados (sinais comparativos).
   if (atual.spend <= 0) return alertas
 
   // 1. Gastando sem converter (usa o próprio limiar, independente do gate geral).
@@ -204,6 +278,10 @@ function penalidade(a: Alerta): number {
       return PESO_PERFORMANCE
     case 'ctr_caindo':
       return PESO_CTR
+    case 'criativo_rejeitado':
+      return a.severidade === 'critico' ? PESO_CRITICO_CPA : PESO_ATENCAO
+    case 'fadiga_criativo':
+      return PESO_ATENCAO
     default:
       if (a.severidade === 'critico') return PESO_CRITICO_CPA
       if (a.severidade === 'atencao') return PESO_ATENCAO
@@ -250,6 +328,60 @@ async function buscarMetas(
 }
 
 /**
+ * Busca o status por anúncio (linha mais recente por adId) das contas Meta ativas
+ * do cliente. Robusto: retorna [] em qualquer erro (colunas podem ainda estar
+ * nulas/ausentes antes de um novo sync) — degradação graciosa.
+ */
+async function buscarAdsStatus(clienteId: string): Promise<AdStatusRow[]> {
+  try {
+    const contas = await db
+      .select({ id: adAccounts.id })
+      .from(adAccounts)
+      .where(
+        and(
+          eq(adAccounts.clienteId, clienteId),
+          eq(adAccounts.plataforma, 'meta'),
+          eq(adAccounts.ativo, true),
+        ),
+      )
+    if (contas.length === 0) return []
+
+    const rows = await db
+      .select({
+        adId: adInsights.adId,
+        adName: adInsights.adName,
+        effectiveStatus: adInsights.effectiveStatus,
+        frequency: adInsights.frequency,
+        impressions: adInsights.impressions,
+        spend: adInsights.spend,
+        syncedAt: adInsights.syncedAt,
+      })
+      .from(adInsights)
+      .where(inArray(adInsights.adAccountId, contas.map((c) => c.id)))
+
+    // Deduplicar por adId, mantendo a linha mais recente (maior syncedAt).
+    const maisRecente = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) {
+      const anterior = maisRecente.get(r.adId)
+      const tsAtual = r.syncedAt?.getTime() ?? 0
+      const tsAnterior = anterior?.syncedAt?.getTime() ?? 0
+      if (!anterior || tsAtual >= tsAnterior) maisRecente.set(r.adId, r)
+    }
+
+    return [...maisRecente.values()].map((r) => ({
+      adId: r.adId,
+      adName: r.adName,
+      effectiveStatus: r.effectiveStatus ?? null,
+      frequency: r.frequency != null ? Number(r.frequency) : null,
+      impressions: r.impressions ?? 0,
+      spend: r.spend != null ? Number(r.spend) : 0,
+    }))
+  } catch {
+    return []
+  }
+}
+
+/**
  * Alertas de saúde de campanha de TODOS os clientes com contas Meta ativas.
  * Não ordena (quem consome ordena). Não lança para um cliente individual —
  * falhas isoladas são ignoradas para não derrubar o lote.
@@ -261,10 +393,11 @@ export async function getAlertasCampanhas(): Promise<Alerta[]> {
 
   for (const c of lista) {
     try {
-      const [atual, anterior, metas] = await Promise.all([
+      const [atual, anterior, metas, ads] = await Promise.all([
         getMetricasIntervalo(c.id, atualDe, atualAte),
         getMetricasIntervalo(c.id, anteriorDe, anteriorAte),
         buscarMetas(c.id),
+        buscarAdsStatus(c.id),
       ])
       const alertas = avaliarSaudeCliente({
         clienteId: c.id,
@@ -273,6 +406,7 @@ export async function getAlertasCampanhas(): Promise<Alerta[]> {
         metaCpl: metas.metaCpl,
         atual,
         anterior,
+        ads,
       })
       todos.push(...alertas)
     } catch {
@@ -291,10 +425,11 @@ export async function getSaudeDoCliente(clienteId: string): Promise<HealthScore 
   if (!clienteId) return null
   try {
     const { atualDe, atualAte, anteriorDe, anteriorAte } = janelas()
-    const [atual, anterior, metas] = await Promise.all([
+    const [atual, anterior, metas, ads] = await Promise.all([
       getMetricasIntervalo(clienteId, atualDe, atualAte),
       getMetricasIntervalo(clienteId, anteriorDe, anteriorAte),
       buscarMetas(clienteId),
+      buscarAdsStatus(clienteId),
     ])
     const alertas = avaliarSaudeCliente({
       clienteId,
@@ -303,6 +438,7 @@ export async function getSaudeDoCliente(clienteId: string): Promise<HealthScore 
       metaCpl: metas.metaCpl,
       atual,
       anterior,
+      ads,
     })
     return calcularHealthScore(clienteId, alertas)
   } catch {
