@@ -75,6 +75,8 @@ export const contratos = pgTable('contratos', {
 export const tipoTransacaoEnum = pgEnum('tipo_transacao', ['receita', 'despesa'])
 export const categoriaTransacaoEnum = pgEnum('categoria_transacao', ['mensalidade', 'projeto', 'outro', 'ferramenta', 'ads_agencia', 'salario'])
 export const statusTransacaoEnum = pgEnum('status_transacao', ['pago', 'pendente', 'vencido'])
+export const centroCustoEnum = pgEnum('centro_custo', ['operacao', 'midia', 'infraestrutura'])
+export const recorrenciaEnum = pgEnum('recorrencia', ['mensal', 'trimestral', 'avulsa'])
 
 export const transacoes = pgTable('transacoes', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -87,6 +89,12 @@ export const transacoes = pgTable('transacoes', {
   status: statusTransacaoEnum('status').notNull().default('pendente'),
   diaVencto: integer('dia_vencto'),
   notas: text('notas'),
+  centroCusto: centroCustoEnum('centro_custo'),
+  recorrencia: recorrenciaEnum('recorrencia').notNull().default('avulsa'),
+  transacaoPaiId: uuid('transacao_pai_id').references((): any => transacoes.id, { onDelete: 'set null' }),
+  formaPagamento: formaPagamentoEnum('forma_pagamento_transacao'),
+  responsavelId: uuid('responsavel_id').references(() => profiles.id, { onDelete: 'set null' }),
+  comprovanteUrl: text('comprovante_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
@@ -175,6 +183,8 @@ export const contratosRelations = relations(contratos, ({ one }) => ({
 }))
 export const transacoesRelations = relations(transacoes, ({ one }) => ({
   cliente: one(clientes, { fields: [transacoes.clienteId], references: [clientes.id] }),
+  responsavel: one(profiles, { fields: [transacoes.responsavelId], references: [profiles.id] }),
+  transacaoPai: one(transacoes, { fields: [transacoes.transacaoPaiId], references: [transacoes.id], relationName: 'parcelas' }),
 }))
 export const adAccountsRelations = relations(adAccounts, ({ one, many }) => ({
   cliente: one(clientes, { fields: [adAccounts.clienteId], references: [clientes.id] }),
