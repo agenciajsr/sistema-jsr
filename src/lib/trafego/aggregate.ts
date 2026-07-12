@@ -457,3 +457,130 @@ export async function getResumoCliente(
     temDados: true,
   }
 }
+
+// --- Comparação de período (para avaliação de saúde de campanhas) ---
+
+export type MetricasIntervalo = {
+  spend: number
+  impressions: number
+  clicks: number
+  ctr: number | null // (clicks/impressions)*100
+  leads: number
+  vendas: number
+  conversas: number
+  resultadoHeroi: number // resultado da chave-herói do nicho
+  cpa: number | null // spend/vendas
+  cpl: number | null // spend/leads
+  custoPorResultadoHeroi: number | null // spend/resultadoHeroi
+  heroi: Heroi
+}
+
+function metricasVazias(heroi: Heroi): MetricasIntervalo {
+  return {
+    spend: 0,
+    impressions: 0,
+    clicks: 0,
+    ctr: null,
+    leads: 0,
+    vendas: 0,
+    conversas: 0,
+    resultadoHeroi: 0,
+    cpa: null,
+    cpl: null,
+    custoPorResultadoHeroi: null,
+    heroi,
+  }
+}
+
+/**
+ * Totais e derivadas de um cliente para um INTERVALO explícito e FECHADO
+ * (dataMinima <= date <= dataMaxima, ambas 'yyyy-MM-dd'). Usado para comparar
+ * "atual (7d)" vs "anterior (7d)" na avaliação de saúde.
+ * Mesma semântica de derivadas de getResumoCliente (null quando denominador 0).
+ * NUNCA lança: sem contas / sem linhas → MetricasIntervalo zerado com heroi correto.
+ * Não exige sessão (é chamada por orquestradores server-side já autenticados).
+ */
+export async function getMetricasIntervalo(
+  clienteId: string,
+  dataMinima: string,
+  dataMaxima: string,
+): Promise<MetricasIntervalo> {
+  const cliente = await db.query.clientes.findFirst({
+    where: eq(clientes.id, clienteId),
+    columns: { id: true, nicho: true },
+  })
+  const heroi = metricaHeroi((cliente?.nicho ?? 'infoproduto') as Nicho)
+
+  if (!cliente) return metricasVazias(heroi)
+
+  const contas = await db
+    .select({ id: adAccounts.id })
+    .from(adAccounts)
+    .where(
+      and(
+        eq(adAccounts.clienteId, clienteId),
+        eq(adAccounts.plataforma, 'meta'),
+        eq(adAccounts.ativo, true),
+      ),
+    )
+
+  if (contas.length === 0) return metricasVazias(heroi)
+
+  const insights = await db
+    .select({
+      spend: campaignInsights.spend,
+      impressions: campaignInsights.impressions,
+      clicks: campaignInsights.clicks,
+      actions: campaignInsights.actions,
+    })
+    .from(campaignInsights)
+    .where(
+      and(
+        inArray(
+          campaignInsights.adAccountId,
+          contas.map((c) => c.id),
+        ),
+        gte(campaignInsights.date, dataMinima),
+        lte(campaignInsights.date, dataMaxima),
+      ),
+    )
+
+  if (insights.length === 0) return metricasVazias(heroi)
+
+  let spend = 0
+  let impressions = 0
+  let clicks = 0
+  let leads = 0
+  let vendas = 0
+  let conversas = 0
+
+  for (const i of insights) {
+    spend += Number(i.spend) || 0
+    impressions += i.impressions ?? 0
+    clicks += i.clicks ?? 0
+    const r = parseActions(i.actions)
+    leads += r.leads
+    vendas += r.vendas
+    conversas += r.conversas
+  }
+
+  const resultadoHeroi = resultadoDaChave(
+    { leads, vendas, conversas, linkClicks: 0 },
+    heroi.chave,
+  )
+
+  return {
+    spend,
+    impressions,
+    clicks,
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    leads,
+    vendas,
+    conversas,
+    resultadoHeroi,
+    cpa: vendas > 0 ? spend / vendas : null,
+    cpl: leads > 0 ? spend / leads : null,
+    custoPorResultadoHeroi: resultadoHeroi > 0 ? spend / resultadoHeroi : null,
+    heroi,
+  }
+}
