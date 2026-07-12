@@ -20,7 +20,7 @@ export default async function EditarClientePage({
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-8">
+    <div className="mx-auto w-full max-w-3xl space-y-8">
       <h1 className="text-[28px] leading-tight font-semibold">Editar Cliente</h1>
       <ClienteForm
         mode="editar"
@@ -32,7 +32,27 @@ export default async function EditarClientePage({
           contatoNome: cliente.contatoNome ?? '',
           contatoTelefone: cliente.contatoTelefone ?? '',
           contatoEmail: cliente.contatoEmail ?? '',
+          tipoPessoa: cliente.tipoPessoa ?? 'juridica',
+          documento: cliente.documento ?? '',
+          razaoSocial: cliente.razaoSocial ?? '',
+          nomeFantasia: cliente.nomeFantasia ?? '',
+          endereco: cliente.endereco ?? '',
+          cidade: cliente.cidade ?? '',
+          estado: cliente.estado ?? '',
+          cep: cliente.cep ?? '',
+          instagram: cliente.instagram ?? '',
+          siteUrl: cliente.siteUrl ?? '',
+          formaPagamento: cliente.formaPagamento ?? undefined,
+          diaPagamento: cliente.diaPagamento ?? '',
+          servicosContratados: ((cliente.servicosContratados ?? []) as typeof import('@/lib/validations/cliente').SERVICOS_DISPONIVEIS[number][]),
+          gestorId: cliente.gestorId ?? '',
+          verbaMensal: cliente.verbaMensal ? Number(cliente.verbaMensal) : '',
+          ticketMedio: cliente.ticketMedio ? Number(cliente.ticketMedio) : '',
+          agendamentoPosts: cliente.agendamentoPosts ?? false,
+          frequenciaPosts: cliente.frequenciaPosts ?? '',
           notas: cliente.notas ?? '',
+          origemCliente: cliente.origemCliente ?? '',
+          objetivoPrincipal: cliente.objetivoPrincipal ?? '',
         }}
       />
     </div>
