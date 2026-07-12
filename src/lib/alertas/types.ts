@@ -1,4 +1,4 @@
-export type TipoAlerta = 'contrato_vencendo' | 'pagamento_vencido' | 'cliente_inativo'
+export type TipoAlerta = 'contrato_vencendo' | 'pagamento_vencido' | 'cliente_inativo' | 'verba_baixa'
 
 export type SeveridadeAlerta = 'critico' | 'atencao' | 'info'
 

@@ -6,7 +6,6 @@ import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
 import { adAccounts, campaignInsights, clientes } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
-import { inngest } from '@/lib/inngest/client'
 
 export type TrafegoCampanha = {
   campaignId: string
@@ -120,19 +119,18 @@ export async function getTrafegoData(): Promise<TrafegoAccount[]> {
   return result
 }
 
-export async function triggerMetaSync() {
+export async function triggerMetaSync(clienteId?: string) {
   const currentUser = await getCurrentUser()
   if (!currentUser) {
     return { error: 'Sessao expirada. Faca login novamente.' }
   }
 
-  try {
-    await inngest.send({ name: 'meta-ads/sync.requested', data: {} })
-    return { data: { triggered: true } }
-  } catch (err) {
-    console.error('[triggerMetaSync] Erro ao disparar sync:', err)
-    return { error: 'Nao foi possivel iniciar a sincronizacao. Tente novamente.' }
-  }
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const params = clienteId ? `?clienteId=${clienteId}` : ''
+
+  // Fire-and-forget: dispara sync via API route sem aguardar
+  fetch(`${baseUrl}/api/sync-meta${params}`, { method: 'POST' }).catch(() => {})
+  return { data: { triggered: true } }
 }
 
 export async function getUltimaSync(): Promise<Date | null> {

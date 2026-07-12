@@ -1,7 +1,8 @@
-import { eq, and, gte, inArray } from 'drizzle-orm'
+import { eq, and, gte, lte, inArray } from 'drizzle-orm'
+import { format, subDays } from 'date-fns'
 
 import { db } from '@/lib/db'
-import { adAccounts, campaignInsights, clientes } from '@/lib/db/schema'
+import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 
 export type Nicho = 'ecommerce' | 'negocio_local' | 'infoproduto'
@@ -80,6 +81,17 @@ export function parseActions(actions: unknown): ResultadoActions {
   }
 }
 
+/**
+ * Extrai a RECEITA total (valor monetário de compras) do campo `action_values` (jsonb) da Meta.
+ * Usa a mesma lógica de dedup/prioridade de VENDAS_TYPES.
+ * Retorna 0 quando não há dados válidos (nunca lança).
+ */
+export function parseActionValues(actionValues: unknown): number {
+  if (!Array.isArray(actionValues)) return 0
+  const items = actionValues.filter(isActionItem)
+  return somarGrupo(items, VENDAS_TYPES)
+}
+
 export type ChaveHeroi = 'vendas' | 'conversas' | 'leads'
 export type Heroi = { chave: ChaveHeroi; label: string }
 
@@ -125,6 +137,24 @@ export type CampanhaRanking = {
   cpaOuCpl: number | null
 }
 
+export type CriativoRanking = {
+  adId: string
+  adName: string
+  adsetName: string
+  thumbUrl: string | null
+  spend: number
+  resultadoPrimario: number
+  cpaOuCpl: number | null
+}
+
+export type ConjuntoRanking = {
+  adsetId: string
+  adsetName: string
+  spend: number
+  resultadoPrimario: number
+  cpaOuCpl: number | null
+}
+
 export type ResumoCliente = {
   clienteId: string
   contasUnificadas: number
@@ -148,6 +178,10 @@ export type ResumoCliente = {
   }
   serieSpendPorDia: { date: string; spend: number }[]
   ranking: CampanhaRanking[]
+  receita: number
+  roas: number | null
+  topCriativos: CriativoRanking[]
+  topConjuntos: ConjuntoRanking[]
   temDados: boolean
 }
 
@@ -166,19 +200,25 @@ function resumoVazio(clienteId: string, heroi: Heroi, contas: number): ResumoCli
     derivadas: { cpm: null, ctr: null, cpl: null, cpa: null, custoPorResultadoHeroi: null },
     serieSpendPorDia: [],
     ranking: [],
+    receita: 0,
+    roas: null,
+    topCriativos: [],
+    topConjuntos: [],
     temDados: false,
   }
 }
 
+export type Periodo = 'hoje' | 'ontem' | '7d' | '30d'
+
 /**
- * Agrega TODAS as contas Meta de um cliente num resumo unificado, para os
- * ultimos `periodoDias` dias. Parseia `actions` de cada linha diaria para
+ * Agrega TODAS as contas Meta de um cliente num resumo unificado para o
+ * período solicitado. Parseia `actions` de cada linha diaria para
  * derivar leads/vendas/conversas. Nunca lanca: retorna resumo zerado
  * (temDados=false) quando nao ha contas, dados ou sessao.
  */
 export async function getResumoCliente(
   clienteId: string,
-  periodoDias: 7 | 30,
+  periodo: Periodo = '30d',
 ): Promise<ResumoCliente | null> {
   const user = await getCurrentUser()
   if (!user) return null
@@ -206,9 +246,33 @@ export async function getResumoCliente(
   if (contas.length === 0) return resumoVazio(clienteId, heroi, 0)
 
   const hoje = new Date()
-  const desde = new Date(hoje)
-  desde.setDate(desde.getDate() - periodoDias)
-  const dataMinima = desde.toISOString().slice(0, 10)
+  const hojeStr = format(hoje, 'yyyy-MM-dd')
+  let dataMinima: string
+  let dataMaxima: string | null = null // null = sem limite superior (ate hoje)
+  switch (periodo) {
+    case 'hoje':
+      dataMinima = hojeStr
+      break
+    case 'ontem': {
+      const ontemStr = format(subDays(hoje, 1), 'yyyy-MM-dd')
+      dataMinima = ontemStr
+      dataMaxima = ontemStr
+      break
+    }
+    case '7d':
+      dataMinima = format(subDays(hoje, 7), 'yyyy-MM-dd')
+      break
+    case '30d':
+    default:
+      dataMinima = format(subDays(hoje, 30), 'yyyy-MM-dd')
+      break
+  }
+
+  const insightsConditions = [
+    inArray(campaignInsights.adAccountId, contas.map((c) => c.id)),
+    gte(campaignInsights.date, dataMinima),
+    ...(dataMaxima ? [lte(campaignInsights.date, dataMaxima)] : []),
+  ]
 
   const insights = await db
     .select({
@@ -220,18 +284,15 @@ export async function getResumoCliente(
       clicks: campaignInsights.clicks,
       reach: campaignInsights.reach,
       actions: campaignInsights.actions,
+      actionValues: campaignInsights.actionValues,
     })
     .from(campaignInsights)
-    .where(
-      and(
-        inArray(campaignInsights.adAccountId, contas.map((c) => c.id)),
-        gte(campaignInsights.date, dataMinima),
-      ),
-    )
+    .where(and(...insightsConditions))
 
   if (insights.length === 0) return resumoVazio(clienteId, heroi, contas.length)
 
   const totais = { spend: 0, impressions: 0, clicks: 0, reach: 0, leads: 0, vendas: 0, conversas: 0, linkClicks: 0 }
+  let receita = 0
   const spendPorDia = new Map<string, number>()
   const porCampanha = new Map<string, { campaignName: string; spend: number; resultadoPrimario: number }>()
 
@@ -247,6 +308,7 @@ export async function getResumoCliente(
     totais.vendas += r.vendas
     totais.conversas += r.conversas
     totais.linkClicks += r.linkClicks
+    receita += parseActionValues(i.actionValues)
 
     spendPorDia.set(i.date, (spendPorDia.get(i.date) ?? 0) + spend)
 
@@ -288,6 +350,98 @@ export async function getResumoCliente(
     custoPorResultadoHeroi: resultadoHeroiTotal > 0 ? totais.spend / resultadoHeroiTotal : null,
   }
 
+  const roas = receita > 0 && totais.spend > 0 ? receita / totais.spend : null
+
+  // --- Top Criativos e Conjuntos (a partir de ad_insights) ---
+  let adRows: { adId: string; adName: string; adsetId: string | null; adsetName: string | null; thumbnailUrl: string | null; spend: string; actions: unknown }[] = []
+  try {
+    adRows = await db
+      .select({
+        adId: adInsights.adId,
+        adName: adInsights.adName,
+        adsetId: adInsights.adsetId,
+        adsetName: adInsights.adsetName,
+        thumbnailUrl: adInsights.thumbnailUrl,
+        spend: adInsights.spend,
+        actions: adInsights.actions,
+      })
+      .from(adInsights)
+      .where(
+        and(
+          inArray(adInsights.adAccountId, contas.map((c) => c.id)),
+          gte(adInsights.dateStart, dataMinima),
+          ...(dataMaxima ? [lte(adInsights.dateStart, dataMaxima)] : []),
+        ),
+      )
+  } catch {
+    // ad_insights pode não existir ainda — continuar sem criativos/conjuntos
+  }
+
+  // Agrupar por adId (criativos)
+  const porCriativo = new Map<string, { adName: string; adsetName: string; thumbUrl: string | null; spend: number; resultadoPrimario: number }>()
+  // Agrupar por adsetId (conjuntos)
+  const porConjunto = new Map<string, { adsetName: string; spend: number; resultadoPrimario: number }>()
+
+  for (const row of adRows) {
+    const spend = Number(row.spend) || 0
+    const r = parseActions(row.actions)
+    const resultado = resultadoDaChave(r, heroi.chave)
+
+    // Criativos
+    const existC = porCriativo.get(row.adId)
+    if (existC) {
+      existC.spend += spend
+      existC.resultadoPrimario += resultado
+      if (!existC.thumbUrl && row.thumbnailUrl) existC.thumbUrl = row.thumbnailUrl
+    } else {
+      porCriativo.set(row.adId, {
+        adName: row.adName,
+        adsetName: row.adsetName ?? '',
+        thumbUrl: row.thumbnailUrl ?? null,
+        spend,
+        resultadoPrimario: resultado,
+      })
+    }
+
+    // Conjuntos
+    const adsetKey = row.adsetId ?? '_sem_conjunto'
+    const existJ = porConjunto.get(adsetKey)
+    if (existJ) {
+      existJ.spend += spend
+      existJ.resultadoPrimario += resultado
+    } else {
+      porConjunto.set(adsetKey, {
+        adsetName: row.adsetName ?? 'Sem conjunto',
+        spend,
+        resultadoPrimario: resultado,
+      })
+    }
+  }
+
+  const topCriativos: CriativoRanking[] = Array.from(porCriativo.entries())
+    .map(([adId, v]) => ({
+      adId,
+      adName: v.adName,
+      adsetName: v.adsetName,
+      thumbUrl: v.thumbUrl,
+      spend: v.spend,
+      resultadoPrimario: v.resultadoPrimario,
+      cpaOuCpl: v.resultadoPrimario > 0 ? v.spend / v.resultadoPrimario : null,
+    }))
+    .sort((a, b) => b.resultadoPrimario - a.resultadoPrimario || b.spend - a.spend)
+    .slice(0, 8)
+
+  const topConjuntos: ConjuntoRanking[] = Array.from(porConjunto.entries())
+    .map(([adsetId, v]) => ({
+      adsetId,
+      adsetName: v.adsetName,
+      spend: v.spend,
+      resultadoPrimario: v.resultadoPrimario,
+      cpaOuCpl: v.resultadoPrimario > 0 ? v.spend / v.resultadoPrimario : null,
+    }))
+    .sort((a, b) => b.resultadoPrimario - a.resultadoPrimario || b.spend - a.spend)
+    .slice(0, 6)
+
   return {
     clienteId,
     contasUnificadas: contas.length,
@@ -296,6 +450,10 @@ export async function getResumoCliente(
     derivadas,
     serieSpendPorDia,
     ranking,
+    receita,
+    roas,
+    topCriativos,
+    topConjuntos,
     temDados: true,
   }
 }

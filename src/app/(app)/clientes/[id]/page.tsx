@@ -134,7 +134,7 @@ export default async function ClienteDetalhePage({
     getCobrancasDoCliente(id),
     getContasDoCliente(id),
     getContasNaoVinculadas(),
-    getResumoCliente(id, 30),
+    getResumoCliente(id, '30d'),
     getChecklistDoCliente(id),
     getAcompanhamentosDoCliente(id),
     getAlertasDoCliente(id),

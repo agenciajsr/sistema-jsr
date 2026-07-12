@@ -140,6 +140,57 @@ export function avaliarClientesInativos(clientes: ClienteInput[]): Alerta[] {
   return alertas
 }
 
+// --- Saldo de contas de anuncio ---
+
+type ContaAnuncioInput = {
+  id: string
+  nome: string
+  clienteId: string | null
+  clienteNome: string | null
+  saldo: string | number | null
+}
+
+const THRESHOLD_CRITICO_SALDO = 50
+const THRESHOLD_ATENCAO_SALDO = 100
+
+export function avaliarSaldoContas(contas: ContaAnuncioInput[]): Alerta[] {
+  const alertas: Alerta[] = []
+  const hoje = new Date().toISOString().slice(0, 10)
+
+  for (const conta of contas) {
+    if (conta.saldo === null || conta.saldo === undefined) continue
+
+    const saldo = typeof conta.saldo === 'string' ? Number(conta.saldo) : conta.saldo
+    if (isNaN(saldo)) continue
+
+    let severidade: SeveridadeAlerta
+    let titulo: string
+
+    if (saldo < THRESHOLD_CRITICO_SALDO) {
+      severidade = 'critico'
+      titulo = 'Verba quase zerada'
+    } else if (saldo < THRESHOLD_ATENCAO_SALDO) {
+      severidade = 'atencao'
+      titulo = 'Verba baixa'
+    } else {
+      continue
+    }
+
+    alertas.push({
+      id: `verba-${conta.id}`,
+      tipo: 'verba_baixa',
+      severidade,
+      titulo,
+      detalhe: `Conta "${conta.nome}" com saldo de ${formatarMoeda(saldo)}`,
+      clienteNome: conta.clienteNome ?? 'Sem cliente',
+      clienteId: conta.clienteId ?? '',
+      dataRelevante: hoje,
+    })
+  }
+
+  return alertas
+}
+
 // --- Ordenacao ---
 
 export function ordenarPorSeveridade(alertas: Alerta[]): Alerta[] {

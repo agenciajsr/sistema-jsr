@@ -1,4 +1,4 @@
-import { metaAdAccountsResponseSchema, metaInsightsResponseSchema } from './schemas'
+import { metaAdAccountsResponseSchema, metaAdInsightsResponseSchema, metaInsightsResponseSchema } from './schemas'
 
 const META_BASE_URL = 'https://graph.facebook.com'
 
@@ -22,7 +22,7 @@ async function metaFetch(path: string, params: Record<string, string> = {}): Pro
     url.searchParams.set(k, v)
   }
 
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) })
 
   // Monitorar rate limit via header X-Business-Use-Case-Usage
   const usageHeader = res.headers.get('x-business-use-case-usage')
@@ -48,6 +48,26 @@ async function metaFetch(path: string, params: Record<string, string> = {}): Pro
   }
 
   return res.json()
+}
+
+/**
+ * Busca o saldo restante de uma conta de anuncio.
+ * spend_cap = limite total de gasto definido na conta; amount_spent = quanto ja gastou.
+ * Saldo = spend_cap - amount_spent. Se nao tiver spend_cap, retorna null (sem limite).
+ */
+export async function fetchAccountBalance(adAccountId: string): Promise<number | null> {
+  try {
+    const raw = await metaFetch(`/act_${adAccountId}`, {
+      fields: 'spend_cap,amount_spent',
+    })
+    const data = raw as { spend_cap?: string; amount_spent?: string }
+    if (!data.spend_cap || data.spend_cap === '0') return null
+    const spendCap = Number(data.spend_cap) / 100 // Meta retorna em centavos
+    const amountSpent = Number(data.amount_spent ?? '0') / 100
+    return Math.max(spendCap - amountSpent, 0)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -78,21 +98,100 @@ export async function fetchMetaAdAccounts() {
 }
 
 /**
+ * Busca uma URL completa da Meta (usada para paginação — next URLs já incluem token).
+ */
+async function metaFetchUrl(url: string): Promise<unknown> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`[Meta API] Erro ${res.status}: ${body}`)
+  }
+  return res.json()
+}
+
+/**
  * Busca insights de campanhas de uma conta de anuncio (historico diario, ultimos 30 dias).
- * Com time_increment '1', a Meta retorna UMA linha por dia por campanha,
- * cada uma com date_start === date_stop = o dia. O sync (sync-meta-ads.ts) usa
- * insight.date_start como date e faz upsert por (adAccountId, date, campaignId),
- * lidando corretamente com o historico sem alteracao no schema.
+ * Segue paginação automaticamente (max 500 registros para segurança).
  * @param adAccountId ID numerico da conta (sem prefixo act_)
  */
-export async function fetchCampaignInsights(adAccountId: string) {
+export async function fetchCampaignInsights(adAccountId: string, datePreset: string = 'last_30d') {
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'campaign',
-    fields: 'campaign_id,campaign_name,spend,impressions,clicks,reach,cpc,cpm,ctr,actions',
-    date_preset: 'last_30d',
+    fields: 'campaign_id,campaign_name,spend,impressions,clicks,reach,cpc,cpm,ctr,actions,action_values',
+    date_preset: datePreset,
     time_increment: '1',
+    limit: '100',
   })
 
   const parsed = metaInsightsResponseSchema.parse(raw)
-  return parsed.data
+  const allData = [...parsed.data]
+
+  // Seguir paginação
+  let nextUrl = parsed.paging?.next
+  let pages = 0
+  while (nextUrl && pages < 4) { // max 5 páginas = 500 registros
+    const nextRaw = await metaFetchUrl(nextUrl)
+    const nextParsed = metaInsightsResponseSchema.parse(nextRaw)
+    allData.push(...nextParsed.data)
+    nextUrl = nextParsed.paging?.next
+    pages++
+  }
+
+  return allData
+}
+
+/**
+ * Busca insights nível anúncio (ad-level) de uma conta. Agregado nos últimos 30 dias
+ * (sem time_increment — uma linha por anúncio no período inteiro para limitar volume).
+ * Segue paginação automaticamente (max 400 registros).
+ */
+export async function fetchAdInsights(adAccountId: string, datePreset: string = 'last_30d') {
+  const raw = await metaFetch(`/act_${adAccountId}/insights`, {
+    level: 'ad',
+    fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,actions,action_values',
+    date_preset: datePreset,
+    limit: '200',
+  })
+
+  const parsed = metaAdInsightsResponseSchema.parse(raw)
+  const allData = [...parsed.data]
+
+  // Seguir paginação (max 1 página extra = 400 registros)
+  let nextUrl = parsed.paging?.next
+  if (nextUrl) {
+    try {
+      const nextRaw = await metaFetchUrl(nextUrl)
+      const nextParsed = metaAdInsightsResponseSchema.parse(nextRaw)
+      allData.push(...nextParsed.data)
+    } catch { /* ignorar erro de paginação extra */ }
+  }
+
+  return allData
+}
+
+/**
+ * Busca thumbnails dos criativos ativos de uma conta (best-effort).
+ * Retorna Map<adId, thumbnailUrl>. Nunca lança — retorna Map vazio em caso de erro.
+ */
+export async function fetchAdThumbnails(adAccountId: string): Promise<Map<string, string>> {
+  try {
+    const raw = await metaFetch(`/act_${adAccountId}/ads`, {
+      fields: 'id,creative{thumbnail_url}',
+      limit: '200',
+    })
+
+    const result = new Map<string, string>()
+    const data = (raw as { data?: Array<{ id?: string; creative?: { thumbnail_url?: string } }> }).data
+    if (!Array.isArray(data)) return result
+
+    for (const ad of data) {
+      const url = ad?.creative?.thumbnail_url
+      if (ad?.id && url) {
+        result.set(ad.id, url)
+      }
+    }
+    return result
+  } catch {
+    return new Map()
+  }
 }

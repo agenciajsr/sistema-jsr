@@ -4,12 +4,13 @@ import { eq, lte } from 'drizzle-orm'
 import { addDays, format } from 'date-fns'
 
 import { db } from '@/lib/db'
-import { contratos, transacoes, clientes } from '@/lib/db/schema'
+import { contratos, transacoes, clientes, adAccounts } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import {
   avaliarContratos,
   avaliarTransacoes,
   avaliarClientesInativos,
+  avaliarSaldoContas,
   ordenarPorSeveridade,
 } from '@/lib/alertas/avaliar'
 import type { Alerta } from '@/lib/alertas/types'
@@ -75,16 +76,31 @@ export async function getAlertas(): Promise<Alerta[]> {
 
   const todosClientes = [...clientesRows, ...clientesEncerrados]
 
+  // 4. Contas de anuncio com saldo baixo
+  const contasRows = await db
+    .select({
+      id: adAccounts.id,
+      nome: adAccounts.nome,
+      clienteId: adAccounts.clienteId,
+      clienteNome: clientes.nome,
+      saldo: adAccounts.saldo,
+    })
+    .from(adAccounts)
+    .leftJoin(clientes, eq(adAccounts.clienteId, clientes.id))
+    .where(eq(adAccounts.ativo, true))
+
   // Avaliar
   const alertasContratos = avaliarContratos(contratosRows)
   const alertasTransacoes = avaliarTransacoes(transacoesRows)
   const alertasClientes = avaliarClientesInativos(todosClientes)
+  const alertasSaldo = avaliarSaldoContas(contasRows)
 
   // Unificar e ordenar
   return ordenarPorSeveridade([
     ...alertasContratos,
     ...alertasTransacoes,
     ...alertasClientes,
+    ...alertasSaldo,
   ])
 }
 

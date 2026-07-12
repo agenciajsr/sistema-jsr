@@ -22,6 +22,7 @@ const TIPO_HREF: Record<TipoAlerta, string> = {
   contrato_vencendo: '/alertas',
   pagamento_vencido: '/financeiro',
   cliente_inativo: '/clientes',
+  verba_baixa: '/alertas',
 }
 
 // Lista de alertas importantes com link por linha. Client component (painel e 'use client').

@@ -1,23 +1,42 @@
 import Link from 'next/link'
-import { DollarSign, FileText, Pause, UserPlus } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { ptBR } from 'date-fns/locale/pt-BR'
+import { DollarSign, FileText, UserPlus } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { TipoAtividade } from '@/lib/mock/dashboard-ref'
-import { atividadeRecenteMock } from '@/lib/mock/dashboard-ref'
+import type { AtividadeItem } from '@/lib/dashboard/data'
+
+type TipoAtividade = AtividadeItem['tipo']
 
 const CONFIG_TIPO: Record<
   TipoAtividade,
   { classe: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  relatorio: { classe: 'bg-primary/10 text-primary', icon: FileText },
-  pagamento: { classe: 'bg-chart-success/10 text-chart-success', icon: DollarSign },
-  campanha: { classe: 'bg-chart-warning/10 text-chart-warning', icon: Pause },
   cliente: { classe: 'bg-chart-purple/10 text-chart-purple', icon: UserPlus },
+  pagamento: { classe: 'bg-chart-success/10 text-chart-success', icon: DollarSign },
 }
 
-// Feed de atividade recente. Server component.
-export function AtividadeRecente() {
+type Props = {
+  atividades: AtividadeItem[]
+}
+
+export function AtividadeRecente({ atividades }: Props) {
+  if (atividades.length === 0) {
+    return (
+      <Card className="border-none shadow-[var(--shadow-sm)]">
+        <CardHeader>
+          <CardTitle className="text-base">Atividade Recente</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Nenhuma atividade recente registrada.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="border-none shadow-[var(--shadow-sm)]">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -27,8 +46,8 @@ export function AtividadeRecente() {
         </Link>
       </CardHeader>
       <CardContent className="space-y-1">
-        {atividadeRecenteMock.map((a) => {
-          const config = CONFIG_TIPO[a.tipo]
+        {atividades.map((a) => {
+          const config = CONFIG_TIPO[a.tipo] ?? CONFIG_TIPO.cliente
           return (
             <div key={a.id} className="flex items-start gap-3 rounded-xl p-2">
               <div
@@ -43,7 +62,9 @@ export function AtividadeRecente() {
                 <p className="text-sm font-medium">{a.titulo}</p>
                 <p className="truncate text-xs text-muted-foreground">{a.sub}</p>
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">{a.tempo}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatDistanceToNow(a.tempo, { addSuffix: true, locale: ptBR })}
+              </span>
             </div>
           )
         })}

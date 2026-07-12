@@ -2,8 +2,8 @@ import { eq, and } from 'drizzle-orm'
 
 import { inngest } from '../client'
 import { db } from '@/lib/db'
-import { adAccounts, campaignInsights } from '@/lib/db/schema'
-import { fetchMetaAdAccounts, fetchCampaignInsights } from '@/lib/meta/client'
+import { adAccounts, adInsights, campaignInsights } from '@/lib/db/schema'
+import { fetchMetaAdAccounts, fetchCampaignInsights, fetchAdInsights, fetchAdThumbnails, fetchAccountBalance } from '@/lib/meta/client'
 
 export const syncMetaAds = inngest.createFunction(
   {
@@ -92,6 +92,7 @@ export const syncMetaAds = inngest.createFunction(
             cpm: insight.cpm ?? null,
             ctr: insight.ctr ?? null,
             actions: insight.actions.length > 0 ? insight.actions : null,
+            actionValues: insight.action_values.length > 0 ? insight.action_values : null,
             syncedAt: new Date(),
           }
 
@@ -111,6 +112,69 @@ export const syncMetaAds = inngest.createFunction(
         }
 
         return insights.length
+      })
+
+      // Step: sincronizar ad_insights (nível anúncio/criativo)
+      await step.run(`sync-ad-insights-${account.metaAccountId}`, async () => {
+        const [ads, thumbs] = await Promise.all([
+          fetchAdInsights(account.metaAccountId),
+          fetchAdThumbnails(account.metaAccountId),
+        ])
+
+        for (const ad of ads) {
+          const [existing] = await db
+            .select({ id: adInsights.id })
+            .from(adInsights)
+            .where(
+              and(
+                eq(adInsights.adAccountId, account.id),
+                eq(adInsights.dateStart, ad.date_start),
+                eq(adInsights.adId, ad.ad_id),
+              ),
+            )
+            .limit(1)
+
+          const adData = {
+            adName: ad.ad_name,
+            adsetId: ad.adset_id || null,
+            adsetName: ad.adset_name || null,
+            campaignId: ad.campaign_id || null,
+            campaignName: ad.campaign_name || null,
+            thumbnailUrl: thumbs.get(ad.ad_id) ?? null,
+            spend: ad.spend,
+            impressions: parseInt(ad.impressions, 10),
+            clicks: parseInt(ad.clicks, 10),
+            actions: ad.actions.length > 0 ? ad.actions : null,
+            actionValues: ad.action_values.length > 0 ? ad.action_values : null,
+            dateStop: ad.date_stop,
+            syncedAt: new Date(),
+          }
+
+          if (existing) {
+            await db.update(adInsights).set(adData).where(eq(adInsights.id, existing.id))
+          } else {
+            await db.insert(adInsights).values({
+              adAccountId: account.id,
+              adId: ad.ad_id,
+              dateStart: ad.date_start,
+              ...adData,
+            })
+          }
+        }
+
+        return ads.length
+      })
+
+      // Step: atualizar saldo da conta
+      await step.run(`sync-balance-${account.metaAccountId}`, async () => {
+        const saldo = await fetchAccountBalance(account.metaAccountId)
+        if (saldo !== null) {
+          await db
+            .update(adAccounts)
+            .set({ saldo: saldo.toFixed(2), updatedAt: new Date() })
+            .where(eq(adAccounts.id, account.id))
+        }
+        return saldo
       })
 
       // Pausa de 2s entre contas para respeitar rate limits da Meta

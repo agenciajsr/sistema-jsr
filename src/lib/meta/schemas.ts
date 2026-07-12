@@ -39,12 +39,41 @@ export const metaInsightSchema = z.object({
   cpm: z.string().optional(),
   ctr: z.string().optional(),
   actions: z.array(metaActionSchema).optional().default([]),
+  action_values: z.array(metaActionSchema).optional().default([]),
   date_start: z.string(),
   date_stop: z.string(),
 })
 
 export const metaInsightsResponseSchema = z.object({
   data: z.array(metaInsightSchema),
+  paging: z.object({
+    cursors: z.object({
+      before: z.string().optional(),
+      after: z.string().optional(),
+    }).optional(),
+    next: z.string().optional(),
+  }).optional(),
+})
+
+// Schema para insight nível anúncio (ad-level)
+export const metaAdInsightSchema = z.object({
+  ad_id: z.string(),
+  ad_name: z.string().default(''),
+  adset_id: z.string().default(''),
+  adset_name: z.string().default(''),
+  campaign_id: z.string().default(''),
+  campaign_name: z.string().default(''),
+  spend: z.string().default('0'),
+  impressions: z.string().default('0'),
+  clicks: z.string().default('0'),
+  actions: z.array(metaActionSchema).optional().default([]),
+  action_values: z.array(metaActionSchema).optional().default([]),
+  date_start: z.string(),
+  date_stop: z.string(),
+})
+
+export const metaAdInsightsResponseSchema = z.object({
+  data: z.array(metaAdInsightSchema),
   paging: z.object({
     cursors: z.object({
       before: z.string().optional(),

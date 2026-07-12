@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { parseActions } from './aggregate'
+import { parseActions, parseActionValues } from './aggregate'
 
 describe('parseActions', () => {
   it('(a) conta leads simples a partir de um action_type de lead', () => {
@@ -51,5 +51,35 @@ describe('parseActions', () => {
     ])
     expect(r.linkClicks).toBe(15)
     expect(r.leads).toBe(2.5)
+  })
+})
+
+describe('parseActionValues', () => {
+  it('extrai receita de omni_purchase', () => {
+    expect(parseActionValues([{ action_type: 'omni_purchase', value: '150.5' }])).toBe(150.5)
+  })
+
+  it('prioriza omni_purchase sobre purchase (dedup)', () => {
+    const result = parseActionValues([
+      { action_type: 'purchase', value: '50' },
+      { action_type: 'omni_purchase', value: '200' },
+      { action_type: 'offsite_conversion.fb_pixel_purchase', value: '50' },
+    ])
+    expect(result).toBe(200)
+  })
+
+  it('usa purchase quando omni_purchase ausente', () => {
+    expect(parseActionValues([{ action_type: 'purchase', value: '99.9' }])).toBe(99.9)
+  })
+
+  it('retorna 0 para null/undefined/invalido sem lancar', () => {
+    expect(parseActionValues(null)).toBe(0)
+    expect(parseActionValues(undefined)).toBe(0)
+    expect(parseActionValues('x')).toBe(0)
+    expect(parseActionValues([{ foo: 'bar' }])).toBe(0)
+  })
+
+  it('retorna 0 quando nao ha action_types de venda', () => {
+    expect(parseActionValues([{ action_type: 'lead', value: '10' }])).toBe(0)
   })
 })

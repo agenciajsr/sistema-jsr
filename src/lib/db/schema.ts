@@ -69,6 +69,7 @@ export const adAccounts = pgTable('ad_accounts', {
   nome: text('nome').notNull(),
   accountStatus: integer('account_status'),
   currency: text('currency').default('BRL'),
+  saldo: numeric('saldo', { precision: 12, scale: 2 }),
   ativo: boolean('ativo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -90,6 +91,7 @@ export const campaignInsights = pgTable('campaign_insights', {
   cpm: numeric('cpm', { precision: 10, scale: 4 }),
   ctr: numeric('ctr', { precision: 8, scale: 4 }),
   actions: jsonb('actions'),
+  actionValues: jsonb('action_values'),
   syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   accountDateCampaignIdx: index('ci_account_date_campaign_idx').on(table.adAccountId, table.date, table.campaignId),

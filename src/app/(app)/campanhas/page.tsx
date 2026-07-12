@@ -1,4 +1,5 @@
 import {
+  DollarSign,
   Eye,
   MousePointerClick,
   Percent,
@@ -25,12 +26,14 @@ import { SyncButton } from '@/components/trafego/sync-button'
 import { SeletorCampanhas } from '@/components/trafego/seletor-campanhas'
 import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
 import { GraficoVerba } from '@/components/trafego/grafico-verba'
+import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
+import { ConjuntosPerformam } from '@/components/trafego/conjuntos-performam'
 import {
   getContasNaoVinculadas,
   getUltimaSync,
   listarClientes,
 } from '@/actions/trafego'
-import { getResumoCliente, listarClientesComContas } from '@/lib/trafego/aggregate'
+import { getResumoCliente, listarClientesComContas, type Periodo } from '@/lib/trafego/aggregate'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -52,6 +55,14 @@ function pct(v: number | null): string {
   return v === null ? '-' : `${formatadorPct.format(v)}%`
 }
 
+const PERIODOS_VALIDOS: Periodo[] = ['hoje', 'ontem', '7d', '30d']
+const PERIODO_LABELS: Record<Periodo, string> = {
+  hoje: 'Hoje',
+  ontem: 'Ontem',
+  '7d': '7d',
+  '30d': '30d',
+}
+
 export default async function CampanhasPage({
   searchParams,
 }: {
@@ -59,7 +70,9 @@ export default async function CampanhasPage({
 }) {
   const sp = await searchParams
   const cliente = sp.cliente ?? null
-  const periodo: '7' | '30' = sp.periodo === '7' ? '7' : '30'
+  const periodo: Periodo = PERIODOS_VALIDOS.includes(sp.periodo as Periodo)
+    ? (sp.periodo as Periodo)
+    : '30d'
 
   const [clientesComContas, contasNaoVinculadas, clientesParaVinculo, ultimaSync] =
     await Promise.all([
@@ -70,7 +83,7 @@ export default async function CampanhasPage({
     ])
 
   const resumo = cliente
-    ? await getResumoCliente(cliente, Number(periodo) as 7 | 30)
+    ? await getResumoCliente(cliente, periodo)
     : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
@@ -89,7 +102,7 @@ export default async function CampanhasPage({
           <SeletorCampanhas
             clientes={clientesComContas.map((c) => ({ id: c.id, nome: c.nome }))}
             clienteAtual={cliente}
-            periodoAtual={periodo}
+            periodoAtual={periodo as string}
           />
           {ultimaSync && (
             <span className="text-xs text-muted-foreground">
@@ -154,7 +167,7 @@ export default async function CampanhasPage({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label={`Verba (${periodo}d)`}
+              label={`Verba (${PERIODO_LABELS[periodo]})`}
               value={formatadorMoeda.format(resumo.totais.spend)}
               icon={Wallet}
               color="primary"
@@ -204,6 +217,22 @@ export default async function CampanhasPage({
               icon={Users}
               color="primary"
             />
+            {resumo.receita > 0 && (
+              <StatCard
+                label="Receita"
+                value={formatadorMoeda.format(resumo.receita)}
+                icon={DollarSign}
+                color="success"
+              />
+            )}
+            {resumo.roas !== null && (
+              <StatCard
+                label="ROAS"
+                value={`${resumo.roas.toFixed(2)}x`}
+                icon={TrendingUp}
+                color="success"
+              />
+            )}
           </div>
 
           <Card className="border-none shadow-[var(--shadow-sm)]">
@@ -260,6 +289,16 @@ export default async function CampanhasPage({
               )}
             </CardContent>
           </Card>
+
+          <CriativosCampeoes
+            topCriativos={resumo.topCriativos}
+            labelHeroi={resumo.heroi.label}
+          />
+
+          <ConjuntosPerformam
+            topConjuntos={resumo.topConjuntos}
+            labelHeroi={resumo.heroi.label}
+          />
         </div>
       )}
 

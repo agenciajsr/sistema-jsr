@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle, UserX, Wallet, AlertTriangle, Info } from 'lucide-react'
+import { Calendar, CheckCircle, UserX, Wallet, AlertTriangle, Info, DollarSign } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,12 +9,14 @@ const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>>
   contrato_vencendo: Calendar,
   pagamento_vencido: Wallet,
   cliente_inativo: UserX,
+  verba_baixa: DollarSign,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
   contrato_vencendo: 'Contrato',
   pagamento_vencido: 'Pagamento',
   cliente_inativo: 'Cliente',
+  verba_baixa: 'Verba',
 }
 
 const SEVERIDADE_CONFIG: Record<

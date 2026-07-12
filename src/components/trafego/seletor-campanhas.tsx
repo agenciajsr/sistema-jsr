@@ -19,7 +19,7 @@ export function SeletorCampanhas({
 }: {
   clientes: Cliente[]
   clienteAtual: string | null
-  periodoAtual: '7' | '30'
+  periodoAtual: string
 }) {
   const router = useRouter()
 
@@ -62,8 +62,10 @@ export function SeletorCampanhas({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="7">Últimos 7 dias</SelectItem>
-          <SelectItem value="30">Últimos 30 dias</SelectItem>
+          <SelectItem value="hoje">Hoje</SelectItem>
+          <SelectItem value="ontem">Ontem</SelectItem>
+          <SelectItem value="7d">7 dias</SelectItem>
+          <SelectItem value="30d">30 dias</SelectItem>
         </SelectContent>
       </Select>
     </div>

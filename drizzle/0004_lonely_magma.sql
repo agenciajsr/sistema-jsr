@@ -1,0 +1,1 @@
+ALTER TABLE "ad_accounts" ADD COLUMN "saldo" numeric(12, 2);
