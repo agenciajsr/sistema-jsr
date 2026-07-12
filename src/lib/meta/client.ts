@@ -157,7 +157,7 @@ export async function fetchAdInsights(adAccountId: string, datePreset: string = 
   const allData = [...parsed.data]
 
   // Seguir paginação (max 1 página extra = 400 registros)
-  let nextUrl = parsed.paging?.next
+  const nextUrl = parsed.paging?.next
   if (nextUrl) {
     try {
       const nextRaw = await metaFetchUrl(nextUrl)
