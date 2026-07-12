@@ -73,7 +73,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const result = streamText({
       model: openai(OPENAI_MODEL),
-      system: buildSystemMessage(),
+      system: await buildSystemMessage(),
       messages,
     })
     // Stream de texto simples, consumido pelo client via fetch + reader.

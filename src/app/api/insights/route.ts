@@ -49,7 +49,7 @@ export async function GET(): Promise<Response> {
   try {
     const result = streamText({
       model: openai(OPENAI_MODEL),
-      system: buildSystemMessage(),
+      system: await buildSystemMessage(),
       messages: [
         {
           role: 'user',
