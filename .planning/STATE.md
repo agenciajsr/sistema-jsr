@@ -112,6 +112,7 @@ None yet.
 | 260711-i9j | Alertas da agencia — alertas derivados on-demand (contratos, transacoes, clientes), tela /alertas real, dashboard real | 2026-07-11 | fa8a3ca | [260711-i9j-alertas-da-agencia-tabela-logica-avaliac](./quick/260711-i9j-alertas-da-agencia-tabela-logica-avaliac/) |
 | 260711-q7a | Integracao Meta Ads — tabelas ad_accounts/campaign_insights, sync Inngest (cron+manual), tela /trafego real | 2026-07-11 | 81c9cc2 | [260711-q7a-integracao-meta-ads-tabelas-sync-inngest](./quick/260711-q7a-integracao-meta-ads-tabelas-sync-inngest/) |
 | 260711-tg5 | Ficha do Cliente real — tabelas checklist_items/acompanhamentos + coluna usa_asaas (migration aditiva NÃO aplicada), cobrança editável, contas de anúncio reais + vínculo, checklist/acompanhamento persistidos, alertas do cliente; ficha 100% sem mock | 2026-07-12 | 6402a23 | [260711-tg5-ficha-do-cliente-real-ligar-a-ficha-aos-](./quick/260711-tg5-ficha-do-cliente-real-ligar-a-ficha-aos-/) |
+| 260712-22h | Chat com IA ligado aos dados REAIS — buildSnapshot async (financeiro, clientes/contratos, alertas, performance de campanhas por cliente com ROAS) substitui os mocks; conserta Chat e card de Insights do dashboard | 2026-07-12 | 5e121c4 | [260712-22h-ligar-chat-com-ia-aos-dados-reais-reescr](./quick/260712-22h-ligar-chat-com-ia-aos-dados-reais-reescr/) |
 
 ## Session Continuity
 
