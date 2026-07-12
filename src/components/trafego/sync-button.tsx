@@ -23,6 +23,13 @@ export function SyncButton() {
   }, [])
 
   async function handleSync() {
+    // Guard: sync manual só com cliente selecionado — evita puxar TODAS as contas
+    // e abusar do limite da API da Meta. O cron/Inngest agendado continua inalterado.
+    if (!clienteId) {
+      toast.warning('Selecione um cliente antes de sincronizar — assim você puxa só as contas dele e não abusa do limite da Meta.')
+      return
+    }
+
     setSyncing(true)
     const result = await triggerMetaSync(clienteId)
 
