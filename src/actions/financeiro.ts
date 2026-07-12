@@ -1,6 +1,7 @@
 'use server'
 
 import { eq, sql, and, lte, gte, desc } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
 import { transacoes, contratos, clientes } from '@/lib/db/schema'
@@ -79,6 +80,108 @@ export async function deleteTransacao(id: string) {
   await db.delete(transacoes).where(eq(transacoes.id, id))
 
   return { data: { id } }
+}
+
+export type CobrancaCliente = {
+  id: string
+  descricao: string
+  valor: string
+  data: string
+  status: 'pago' | 'pendente' | 'vencido'
+  diaVencto: number | null
+}
+
+export async function getCobrancasDoCliente(clienteId: string): Promise<CobrancaCliente[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  return db
+    .select({
+      id: transacoes.id,
+      descricao: transacoes.descricao,
+      valor: transacoes.valor,
+      data: transacoes.data,
+      status: transacoes.status,
+      diaVencto: transacoes.diaVencto,
+    })
+    .from(transacoes)
+    .where(and(eq(transacoes.clienteId, clienteId), eq(transacoes.tipo, 'receita')))
+    .orderBy(desc(transacoes.data))
+}
+
+export async function updateTransacaoStatus(
+  id: string,
+  clienteId: string,
+  status: 'pago' | 'pendente' | 'vencido',
+) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  await db
+    .update(transacoes)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(transacoes.id, id))
+
+  revalidatePath(`/clientes/${clienteId}`)
+  revalidatePath('/financeiro')
+  return { data: { ok: true } }
+}
+
+export async function createCobranca(
+  clienteId: string,
+  input: { descricao: string; valor: number; data: string; diaVencto?: number },
+) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  const descricao = input.descricao?.trim()
+  if (!descricao) {
+    return { error: 'Informe a descricao da cobranca.' }
+  }
+  if (!(input.valor > 0)) {
+    return { error: 'O valor deve ser maior que zero.' }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.data)) {
+    return { error: 'Data invalida.' }
+  }
+  const diaVencto =
+    input.diaVencto != null && input.diaVencto >= 1 && input.diaVencto <= 31
+      ? input.diaVencto
+      : null
+
+  await db.insert(transacoes).values({
+    tipo: 'receita',
+    categoria: 'mensalidade',
+    clienteId,
+    descricao,
+    valor: input.valor.toFixed(2),
+    data: input.data,
+    status: 'pendente',
+    diaVencto,
+  })
+
+  revalidatePath(`/clientes/${clienteId}`)
+  revalidatePath('/financeiro')
+  return { data: { ok: true } }
+}
+
+export async function setUsaAsaas(clienteId: string, usaAsaas: boolean) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  await db
+    .update(clientes)
+    .set({ usaAsaas, updatedAt: new Date() })
+    .where(eq(clientes.id, clienteId))
+
+  revalidatePath(`/clientes/${clienteId}`)
+  return { data: { ok: true } }
 }
 
 export async function calcularMrr() {

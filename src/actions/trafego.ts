@@ -175,6 +175,36 @@ export async function getContasNaoVinculadas(): Promise<ContaNaoVinculada[]> {
     .orderBy(adAccounts.nome)
 }
 
+export type ContaDoCliente = {
+  id: string
+  nome: string
+  metaAccountId: string
+  plataforma: 'meta' | 'google'
+  accountStatus: number | null
+  ativo: boolean
+}
+
+/**
+ * Todas as contas de anuncio (qualquer plataforma) vinculadas a um cliente.
+ */
+export async function getContasDoCliente(clienteId: string): Promise<ContaDoCliente[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  return db
+    .select({
+      id: adAccounts.id,
+      nome: adAccounts.nome,
+      metaAccountId: adAccounts.metaAccountId,
+      plataforma: adAccounts.plataforma,
+      accountStatus: adAccounts.accountStatus,
+      ativo: adAccounts.ativo,
+    })
+    .from(adAccounts)
+    .where(eq(adAccounts.clienteId, clienteId))
+    .orderBy(adAccounts.nome)
+}
+
 /**
  * Clientes ativos (id, nome) para popular selects de vinculo.
  */
@@ -209,6 +239,9 @@ export async function vincularContaAoCliente(
       .where(eq(adAccounts.id, adAccountId))
 
     revalidatePath('/campanhas')
+    if (clienteId) {
+      revalidatePath(`/clientes/${clienteId}`)
+    }
     return { data: { ok: true } }
   } catch (err) {
     console.error('[vincularContaAoCliente] Erro ao vincular conta:', err)

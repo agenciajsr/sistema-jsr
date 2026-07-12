@@ -87,3 +87,11 @@ export async function getAlertas(): Promise<Alerta[]> {
     ...alertasClientes,
   ])
 }
+
+/**
+ * Alertas relevantes para um cliente especifico (filtra os alertas gerais por clienteId).
+ */
+export async function getAlertasDoCliente(clienteId: string): Promise<Alerta[]> {
+  const todos = await getAlertas()
+  return todos.filter((a) => a.clienteId === clienteId)
+}
