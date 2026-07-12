@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260711-q7a (Integracao Meta Ads — tabelas, sync Inngest, tela real)
-last_updated: "2026-07-11T22:12:00Z"
-last_activity: "2026-07-11 - Completed quick task 260711-q7a: Integracao Meta Ads (tabelas ad_accounts/campaign_insights, sync Inngest, tela /trafego real)"
+stopped_at: Completed quick-260711-tg5 (Ficha do Cliente real — migration aditiva NÃO aplicada)
+last_updated: "2026-07-12T00:33:00Z"
+last_activity: "2026-07-12 - Completed quick task 260711-tg5: Ficha do Cliente real (tabelas checklist_items/acompanhamentos + usa_asaas, cobrança/checklist/acompanhamento persistidos, alertas do cliente; migration 0001 gerada mas NÃO aplicada)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -111,9 +111,10 @@ None yet.
 | 260711-hts | Financeiro da agencia — tabela transacoes, CRUD Server Actions, MRR de contratos, tela /financeiro com dados reais | 2026-07-11 | cab8489 | [260711-hts-financeiro-da-agencia-tabelas-crud-mrr-p](./quick/260711-hts-financeiro-da-agencia-tabelas-crud-mrr-p/) |
 | 260711-i9j | Alertas da agencia — alertas derivados on-demand (contratos, transacoes, clientes), tela /alertas real, dashboard real | 2026-07-11 | fa8a3ca | [260711-i9j-alertas-da-agencia-tabela-logica-avaliac](./quick/260711-i9j-alertas-da-agencia-tabela-logica-avaliac/) |
 | 260711-q7a | Integracao Meta Ads — tabelas ad_accounts/campaign_insights, sync Inngest (cron+manual), tela /trafego real | 2026-07-11 | 81c9cc2 | [260711-q7a-integracao-meta-ads-tabelas-sync-inngest](./quick/260711-q7a-integracao-meta-ads-tabelas-sync-inngest/) |
+| 260711-tg5 | Ficha do Cliente real — tabelas checklist_items/acompanhamentos + coluna usa_asaas (migration aditiva NÃO aplicada), cobrança editável, contas de anúncio reais + vínculo, checklist/acompanhamento persistidos, alertas do cliente; ficha 100% sem mock | 2026-07-12 | 6402a23 | [260711-tg5-ficha-do-cliente-real-ligar-a-ficha-aos-](./quick/260711-tg5-ficha-do-cliente-real-ligar-a-ficha-aos-/) |
 
 ## Session Continuity
 
-Last session: 2026-07-11T22:12:00Z
-Stopped at: Completed quick-260711-q7a-PLAN.md (Integracao Meta Ads — tabelas, sync Inngest, tela /trafego real)
+Last session: 2026-07-12T00:33:00Z
+Stopped at: Completed quick-260711-tg5-PLAN.md (Ficha do Cliente real — migration aditiva gerada mas NÃO aplicada; orquestrador deve aplicar drizzle/0001_short_vindicator.sql)
 Resume file: None
