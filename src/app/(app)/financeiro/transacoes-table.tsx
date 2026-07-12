@@ -1,8 +1,8 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, FileCheck, FileX } from 'lucide-react'
+import { Pencil, Trash2, FileCheck, FileX } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { deleteTransacao } from '@/actions/financeiro'
@@ -17,17 +17,27 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import { TransacaoForm, type TransacaoParaEditar } from './transacao-form'
+
+type ClienteOption = { id: string; nome: string }
+type ResponsavelOption = { id: string; nome: string }
+
 type Transacao = {
   id: string
   tipo: 'receita' | 'despesa'
   categoria: string
+  clienteId?: string | null
   clienteNome: string | null
   descricao: string
   valor: string
   data: string
   status: 'pago' | 'pendente' | 'vencido'
+  diaVencto?: number | null
+  notas?: string | null
   centroCusto?: string | null
+  recorrencia?: string | null
   formaPagamento?: string | null
+  responsavelId?: string | null
   responsavelNome?: string | null
   comprovanteUrl?: string | null
 }
@@ -76,9 +86,18 @@ const FORMA_PGTO_LABEL: Record<string, string> = {
   transferencia: 'Transferencia',
 }
 
-export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
+export function TransacoesTable({
+  transacoes,
+  clientes,
+  responsaveis,
+}: {
+  transacoes: Transacao[]
+  clientes: ClienteOption[]
+  responsaveis: ResponsavelOption[]
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [editando, setEditando] = useState<TransacaoParaEditar | null>(null)
 
   function handleDelete(id: string) {
     startTransition(async () => {
@@ -90,6 +109,37 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
       toast.success('Transacao excluida.')
       router.refresh()
     })
+  }
+
+  function handleEdit(t: Transacao) {
+    setEditando({
+      id: t.id,
+      tipo: t.tipo,
+      categoria: t.categoria,
+      clienteId: t.clienteId,
+      descricao: t.descricao,
+      valor: t.valor,
+      data: t.data,
+      status: t.status,
+      diaVencto: t.diaVencto,
+      notas: t.notas,
+      centroCusto: t.centroCusto,
+      recorrencia: t.recorrencia,
+      formaPagamento: t.formaPagamento,
+      responsavelId: t.responsavelId,
+      comprovanteUrl: t.comprovanteUrl,
+    })
+  }
+
+  if (editando) {
+    return (
+      <TransacaoForm
+        clientes={clientes}
+        responsaveis={responsaveis}
+        transacao={editando}
+        onClose={() => setEditando(null)}
+      />
+    )
   }
 
   if (transacoes.length === 0) {
@@ -114,7 +164,7 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
           <TableHead className="text-right">Valor</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Comprovante</TableHead>
-          <TableHead className="w-10" />
+          <TableHead className="w-20" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -152,15 +202,26 @@ export function TransacoesTable({ transacoes }: { transacoes: Transacao[] }) {
               )}
             </TableCell>
             <TableCell>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-destructive"
-                disabled={isPending}
-                onClick={() => handleDelete(t.id)}
-              >
-                <Trash2 className="size-4" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-primary"
+                  disabled={isPending}
+                  onClick={() => handleEdit(t)}
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-destructive"
+                  disabled={isPending}
+                  onClick={() => handleDelete(t.id)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             </TableCell>
           </TableRow>
         ))}

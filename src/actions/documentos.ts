@@ -114,6 +114,47 @@ export async function listarDocumentos(clienteId?: string) {
   return query
 }
 
+export async function atualizarDocumento(
+  id: string,
+  dados: { nome?: string; notas?: string | null }
+) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  if (!id) {
+    return { error: 'ID do documento nao informado.' }
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (dados.nome !== undefined && dados.nome.trim()) {
+    updates.nome = dados.nome.trim()
+  }
+  if (dados.notas !== undefined) {
+    updates.notas = dados.notas?.trim() || null
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return { error: 'Nenhum campo para atualizar.' }
+  }
+
+  const doc = await db.query.documentos.findFirst({
+    where: eq(documentos.id, id),
+  })
+
+  if (!doc) {
+    return { error: 'Documento nao encontrado.' }
+  }
+
+  await db.update(documentos).set(updates).where(eq(documentos.id, id))
+
+  revalidatePath(`/clientes/${doc.clienteId}`)
+  revalidatePath('/documentos')
+
+  return { data: { id } }
+}
+
 export async function deletarDocumento(id: string) {
   const currentUser = await getCurrentUser()
   if (!currentUser) {

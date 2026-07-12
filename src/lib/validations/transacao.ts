@@ -14,6 +14,7 @@ export const transacaoSchema = z.object({
   recorrencia: z.enum(['mensal', 'trimestral', 'avulsa']).default('avulsa'),
   formaPagamento: z.enum(['pix', 'boleto', 'cartao', 'transferencia']).optional().or(z.literal('')).transform(v => v || undefined),
   responsavelId: z.string().uuid().optional().or(z.literal('')).transform(v => v || undefined),
+  comprovanteUrl: z.string().url().optional().or(z.literal('')).transform(v => v || undefined),
 })
 
 export type TransacaoInput = z.infer<typeof transacaoSchema>

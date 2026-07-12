@@ -20,17 +20,27 @@ import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
 import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
+import { MonthSelector } from './month-selector'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
 
-export default async function FinanceiroPage() {
+export default async function FinanceiroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string; ano?: string }>
+}) {
+  const params = await searchParams
+  const agora = new Date()
+  const mes = params.mes ? Number(params.mes) : agora.getMonth() + 1
+  const ano = params.ano ? Number(params.ano) : agora.getFullYear()
+
   const [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] = await Promise.all([
-    getResumoFinanceiro(),
+    getResumoFinanceiro(mes, ano),
     calcularMrr(),
-    listTransacoes(),
+    listTransacoes({ mes, ano }),
     db
       .select({ id: clientes.id, nome: clientes.nome })
       .from(clientes)
@@ -45,24 +55,32 @@ export default async function FinanceiroPage() {
     id: t.id,
     tipo: t.tipo,
     categoria: t.categoria,
+    clienteId: t.clienteId,
     clienteNome: t.clienteNome,
     descricao: t.descricao,
     valor: t.valor,
     data: t.data,
     status: t.status,
+    diaVencto: t.diaVencto,
+    notas: t.notas,
     centroCusto: t.centroCusto,
+    recorrencia: t.recorrencia,
     formaPagamento: t.formaPagamento,
+    responsavelId: t.responsavelId,
     responsavelNome: t.responsavelNome,
     comprovanteUrl: t.comprovanteUrl,
   }))
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Financeiro</h1>
-        <p className="text-sm text-muted-foreground">
-          Receitas, despesas, lucro e MRR da agencia em tempo real.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Financeiro</h1>
+          <p className="text-sm text-muted-foreground">
+            Receitas, despesas, lucro e MRR da agencia em tempo real.
+          </p>
+        </div>
+        <MonthSelector mes={mes} ano={ano} />
       </div>
 
       {/* KPIs - sempre visiveis */}
@@ -122,7 +140,11 @@ export default async function FinanceiroPage() {
               <CardTitle className="text-base">Transacoes do Mes</CardTitle>
             </CardHeader>
             <CardContent>
-              <TransacoesTable transacoes={transacoesParaTabela} />
+              <TransacoesTable
+                transacoes={transacoesParaTabela}
+                clientes={clientesAtivos}
+                responsaveis={profilesList}
+              />
             </CardContent>
           </Card>
         </TabsContent>

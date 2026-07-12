@@ -1,13 +1,12 @@
 'use client'
 
-import { Bot, SendHorizontal, Sparkles } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Bot, SendHorizontal, Sparkles, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { MockNotice } from '@/components/mock-notice'
 import { cn } from '@/lib/utils'
 
 // Interface de chat premium do Copilot. Client component. Consome a rota
@@ -24,10 +23,30 @@ const SUGESTOES = [
   'O que precisa da minha atenção hoje?',
 ]
 
+const STORAGE_KEY = 'jsr-chat-history'
+
 function novoId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2)
+}
+
+function salvarHistorico(mensagens: Mensagem[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(mensagens))
+  } catch {
+    // localStorage cheio ou indisponível — ignora silenciosamente
+  }
+}
+
+function carregarHistorico(): Mensagem[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    return JSON.parse(raw) as Mensagem[]
+  } catch {
+    return []
+  }
 }
 
 export default function ChatIaPage() {
@@ -35,6 +54,24 @@ export default function ChatIaPage() {
   const [input, setInput] = useState('')
   const [carregando, setCarregando] = useState(false)
   const fimRef = useRef<HTMLDivElement>(null)
+
+  // Restaurar histórico do localStorage na montagem
+  useEffect(() => {
+    const salvo = carregarHistorico()
+    if (salvo.length > 0) setMensagens(salvo)
+  }, [])
+
+  // Persistir mensagens no localStorage sempre que mudam
+  useEffect(() => {
+    if (mensagens.length > 0) {
+      salvarHistorico(mensagens)
+    }
+  }, [mensagens])
+
+  const limparConversa = useCallback(() => {
+    setMensagens([])
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
 
   // Auto-scroll: mantém a visão no fim quando chegam mensagens/chunks.
   useEffect(() => {
@@ -125,13 +162,18 @@ export default function ChatIaPage() {
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Chat com IA</h1>
         <Badge variant="secondary">Beta</Badge>
+        {mensagens.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={limparConversa}
+            className="ml-auto gap-1.5 text-muted-foreground"
+          >
+            <Trash2 className="size-4" />
+            Limpar conversa
+          </Button>
+        )}
       </div>
-
-      <MockNotice>
-        O Copilot analisa <strong>dados de exemplo</strong> por enquanto. Quando
-        as integrações reais (Meta/Google Ads e financeiro) entrarem, ele passará
-        a analisar os números reais da agência.
-      </MockNotice>
 
       <Card className="flex h-[calc(100vh-16rem)] min-h-[26rem] flex-col gap-0 overflow-hidden py-0">
         {/* Lista de mensagens */}

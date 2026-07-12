@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { format } from 'date-fns'
-import { Download, Trash2, Loader2, FileText } from 'lucide-react'
+import { useState, useTransition, useMemo } from 'react'
+import { format, subDays, isAfter } from 'date-fns'
+import { Download, Trash2, Loader2, FileText, Pencil } from 'lucide-react'
 
-import { deletarDocumento, getUrlDocumento } from '@/actions/documentos'
+import { deletarDocumento, getUrlDocumento, atualizarDocumento } from '@/actions/documentos'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +33,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 
 const CATEGORIA_LABEL: Record<string, string> = {
   contrato: 'Contrato',
@@ -79,12 +88,30 @@ function formatarTamanho(bytes: number): string {
 
 export function DocumentosLista({ documentos, mostrarCliente = false }: DocumentosListaProps) {
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todos')
+  const [filtroData, setFiltroData] = useState<string>('todos')
   const [isPending, startTransition] = useTransition()
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
-  const docsFiltrados = filtroCategoria === 'todos'
-    ? documentos
-    : documentos.filter((d) => d.categoria === filtroCategoria)
+  // Estado do painel de edicao
+  const [editDoc, setEditDoc] = useState<DocumentoItem | null>(null)
+  const [editNome, setEditNome] = useState('')
+  const [editNotas, setEditNotas] = useState('')
+
+  const docsFiltrados = useMemo(() => {
+    let resultado = documentos
+
+    if (filtroCategoria !== 'todos') {
+      resultado = resultado.filter((d) => d.categoria === filtroCategoria)
+    }
+
+    if (filtroData !== 'todos') {
+      const dias = filtroData === '7dias' ? 7 : 30
+      const dataLimite = subDays(new Date(), dias)
+      resultado = resultado.filter((d) => isAfter(new Date(d.createdAt), dataLimite))
+    }
+
+    return resultado
+  }, [documentos, filtroCategoria, filtroData])
 
   const handleDownload = (docId: string) => {
     setLoadingId(docId)
@@ -103,6 +130,23 @@ export function DocumentosLista({ documentos, mostrarCliente = false }: Document
     })
   }
 
+  const handleOpenEdit = (doc: DocumentoItem) => {
+    setEditNome(doc.nome)
+    setEditNotas(doc.notas || '')
+    setEditDoc(doc)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editDoc) return
+    startTransition(async () => {
+      await atualizarDocumento(editDoc.id, {
+        nome: editNome,
+        notas: editNotas,
+      })
+      setEditDoc(null)
+    })
+  }
+
   if (documentos.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center">
@@ -114,8 +158,8 @@ export function DocumentosLista({ documentos, mostrarCliente = false }: Document
 
   return (
     <div className="space-y-4">
-      {/* Filtro por categoria */}
-      <div className="flex items-center gap-2">
+      {/* Filtros */}
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-muted-foreground">Filtrar:</span>
         <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
           <SelectTrigger className="w-[180px]">
@@ -128,6 +172,16 @@ export function DocumentosLista({ documentos, mostrarCliente = false }: Document
                 {label}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={filtroData} onValueChange={setFiltroData}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todas as datas</SelectItem>
+            <SelectItem value="7dias">Ultimos 7 dias</SelectItem>
+            <SelectItem value="30dias">Ultimos 30 dias</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
@@ -175,6 +229,14 @@ export function DocumentosLista({ documentos, mostrarCliente = false }: Document
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => handleOpenEdit(doc)}
+                      title="Editar"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDownload(doc.id)}
                       disabled={isPending && loadingId === doc.id}
                       title="Baixar"
@@ -216,6 +278,43 @@ export function DocumentosLista({ documentos, mostrarCliente = false }: Document
           </TableBody>
         </Table>
       </div>
+
+      {/* Painel de edicao */}
+      <Sheet open={!!editDoc} onOpenChange={(open) => { if (!open) setEditDoc(null) }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Editar documento</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-nome">Nome do arquivo</Label>
+              <Input
+                id="edit-nome"
+                value={editNome}
+                onChange={(e) => setEditNome(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-notas">Notas</Label>
+              <Textarea
+                id="edit-notas"
+                value={editNotas}
+                onChange={(e) => setEditNotas(e.target.value)}
+                rows={4}
+                placeholder="Observacoes sobre o documento..."
+              />
+            </div>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={isPending || !editNome.trim()}
+              className="w-full"
+            >
+              {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Salvar alteracoes
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

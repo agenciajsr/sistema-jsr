@@ -4,11 +4,11 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
-import { createTransacao } from '@/actions/financeiro'
+import { createTransacao, updateTransacao } from '@/actions/financeiro'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +16,24 @@ import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transaca
 
 type ClienteOption = { id: string; nome: string }
 type ResponsavelOption = { id: string; nome: string }
+
+export type TransacaoParaEditar = {
+  id: string
+  tipo: 'receita' | 'despesa'
+  categoria: string
+  clienteId?: string | null
+  descricao: string
+  valor: string
+  data: string
+  status: 'pago' | 'pendente' | 'vencido'
+  diaVencto?: number | null
+  notas?: string | null
+  centroCusto?: string | null
+  recorrencia?: string | null
+  formaPagamento?: string | null
+  responsavelId?: string | null
+  comprovanteUrl?: string | null
+}
 
 const SELECT_CLASS = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
 
@@ -48,6 +66,7 @@ const VALORES_PADRAO = {
   recorrencia: 'avulsa' as const,
   formaPagamento: '' as const,
   responsavelId: '',
+  comprovanteUrl: '',
 }
 
 const ERRO_PADRAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
@@ -55,13 +74,38 @@ const ERRO_PADRAO = 'Nao foi possivel salvar. Verifique os dados e tente novamen
 export function TransacaoForm({
   clientes,
   responsaveis,
+  transacao,
+  onClose,
 }: {
   clientes: ClienteOption[]
   responsaveis: ResponsavelOption[]
+  transacao?: TransacaoParaEditar
+  onClose?: () => void
 }) {
   const router = useRouter()
-  const [aberto, setAberto] = useState(false)
+  const [aberto, setAberto] = useState(!!transacao)
   const [isPending, startTransition] = useTransition()
+
+  const isEdicao = !!transacao
+
+  const defaultValues = transacao
+    ? {
+        tipo: transacao.tipo,
+        categoria: transacao.categoria as typeof VALORES_PADRAO.categoria,
+        clienteId: transacao.clienteId ?? '',
+        descricao: transacao.descricao,
+        valor: Number(transacao.valor),
+        data: transacao.data,
+        status: transacao.status,
+        diaVencto: transacao.diaVencto ?? ('' as unknown as undefined),
+        notas: transacao.notas ?? '',
+        centroCusto: (transacao.centroCusto ?? '') as typeof VALORES_PADRAO.centroCusto,
+        recorrencia: (transacao.recorrencia ?? 'avulsa') as typeof VALORES_PADRAO.recorrencia,
+        formaPagamento: (transacao.formaPagamento ?? '') as typeof VALORES_PADRAO.formaPagamento,
+        responsavelId: transacao.responsavelId ?? '',
+        comprovanteUrl: transacao.comprovanteUrl ?? '',
+      }
+    : VALORES_PADRAO
 
   const {
     register,
@@ -72,7 +116,7 @@ export function TransacaoForm({
     formState: { errors },
   } = useForm<z.input<typeof transacaoSchema>, unknown, TransacaoInput>({
     resolver: zodResolver(transacaoSchema),
-    defaultValues: VALORES_PADRAO,
+    defaultValues,
   })
 
   const tipoAtual = watch('tipo')
@@ -80,16 +124,26 @@ export function TransacaoForm({
 
   function onSubmit(values: TransacaoInput) {
     startTransition(async () => {
-      const result = await createTransacao(values)
+      const result = isEdicao
+        ? await updateTransacao(transacao!.id, values)
+        : await createTransacao(values)
       if ('error' in result) {
         toast.error(result.error ?? ERRO_PADRAO)
         return
       }
-      toast.success('Transacao registrada com sucesso.')
-      reset({ ...VALORES_PADRAO, data: hoje() })
+      toast.success(isEdicao ? 'Transacao atualizada com sucesso.' : 'Transacao registrada com sucesso.')
+      if (!isEdicao) {
+        reset({ ...VALORES_PADRAO, data: hoje() })
+      }
       setAberto(false)
+      onClose?.()
       router.refresh()
     })
+  }
+
+  function handleCancel() {
+    setAberto(false)
+    onClose?.()
   }
 
   if (!aberto) {
@@ -103,6 +157,12 @@ export function TransacaoForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-lg border border-border bg-card p-6" noValidate>
+      {isEdicao && (
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Pencil className="size-4" />
+          Editando transacao
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="tipo">Tipo</Label>
@@ -234,7 +294,14 @@ export function TransacaoForm({
 
         <div className="space-y-2">
           <Label htmlFor="comprovanteUrl">URL do Comprovante (opcional)</Label>
-          <Input id="comprovanteUrl" placeholder="https://..." disabled={isPending} />
+          <Input
+            id="comprovanteUrl"
+            placeholder="https://..."
+            {...register('comprovanteUrl')}
+          />
+          {errors.comprovanteUrl && (
+            <p className="text-sm text-destructive">{errors.comprovanteUrl.message}</p>
+          )}
         </div>
       </div>
 
@@ -251,13 +318,13 @@ export function TransacaoForm({
 
       <div className="flex gap-2">
         <Button type="submit" disabled={isPending}>
-          {isPending ? 'Salvando...' : 'Salvar Transacao'}
+          {isPending ? 'Salvando...' : isEdicao ? 'Atualizar Transacao' : 'Salvar Transacao'}
         </Button>
         <Button
           type="button"
           variant="outline"
           disabled={isPending}
-          onClick={() => setAberto(false)}
+          onClick={handleCancel}
         >
           Cancelar
         </Button>

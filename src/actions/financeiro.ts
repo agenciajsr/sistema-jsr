@@ -22,7 +22,7 @@ export async function createTransacao(input: TransacaoInput) {
     return { error: ERRO_VALIDACAO }
   }
 
-  const { valor, diaVencto, centroCusto, recorrencia, formaPagamento, responsavelId, ...rest } = parsed.data
+  const { valor, diaVencto, centroCusto, recorrencia, formaPagamento, responsavelId, comprovanteUrl, ...rest } = parsed.data
 
   const [novo] = await db
     .insert(transacoes)
@@ -35,6 +35,7 @@ export async function createTransacao(input: TransacaoInput) {
       recorrencia: recorrencia ?? 'avulsa',
       formaPagamento: formaPagamento ?? null,
       responsavelId: responsavelId ?? null,
+      comprovanteUrl: comprovanteUrl ?? null,
     })
     .returning({ id: transacoes.id })
 
@@ -123,7 +124,9 @@ export async function listTransacoes(filtros?: { mes?: number; ano?: number }) {
       diaVencto: transacoes.diaVencto,
       notas: transacoes.notas,
       centroCusto: transacoes.centroCusto,
+      recorrencia: transacoes.recorrencia,
       formaPagamento: transacoes.formaPagamento,
+      responsavelId: transacoes.responsavelId,
       responsavelNome: profiles.nome,
       comprovanteUrl: transacoes.comprovanteUrl,
     })
@@ -139,6 +142,39 @@ export async function listTransacoes(filtros?: { mes?: number; ano?: number }) {
     .orderBy(desc(transacoes.data))
 
   return rows
+}
+
+export async function updateTransacao(id: string, input: TransacaoInput) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  const parsed = transacaoSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: ERRO_VALIDACAO }
+  }
+
+  const { valor, diaVencto, centroCusto, recorrencia, formaPagamento, responsavelId, comprovanteUrl, ...rest } = parsed.data
+
+  await db
+    .update(transacoes)
+    .set({
+      ...rest,
+      valor: valor.toFixed(2),
+      diaVencto: diaVencto ?? null,
+      clienteId: rest.clienteId ?? null,
+      centroCusto: centroCusto ?? null,
+      recorrencia: recorrencia ?? 'avulsa',
+      formaPagamento: formaPagamento ?? null,
+      responsavelId: responsavelId ?? null,
+      comprovanteUrl: comprovanteUrl ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(transacoes.id, id))
+
+  revalidatePath('/financeiro')
+  return { data: { id } }
 }
 
 export async function deleteTransacao(id: string) {
