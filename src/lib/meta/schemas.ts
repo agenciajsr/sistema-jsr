@@ -66,6 +66,8 @@ export const metaAdInsightSchema = z.object({
   spend: z.string().default('0'),
   impressions: z.string().default('0'),
   clicks: z.string().default('0'),
+  reach: z.string().default('0'),
+  frequency: z.string().optional(),
   actions: z.array(metaActionSchema).optional().default([]),
   action_values: z.array(metaActionSchema).optional().default([]),
   date_start: z.string(),

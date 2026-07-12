@@ -148,7 +148,7 @@ export async function fetchCampaignInsights(adAccountId: string, datePreset: str
 export async function fetchAdInsights(adAccountId: string, datePreset: string = 'last_30d') {
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'ad',
-    fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,actions,action_values',
+    fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,frequency,actions,action_values',
     date_preset: datePreset,
     limit: '200',
   })
@@ -169,26 +169,36 @@ export async function fetchAdInsights(adAccountId: string, datePreset: string = 
   return allData
 }
 
+/** Metadados de nível anúncio buscados no endpoint /ads (best-effort). */
+export type AdMeta = {
+  thumbnailUrl: string | null
+  effectiveStatus: string | null
+}
+
 /**
- * Busca thumbnails dos criativos ativos de uma conta (best-effort).
- * Retorna Map<adId, thumbnailUrl>. Nunca lança — retorna Map vazio em caso de erro.
+ * Busca metadados dos anúncios de uma conta (best-effort): thumbnail do criativo
+ * e status de aprovação (effective_status). Retorna Map<adId, AdMeta>.
+ * Nunca lança — retorna Map vazio em caso de erro; entradas sem id são ignoradas.
  */
-export async function fetchAdThumbnails(adAccountId: string): Promise<Map<string, string>> {
+export async function fetchAdMeta(adAccountId: string): Promise<Map<string, AdMeta>> {
   try {
     const raw = await metaFetch(`/act_${adAccountId}/ads`, {
-      fields: 'id,creative{thumbnail_url}',
+      fields: 'id,effective_status,creative{thumbnail_url}',
       limit: '200',
     })
 
-    const result = new Map<string, string>()
-    const data = (raw as { data?: Array<{ id?: string; creative?: { thumbnail_url?: string } }> }).data
+    const result = new Map<string, AdMeta>()
+    const data = (raw as {
+      data?: Array<{ id?: string; effective_status?: string; creative?: { thumbnail_url?: string } }>
+    }).data
     if (!Array.isArray(data)) return result
 
     for (const ad of data) {
-      const url = ad?.creative?.thumbnail_url
-      if (ad?.id && url) {
-        result.set(ad.id, url)
-      }
+      if (!ad?.id) continue
+      result.set(ad.id, {
+        thumbnailUrl: ad.creative?.thumbnail_url ?? null,
+        effectiveStatus: ad.effective_status ?? null,
+      })
     }
     return result
   } catch {
