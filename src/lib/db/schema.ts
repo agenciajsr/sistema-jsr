@@ -172,6 +172,7 @@ export const clientesRelations = relations(clientes, ({ one, many }) => ({
   adAccounts: many(adAccounts),
   checklistItems: many(checklistItems),
   acompanhamentos: many(acompanhamentos),
+  documentos: many(documentos),
 }))
 export const checklistItemsRelations = relations(checklistItems, ({ one }) => ({
   cliente: one(clientes, { fields: [checklistItems.clienteId], references: [clientes.id] }),
@@ -249,4 +250,28 @@ export const adsetInsightsRelations = relations(adsetInsights, ({ one }) => ({
 }))
 export const adInsightsRelations = relations(adInsights, ({ one }) => ({
   adAccount: one(adAccounts, { fields: [adInsights.adAccountId], references: [adAccounts.id] }),
+}))
+
+// --- Documentos ---
+export const categoriaDocumentoEnum = pgEnum('categoria_documento', ['contrato', 'comprovante', 'briefing', 'criativo', 'relatorio', 'outro'])
+
+export const documentos = pgTable('documentos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  categoria: categoriaDocumentoEnum('categoria').notNull().default('outro'),
+  tamanhoBytes: integer('tamanho_bytes').notNull(),
+  mimeType: text('mime_type').notNull(),
+  storagePath: text('storage_path').notNull(),
+  uploadPorId: uuid('upload_por_id').references(() => profiles.id, { onDelete: 'set null' }),
+  uploadPorNome: text('upload_por_nome').notNull(),
+  notas: text('notas'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteIdx: index('documentos_cliente_id_idx').on(table.clienteId),
+}))
+
+export const documentosRelations = relations(documentos, ({ one }) => ({
+  cliente: one(clientes, { fields: [documentos.clienteId], references: [clientes.id] }),
+  uploadPor: one(profiles, { fields: [documentos.uploadPorId], references: [profiles.id] }),
 }))

@@ -1,16 +1,23 @@
-import { FileText } from 'lucide-react'
+import { listarDocumentos } from '@/actions/documentos'
+import { DocumentosPageClient } from './page-client'
+import { db } from '@/lib/db'
+import { clientes } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
-import { EmBreve } from '@/components/em-breve'
+export default async function DocumentosPage() {
+  const [docs, clientesList] = await Promise.all([
+    listarDocumentos(),
+    db
+      .select({ id: clientes.id, nome: clientes.nome })
+      .from(clientes)
+      .where(eq(clientes.status, 'ativo'))
+      .orderBy(clientes.nome),
+  ])
 
-export default function DocumentosPage() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Documentos</h1>
-      <EmBreve
-        titulo="Documentos e Arquivos"
-        descricao="O repositório de contratos, briefings e materiais dos clientes ficará centralizado aqui."
-        icon={FileText}
-      />
-    </div>
+    <DocumentosPageClient
+      documentos={docs}
+      clientes={clientesList}
+    />
   )
 }

@@ -11,6 +11,7 @@ import { getAcompanhamentosDoCliente } from '@/actions/acompanhamento'
 import { getCobrancasDoCliente } from '@/actions/financeiro'
 import { getContasDoCliente, getContasNaoVinculadas } from '@/actions/trafego'
 import { getAlertasDoCliente } from '@/actions/alertas'
+import { listarDocumentos } from '@/actions/documentos'
 import { getResumoCliente, metricaHeroi } from '@/lib/trafego/aggregate'
 import { ContratoForm } from '@/components/contrato-form'
 import { ChecklistCliente } from '@/components/ficha/checklist-cliente'
@@ -18,6 +19,8 @@ import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
 import { CobrancaCliente } from '@/components/ficha/cobranca-cliente'
 import { VincularContaFicha } from '@/components/ficha/vincular-conta-ficha'
 import { MetasCliente } from '@/components/ficha/metas-cliente'
+import { UploadDocumento } from '@/components/upload-documento'
+import { DocumentosLista } from '@/components/documentos-lista'
 import { StatCard } from '@/components/stat-card'
 import {
   AlertDialog,
@@ -129,6 +132,7 @@ export default async function ClienteDetalhePage({
     checklist,
     acompanhamentos,
     alertas,
+    docsCliente,
   ] = await Promise.all([
     getContratosDoCliente(id),
     getCurrentUser(),
@@ -139,6 +143,7 @@ export default async function ClienteDetalhePage({
     getChecklistDoCliente(id),
     getAcompanhamentosDoCliente(id),
     getAlertasDoCliente(id),
+    listarDocumentos(id),
   ])
 
   // D-03: exclusão de cliente/contrato é exclusiva do Admin.
@@ -288,6 +293,7 @@ export default async function ClienteDetalhePage({
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>
           <TabsTrigger value="checklist">✅ Checklist</TabsTrigger>
           <TabsTrigger value="acompanhamento">📝 Acompanhamento</TabsTrigger>
+          <TabsTrigger value="documentos">📎 Documentos</TabsTrigger>
         </TabsList>
 
         {/* Aba: Contrato & Cobrança (dados REAIS) */}
@@ -536,6 +542,19 @@ export default async function ClienteDetalhePage({
           )}
 
           <AcompanhamentoForm clienteId={id} />
+        </TabsContent>
+
+        {/* Aba: Documentos */}
+        <TabsContent value="documentos" className="space-y-6">
+          <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
+            <h2 className="text-[20px] leading-tight font-semibold">Enviar documento</h2>
+            <UploadDocumento clienteId={id} />
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-[20px] leading-tight font-semibold">Documentos do cliente</h2>
+            <DocumentosLista documentos={docsCliente} />
+          </section>
         </TabsContent>
       </Tabs>
     </div>
