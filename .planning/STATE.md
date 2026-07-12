@@ -121,6 +121,7 @@ None yet.
 | 260712-g1c | Reformular modulo financeiro completo — centro de custo, recorrencia com parcelas automaticas, previsao de caixa 30 dias, 4 abas (Visao Geral/A Receber/A Pagar/Previsao), 6 KPIs, migration 0009 (NAO aplicada) | 2026-07-12 | 0a93766 | [260712-g1c-reformular-modulo-financeiro-completo-ce](./quick/260712-g1c-reformular-modulo-financeiro-completo-ce/) |
 | 260712-h4y | Melhorar dashboard: grafico evolucao, atividade recente expandida, filtro periodo, campanhas saude com metas, responsividade mobile | 2026-07-12 | 200bf5c | [260712-h4y-melhorar-dashboard-grafico-evolucao-ativ](./quick/260712-h4y-melhorar-dashboard-grafico-evolucao-ativ/) |
 | 260712-mro | Incorporar controle de verbas como aba em /campanhas, remover /verbas-ads placeholder | 2026-07-12 | b0cef77 | [260712-mro-incorporar-controle-de-verbas-como-aba-e](./quick/260712-mro-incorporar-controle-de-verbas-como-aba-e/) |
+| 260712-nb8 | Modulo Verbas completo: pagina propria /verbas, sync funding_source, KPIs, alertas, menu lateral | 2026-07-12 | eca6309 | [260712-nb8-modulo-verbas-completo-menu-sync-funding](./quick/260712-nb8-modulo-verbas-completo-menu-sync-funding/) |
 
 ## Session Continuity
 
