@@ -5,6 +5,7 @@ import type { Alerta, SeveridadeAlerta, TipoAlerta } from '@/lib/alertas/types'
 import {
   avaliarSaudeCliente,
   calcularHealthScore,
+  type AdStatusRow,
   type EntradaSaude,
 } from '@/lib/saude/avaliar-campanhas'
 
@@ -35,7 +36,7 @@ function mkMetricas(
 function mkEntrada(
   atual: MetricasIntervalo,
   anterior: MetricasIntervalo,
-  metas: { metaCpa?: number | null; metaCpl?: number | null } = {},
+  metas: { metaCpa?: number | null; metaCpl?: number | null; ads?: AdStatusRow[] } = {},
 ): EntradaSaude {
   return {
     clienteId: 'c1',
@@ -44,6 +45,19 @@ function mkEntrada(
     metaCpl: metas.metaCpl ?? null,
     atual,
     anterior,
+    ads: metas.ads,
+  }
+}
+
+function mkAd(over: Partial<AdStatusRow> = {}): AdStatusRow {
+  return {
+    adId: 'ad1',
+    adName: 'Anúncio Teste',
+    effectiveStatus: null,
+    frequency: null,
+    impressions: 0,
+    spend: 0,
+    ...over,
   }
 }
 
@@ -186,6 +200,127 @@ describe('avaliarSaudeCliente — formato do alerta', () => {
     expect(a.dataRelevante).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(a.titulo.length).toBeGreaterThan(0)
     expect(a.detalhe.length).toBeGreaterThan(0)
+  })
+})
+
+describe('avaliarSaudeCliente — criativo rejeitado', () => {
+  const atual = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+  const anterior = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+
+  it('gera criativo_rejeitado CRÍTICO com effective_status DISAPPROVED citando o anúncio', () => {
+    const ads = [mkAd({ adName: 'Vídeo Promo', effectiveStatus: 'DISAPPROVED' })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const a = alertas.find((x) => x.tipo === 'criativo_rejeitado')
+    expect(a).toBeDefined()
+    expect(a?.severidade).toBe('critico')
+    expect(a?.detalhe).toContain('Vídeo Promo')
+  })
+
+  it('gera criativo_rejeitado ATENÇÃO com effective_status WITH_ISSUES', () => {
+    const ads = [mkAd({ effectiveStatus: 'WITH_ISSUES' })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const a = alertas.find((x) => x.tipo === 'criativo_rejeitado')
+    expect(a).toBeDefined()
+    expect(a?.severidade).toBe('atencao')
+  })
+
+  it('prioriza CRÍTICO e emite no máximo 1 alerta do tipo quando há DISAPPROVED e WITH_ISSUES', () => {
+    const ads = [
+      mkAd({ adId: 'a1', effectiveStatus: 'WITH_ISSUES' }),
+      mkAd({ adId: 'a2', effectiveStatus: 'DISAPPROVED' }),
+      mkAd({ adId: 'a3', effectiveStatus: 'DISAPPROVED' }),
+    ]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const rejeitados = alertas.filter((x) => x.tipo === 'criativo_rejeitado')
+    expect(rejeitados).toHaveLength(1)
+    expect(rejeitados[0].severidade).toBe('critico')
+  })
+
+  it('NÃO gera criativo_rejeitado para status PAUSED/ARCHIVED/DELETED/ACTIVE', () => {
+    for (const status of ['PAUSED', 'ARCHIVED', 'DELETED', 'ACTIVE']) {
+      const ads = [mkAd({ effectiveStatus: status })]
+      const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+      expect(tipos(alertas)).not.toContain('criativo_rejeitado')
+    }
+  })
+})
+
+describe('avaliarSaudeCliente — fadiga de criativo', () => {
+  const atual = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+  const anterior = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+
+  it('gera fadiga_criativo (atenção) com frequency >= 3.5 e volume mínimo, citando a frequência', () => {
+    const ads = [mkAd({ adName: 'Carrossel A', frequency: 4.2, impressions: 5000 })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const a = alertas.find((x) => x.tipo === 'fadiga_criativo')
+    expect(a).toBeDefined()
+    expect(a?.severidade).toBe('atencao')
+    expect(a?.detalhe).toContain('4.2')
+  })
+
+  it('escolhe o anúncio de maior frequency quando há vários em fadiga', () => {
+    const ads = [
+      mkAd({ adId: 'a1', adName: 'Baixa', frequency: 3.6, impressions: 5000 }),
+      mkAd({ adId: 'a2', adName: 'Alta', frequency: 6.0, impressions: 5000 }),
+    ]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const fadigas = alertas.filter((x) => x.tipo === 'fadiga_criativo')
+    expect(fadigas).toHaveLength(1)
+    expect(fadigas[0].detalhe).toContain('Alta')
+  })
+
+  it('NÃO gera fadiga_criativo quando frequency < 3.5', () => {
+    const ads = [mkAd({ frequency: 2.0, impressions: 5000 })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    expect(tipos(alertas)).not.toContain('fadiga_criativo')
+  })
+
+  it('NÃO gera fadiga_criativo quando o volume está abaixo do mínimo', () => {
+    const ads = [mkAd({ frequency: 5.0, impressions: 500 })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    expect(tipos(alertas)).not.toContain('fadiga_criativo')
+  })
+})
+
+describe('avaliarSaudeCliente — degradação graciosa (colunas nulas)', () => {
+  it('effectiveStatus e frequency nulos → nenhum alerta novo e não quebra', () => {
+    const atual = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+    const anterior = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 20 })
+    const ads = [mkAd({ effectiveStatus: null, frequency: null, impressions: 5000 })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    expect(tipos(alertas)).not.toContain('criativo_rejeitado')
+    expect(tipos(alertas)).not.toContain('fadiga_criativo')
+  })
+
+  it('criativo rejeitado avisa mesmo com gasto agregado zerado (verba parada)', () => {
+    const atual = mkMetricas({ spend: 0 })
+    const anterior = mkMetricas({ spend: 0 })
+    const ads = [mkAd({ effectiveStatus: 'DISAPPROVED', adName: 'Parado' })]
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { ads }))
+    const a = alertas.find((x) => x.tipo === 'criativo_rejeitado')
+    expect(a).toBeDefined()
+    expect(a?.severidade).toBe('critico')
+  })
+
+  it('sem ads (campo ausente) → comportamento idêntico ao atual', () => {
+    const atual = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 40 })
+    const anterior = mkMetricas({ spend: 200, vendas: 10, resultadoHeroi: 10, cpa: 40 })
+    const alertas = avaliarSaudeCliente(mkEntrada(atual, anterior, { metaCpa: 20 }))
+    expect(tipos(alertas)).not.toContain('criativo_rejeitado')
+    expect(tipos(alertas)).not.toContain('fadiga_criativo')
+    expect(tipos(alertas)).toContain('cpa_alto')
+  })
+})
+
+describe('calcularHealthScore — novos sinais', () => {
+  it('criativo_rejeitado crítico penaliza como crítico (25)', () => {
+    const s = calcularHealthScore('c1', [mkAlerta('criativo_rejeitado', 'critico')])
+    expect(s.score).toBe(75)
+  })
+
+  it('fadiga_criativo penaliza como atenção (12)', () => {
+    const s = calcularHealthScore('c1', [mkAlerta('fadiga_criativo', 'atencao')])
+    expect(s.score).toBe(88)
   })
 })
 
