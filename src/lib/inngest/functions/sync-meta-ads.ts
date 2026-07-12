@@ -10,7 +10,7 @@ export const syncMetaAds = inngest.createFunction(
     id: 'sync-meta-ads',
     name: 'Sincronizar Meta Ads',
     triggers: [
-      { cron: '0 6 * * *' },
+      { cron: 'TZ=America/Sao_Paulo 0 0,6,12,18 * * *' },
       { event: 'meta-ads/sync.requested' },
     ],
   },
