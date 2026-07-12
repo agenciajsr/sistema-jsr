@@ -29,6 +29,8 @@ export type ClientePerformance = {
   ctr: number | null
   cpm: number | null
   serieSpendPorDia: { date: string; spend: number }[]
+  metaCpa: number | null
+  metaRoas: number | null
 }
 
 export type AtividadeItem = {
@@ -36,7 +38,7 @@ export type AtividadeItem = {
   titulo: string
   sub: string
   tempo: Date
-  tipo: 'cliente' | 'pagamento'
+  tipo: 'cliente' | 'pagamento' | 'transacao' | 'novo_cliente'
 }
 
 export type ResumoFinanceiroDash = {
@@ -47,24 +49,31 @@ export type ResumoFinanceiroDash = {
   percentRecebido: number
 }
 
+export type EvolucaoMensal = {
+  mes: string // 'YYYY-MM'
+  receita: number
+  despesa: number
+}
+
 export type DashboardData = {
   kpis: DashboardKpis
   clientesPerformance: ClientePerformance[]
   financeiro: ResumoFinanceiroDash
   atividadeRecente: AtividadeItem[]
+  evolucaoMensal: EvolucaoMensal[]
 }
 
 /**
  * Busca todos os dados reais para o dashboard.
  * Nunca lança — retorna dados zerados se algo falhar.
  */
-export async function getDashboardData(): Promise<DashboardData | null> {
+export async function getDashboardData(mesParam?: number, anoParam?: number): Promise<DashboardData | null> {
   const user = await getCurrentUser()
   if (!user) return null
 
   const agora = new Date()
-  const mes = agora.getMonth() + 1
-  const ano = agora.getFullYear()
+  const mes = mesParam ?? agora.getMonth() + 1
+  const ano = anoParam ?? agora.getFullYear()
   const hoje = agora.toISOString().slice(0, 10)
 
   // Queries paralelas para performance
@@ -74,7 +83,10 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     clientesAtivosResult,
     campanhasResult,
     clientesComContas,
-    atividadeResult,
+    atividadeAcompResult,
+    atividadeTransResult,
+    atividadeClientesResult,
+    evolucaoResult,
   ] = await Promise.all([
     // MRR: soma de contratos ativos
     db.select({
@@ -112,7 +124,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     // Clientes com contas (para performance)
     listarClientesComContas(),
 
-    // Atividade recente: últimos acompanhamentos + transações recentes
+    // Atividade recente: últimos acompanhamentos
     db.select({
       id: acompanhamentos.id,
       clienteId: acompanhamentos.clienteId,
@@ -123,6 +135,41 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       .from(acompanhamentos)
       .orderBy(desc(acompanhamentos.createdAt))
       .limit(4),
+
+    // Transações recentes pagas (receitas)
+    db.select({
+      id: transacoes.id,
+      descricao: transacoes.descricao,
+      valor: transacoes.valor,
+      data: transacoes.data,
+      tipo: transacoes.tipo,
+      createdAt: transacoes.createdAt,
+    })
+      .from(transacoes)
+      .where(eq(transacoes.status, 'pago'))
+      .orderBy(desc(transacoes.createdAt))
+      .limit(4),
+
+    // Novos clientes recentes
+    db.select({
+      id: clientes.id,
+      nome: clientes.nome,
+      createdAt: clientes.createdAt,
+    })
+      .from(clientes)
+      .orderBy(desc(clientes.createdAt))
+      .limit(3),
+
+    // Evolução financeira — últimos 6 meses
+    db.select({
+      mes: sql<string>`to_char(${transacoes.data}::date, 'YYYY-MM')`,
+      receita: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'receita' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
+      despesa: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'despesa' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
+    })
+      .from(transacoes)
+      .where(sql`${transacoes.data}::date >= (current_date - interval '6 months')`)
+      .groupBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`)
+      .orderBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`),
   ])
 
   const mrr = Number(mrrResult[0]?.total ?? 0)
@@ -166,6 +213,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
         ctr: resumo.derivadas.ctr,
         cpm: resumo.derivadas.cpm,
         serieSpendPorDia: resumo.serieSpendPorDia,
+        metaCpa: c.metaCpa ? Number(c.metaCpa) : null,
+        metaRoas: c.metaRoas ? Number(c.metaRoas) : null,
       })
     } catch {
       // Cliente sem dados ou erro de query — continuar com os demais
@@ -173,13 +222,38 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     }
   }
 
-  // Atividade recente formatada
-  const atividadeRecente: AtividadeItem[] = atividadeResult.map((a) => ({
-    id: a.id,
-    titulo: `Acompanhamento por ${a.autorNome}`,
-    sub: a.nota.slice(0, 60) + (a.nota.length > 60 ? '...' : ''),
-    tempo: a.createdAt,
-    tipo: 'cliente' as const,
+  // Atividade recente formatada — combina acompanhamentos, transações e novos clientes
+  const atividadeRecente: AtividadeItem[] = [
+    ...atividadeAcompResult.map((a) => ({
+      id: a.id,
+      titulo: `Acompanhamento por ${a.autorNome}`,
+      sub: a.nota.slice(0, 60) + (a.nota.length > 60 ? '...' : ''),
+      tempo: a.createdAt,
+      tipo: 'cliente' as const,
+    })),
+    ...atividadeTransResult.map((t) => ({
+      id: t.id,
+      titulo: t.tipo === 'receita' ? 'Pagamento recebido' : 'Despesa paga',
+      sub: `${t.descricao} — R$ ${Number(t.valor).toFixed(2)}`,
+      tempo: t.createdAt,
+      tipo: 'transacao' as const,
+    })),
+    ...atividadeClientesResult.map((c) => ({
+      id: c.id,
+      titulo: 'Novo cliente cadastrado',
+      sub: c.nome,
+      tempo: c.createdAt,
+      tipo: 'novo_cliente' as const,
+    })),
+  ]
+    .sort((a, b) => b.tempo.getTime() - a.tempo.getTime())
+    .slice(0, 6)
+
+  // Evolução mensal formatada
+  const evolucaoMensal: EvolucaoMensal[] = evolucaoResult.map((r) => ({
+    mes: r.mes,
+    receita: Number(r.receita),
+    despesa: Number(r.despesa),
   }))
 
   return {
@@ -201,5 +275,6 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       percentRecebido: mrr > 0 ? Math.round((receita / mrr) * 100) : 0,
     },
     atividadeRecente,
+    evolucaoMensal,
   }
 }

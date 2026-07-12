@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
-import { DollarSign, FileText, UserPlus } from 'lucide-react'
+import { DollarSign, FileText, Receipt, UserPlus } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -13,8 +13,10 @@ const CONFIG_TIPO: Record<
   TipoAtividade,
   { classe: string; icon: React.ComponentType<{ className?: string }> }
 > = {
-  cliente: { classe: 'bg-chart-purple/10 text-chart-purple', icon: UserPlus },
+  cliente: { classe: 'bg-chart-purple/10 text-chart-purple', icon: FileText },
   pagamento: { classe: 'bg-chart-success/10 text-chart-success', icon: DollarSign },
+  transacao: { classe: 'bg-chart-info/10 text-chart-info', icon: Receipt },
+  novo_cliente: { classe: 'bg-chart-orange/10 text-chart-orange', icon: UserPlus },
 }
 
 type Props = {

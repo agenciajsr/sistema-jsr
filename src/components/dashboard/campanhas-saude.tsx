@@ -12,9 +12,24 @@ function iniciais(nome: string): string {
 }
 
 function calcularSaude(c: ClientePerformance): { nivel: NivelSaude; rotulo: string; score: number } {
-  // Score baseado em ROAS + ter resultado
   let score = 50
-  if (c.roas !== null) {
+
+  // Se o cliente tem meta de ROAS definida, usar como referência
+  if (c.roas !== null && c.metaRoas !== null) {
+    const ratio = c.roas / c.metaRoas
+    if (ratio >= 1.2) score = 95
+    else if (ratio >= 1) score = 80
+    else if (ratio >= 0.7) score = 55
+    else score = 25
+  } else if (c.cpa !== null && c.metaCpa !== null) {
+    // Meta de CPA: quanto menor melhor
+    const ratio = c.metaCpa / c.cpa // invertido: CPA abaixo da meta = bom
+    if (ratio >= 1.3) score = 95
+    else if (ratio >= 1) score = 80
+    else if (ratio >= 0.7) score = 50
+    else score = 25
+  } else if (c.roas !== null) {
+    // Fallback sem meta — usar baseline genérico
     if (c.roas >= 4) score = 95
     else if (c.roas >= 2.5) score = 75
     else if (c.roas >= 1) score = 50

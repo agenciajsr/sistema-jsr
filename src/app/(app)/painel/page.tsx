@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import {
   HandCoins,
   Megaphone,
@@ -16,6 +17,8 @@ import { AlertasImportantes } from '@/components/dashboard/alertas-importantes'
 import { AtividadeRecente } from '@/components/dashboard/atividade-recente'
 import { PerformanceClienteTable } from '@/components/dashboard/performance-cliente-table'
 import { AiInsightFloat } from '@/components/dashboard/ai-insight-float'
+import { EvolucaoFinanceira } from '@/components/dashboard/evolucao-financeira'
+import { FiltroPeriodo } from '@/components/dashboard/filtro-periodo'
 import { getDashboardData } from '@/lib/dashboard/data'
 import { getCurrentUser } from '@/lib/auth/session'
 
@@ -25,8 +28,22 @@ const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
 })
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
 
-export default async function PainelPage() {
-  const [user, data] = await Promise.all([getCurrentUser(), getDashboardData()])
+type Props = {
+  searchParams: Promise<{ periodo?: string }>
+}
+
+export default async function PainelPage({ searchParams }: Props) {
+  const params = await searchParams
+  let mesParam: number | undefined
+  let anoParam: number | undefined
+
+  if (params.periodo) {
+    const [a, m] = params.periodo.split('-')
+    anoParam = parseInt(a, 10)
+    mesParam = parseInt(m, 10)
+  }
+
+  const [user, data] = await Promise.all([getCurrentUser(), getDashboardData(mesParam, anoParam)])
 
   const primeiroNome = user?.nome?.split(' ')[0] ?? 'Usuário'
 
@@ -53,6 +70,9 @@ export default async function PainelPage() {
             Aqui está o resumo completo da sua agência hoje.
           </p>
         </div>
+        <Suspense fallback={null}>
+          <FiltroPeriodo />
+        </Suspense>
       </div>
 
       {/* Faixa de 6 KPIs */}
@@ -97,9 +117,12 @@ export default async function PainelPage() {
         />
       </div>
 
+      {/* Gráfico de evolução financeira */}
+      <EvolucaoFinanceira dados={data?.evolucaoMensal ?? []} />
+
       {/* Linha do meio — Performance mais larga, Saúde e Agenda ao lado */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="min-w-0 md:col-span-2">
           <PerformanceGeral clientes={data?.clientesPerformance ?? []} />
         </div>
         <CampanhasSaude clientes={data?.clientesPerformance ?? []} />
@@ -107,14 +130,16 @@ export default async function PainelPage() {
       </div>
 
       {/* Linha de baixo */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <ResumoFinanceiro dados={data?.financeiro ?? null} />
         <AlertasImportantes />
         <AtividadeRecente atividades={data?.atividadeRecente ?? []} />
       </div>
 
-      {/* Tabela full width */}
-      <PerformanceClienteTable clientes={data?.clientesPerformance ?? []} />
+      {/* Tabela full width — scroll horizontal em mobile */}
+      <div className="min-w-0">
+        <PerformanceClienteTable clientes={data?.clientesPerformance ?? []} />
+      </div>
 
       {/* Card flutuante de IA (fora do fluxo) */}
       <AiInsightFloat />

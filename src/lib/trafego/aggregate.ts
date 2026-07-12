@@ -112,15 +112,15 @@ export function metricaHeroi(nicho: Nicho): Heroi {
   }
 }
 
-export type ClienteComContas = { id: string; nome: string; nicho: Nicho }
+export type ClienteComContas = { id: string; nome: string; nicho: Nicho; metaCpa: string | null; metaRoas: string | null }
 
 /**
- * Lista clientes (id, nome, nicho) que possuem ao menos uma conta Meta ativa vinculada.
+ * Lista clientes (id, nome, nicho, metas) que possuem ao menos uma conta Meta ativa vinculada.
  * Distinct por cliente, ordenado por nome.
  */
 export async function listarClientesComContas(): Promise<ClienteComContas[]> {
   const rows = await db
-    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho })
+    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas })
     .from(clientes)
     .innerJoin(adAccounts, eq(adAccounts.clienteId, clientes.id))
     .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
