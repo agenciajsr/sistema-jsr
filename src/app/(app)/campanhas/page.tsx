@@ -1,8 +1,16 @@
-import { AlertTriangle, CheckCircle2, Megaphone, Radio, Wallet } from 'lucide-react'
+import {
+  Eye,
+  MousePointerClick,
+  Percent,
+  Radio,
+  Target,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/stat-card'
 import {
@@ -14,91 +22,75 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SyncButton } from '@/components/trafego/sync-button'
-import { getTrafegoData, getUltimaSync } from '@/actions/trafego'
-import type { TrafegoAccount } from '@/actions/trafego'
+import { SeletorCampanhas } from '@/components/trafego/seletor-campanhas'
+import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
+import { GraficoVerba } from '@/components/trafego/grafico-verba'
+import {
+  getContasNaoVinculadas,
+  getUltimaSync,
+  listarClientes,
+} from '@/actions/trafego'
+import { getResumoCliente, listarClientesComContas } from '@/lib/trafego/aggregate'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
-
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
-
 const formatadorPct = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
 
-/** Agrega campanhas por campaignId: soma spend/impressions/clicks/reach dos ultimos 7 dias */
-function agregarCampanhas(conta: TrafegoAccount) {
-  const mapa = new Map<string, {
-    campaignId: string
-    campaignName: string
-    spend: number
-    impressions: number
-    clicks: number
-    reach: number
-    ctr: number | null
-  }>()
-
-  for (const c of conta.campanhas) {
-    const existing = mapa.get(c.campaignId)
-    if (existing) {
-      existing.spend += Number(c.spend)
-      existing.impressions += c.impressions
-      existing.clicks += c.clicks
-      existing.reach += c.reach
-    } else {
-      mapa.set(c.campaignId, {
-        campaignId: c.campaignId,
-        campaignName: c.campaignName,
-        spend: Number(c.spend),
-        impressions: c.impressions,
-        clicks: c.clicks,
-        reach: c.reach,
-        ctr: c.ctr ? Number(c.ctr) : null,
-      })
-    }
-  }
-
-  // Recalcular CTR apos agregacao
-  return Array.from(mapa.values()).map((item) => ({
-    ...item,
-    ctr: item.clicks > 0 && item.impressions > 0
-      ? (item.clicks / item.impressions) * 100
-      : item.ctr,
-  }))
+function moeda(v: number | null): string {
+  return v === null ? '-' : formatadorMoeda.format(v)
+}
+function numero(v: number | null): string {
+  return v === null ? '-' : formatadorNumero.format(v)
+}
+function pct(v: number | null): string {
+  return v === null ? '-' : `${formatadorPct.format(v)}%`
 }
 
-export default async function CampanhasPage() {
-  const [contas, ultimaSync] = await Promise.all([
-    getTrafegoData(),
-    getUltimaSync(),
-  ])
+export default async function CampanhasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cliente?: string; periodo?: string }>
+}) {
+  const sp = await searchParams
+  const cliente = sp.cliente ?? null
+  const periodo: '7' | '30' = sp.periodo === '7' ? '7' : '30'
 
-  const gastoTotal = contas.reduce((acc, c) => acc + c.spendTotal, 0)
-  const contasAtivas = contas.filter((c) => c.accountStatus === 1).length
+  const [clientesComContas, contasNaoVinculadas, clientesParaVinculo, ultimaSync] =
+    await Promise.all([
+      listarClientesComContas(),
+      getContasNaoVinculadas(),
+      listarClientes(),
+      getUltimaSync(),
+    ])
 
-  // Campanhas unicas nos ultimos 7 dias
-  const campanhasUnicas = new Set<string>()
-  for (const conta of contas) {
-    for (const c of conta.campanhas) {
-      campanhasUnicas.add(c.campaignId)
-    }
-  }
+  const resumo = cliente
+    ? await getResumoCliente(cliente, Number(periodo) as 7 | 30)
+    : null
 
-  const temDados = contas.length > 0
+  const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
+  const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Campanhas</h1>
           <p className="text-sm text-muted-foreground">
-            Status das contas de anúncio e campanhas por cliente.
+            Performance unificada por cliente: verba, resultados e campanhas.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SeletorCampanhas
+            clientes={clientesComContas.map((c) => ({ id: c.id, nome: c.nome }))}
+            clienteAtual={cliente}
+            periodoAtual={periodo}
+          />
           {ultimaSync && (
             <span className="text-xs text-muted-foreground">
               Última sync: {formatDistanceToNow(ultimaSync, { addSuffix: true, locale: ptBR })}
@@ -108,11 +100,12 @@ export default async function CampanhasPage() {
         </div>
       </div>
 
-      {!temDados ? (
-        <Card className="border-none p-12 text-center shadow-sm">
+      {/* Estado vazio total: nada sincronizado */}
+      {semNada && (
+        <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
           <div className="mx-auto max-w-md space-y-4">
             <Radio className="mx-auto size-12 text-muted-foreground/50" />
-            <h2 className="text-lg font-medium">Nenhuma conta de anúncio sincronizada</h2>
+            <h2 className="text-lg font-medium">Nenhuma conta sincronizada</h2>
             <p className="text-sm text-muted-foreground">
               Clique em Sincronizar para buscar as contas da sua Business Manager.
             </p>
@@ -121,101 +114,157 @@ export default async function CampanhasPage() {
             </div>
           </div>
         </Card>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      )}
+
+      {/* Ha clientes com contas, mas nenhum selecionado */}
+      {!semNada && !cliente && clientesComContas.length > 0 && (
+        <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
+          <div className="mx-auto max-w-md space-y-2">
+            <Target className="mx-auto size-12 text-muted-foreground/50" />
+            <h2 className="text-lg font-medium">Selecione um cliente</h2>
+            <p className="text-sm text-muted-foreground">
+              Escolha um cliente acima para ver a performance unificada de todas as contas dele.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Cliente selecionado, sem dados no periodo */}
+      {cliente && resumo && !resumo.temDados && (
+        <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
+          <div className="mx-auto max-w-md space-y-2">
+            <TrendingUp className="mx-auto size-12 text-muted-foreground/50" />
+            <h2 className="text-lg font-medium">
+              Sem dados neste período{clienteSelecionado ? ` para ${clienteSelecionado.nome}` : ''}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Não há insights para o período selecionado. Tente outro período ou sincronize.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Cliente com dados: dashboard premium */}
+      {cliente && resumo && resumo.temDados && (
+        <div className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            {resumo.contasUnificadas}{' '}
+            {resumo.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
+          </p>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="Gasto Total (7d)"
-              value={formatadorMoeda.format(gastoTotal)}
+              label={`Verba (${periodo}d)`}
+              value={formatadorMoeda.format(resumo.totais.spend)}
               icon={Wallet}
               color="primary"
             />
             <StatCard
-              label="Contas Ativas"
-              value={String(contasAtivas)}
-              icon={Radio}
+              label={resumo.heroi.label}
+              value={numero(
+                resumo.heroi.chave === 'vendas'
+                  ? resumo.totais.vendas
+                  : resumo.heroi.chave === 'conversas'
+                    ? resumo.totais.conversas
+                    : resumo.totais.leads,
+              )}
+              icon={Target}
               color="success"
             />
             <StatCard
-              label="Campanhas (7d)"
-              value={String(campanhasUnicas.size)}
-              icon={Megaphone}
+              label={
+                resumo.heroi.chave === 'vendas'
+                  ? 'CPA (custo/venda)'
+                  : `Custo por ${resumo.heroi.label.toLowerCase()}`
+              }
+              value={moeda(
+                resumo.heroi.chave === 'vendas'
+                  ? resumo.derivadas.cpa
+                  : resumo.derivadas.custoPorResultadoHeroi,
+              )}
+              icon={TrendingUp}
               color="warning"
+            />
+            <StatCard
+              label="Impressões"
+              value={numero(resumo.totais.impressions)}
+              icon={Eye}
+              color="primary"
+            />
+            <StatCard
+              label="Cliques"
+              value={numero(resumo.totais.clicks)}
+              icon={MousePointerClick}
+              color="primary"
+            />
+            <StatCard label="CTR" value={pct(resumo.derivadas.ctr)} icon={Percent} color="success" />
+            <StatCard
+              label="Alcance"
+              value={numero(resumo.totais.reach)}
+              icon={Users}
+              color="primary"
             />
           </div>
 
-          <div className="space-y-4">
-            {contas.map((conta) => {
-              const campanhasAgregadas = agregarCampanhas(conta)
+          <Card className="border-none shadow-[var(--shadow-sm)]">
+            <CardHeader>
+              <CardTitle className="text-base">Verba por dia</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {resumo.serieSpendPorDia.length > 0 ? (
+                <GraficoVerba serie={resumo.serieSpendPorDia} />
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Sem série de verba no período.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
-              return (
-                <Card key={conta.id} className="border-none shadow-sm">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                    <div>
-                      <CardTitle className="text-base">{conta.nome}</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        {conta.clienteNome ?? 'Sem cliente associado'}
-                        {conta.ultimaSync && (
-                          <> · sync {formatDistanceToNow(conta.ultimaSync, { addSuffix: true, locale: ptBR })}</>
-                        )}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={conta.accountStatus === 1 ? 'secondary' : 'destructive'}
-                      className="gap-1"
-                    >
-                      {conta.accountStatus === 1 ? (
-                        <CheckCircle2 className="size-3" />
-                      ) : (
-                        <AlertTriangle className="size-3" />
-                      )}
-                      {conta.accountStatus === 1 ? 'Conta ativa' : 'Conta com problema'}
-                    </Badge>
-                  </CardHeader>
-                  <CardContent>
-                    {campanhasAgregadas.length === 0 ? (
-                      <p className="py-4 text-center text-sm text-muted-foreground">
-                        Nenhum dado de campanha. Clique em Sincronizar para buscar dados.
-                      </p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Campanha</TableHead>
-                            <TableHead className="text-right">Gasto (7d)</TableHead>
-                            <TableHead className="text-right">Impressões</TableHead>
-                            <TableHead className="text-right">Cliques</TableHead>
-                            <TableHead className="text-right">CTR</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {campanhasAgregadas.map((campanha) => (
-                            <TableRow key={campanha.campaignId}>
-                              <TableCell className="font-medium">{campanha.campaignName}</TableCell>
-                              <TableCell className="text-right">
-                                {formatadorMoeda.format(campanha.spend)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatadorNumero.format(campanha.impressions)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatadorNumero.format(campanha.clicks)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {campanha.ctr !== null ? `${formatadorPct.format(campanha.ctr)}%` : '-'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </>
+          <Card className="border-none shadow-[var(--shadow-sm)]">
+            <CardHeader>
+              <CardTitle className="text-base">Campanhas que mais performam</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {resumo.ranking.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campanha</TableHead>
+                      <TableHead className="text-right">Gasto</TableHead>
+                      <TableHead className="text-right">{resumo.heroi.label}</TableHead>
+                      <TableHead className="text-right">
+                        {resumo.heroi.chave === 'vendas' ? 'CPA' : 'Custo/result.'}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumo.ranking.map((c) => (
+                      <TableRow key={c.campaignId}>
+                        <TableCell className="font-medium">{c.campaignName}</TableCell>
+                        <TableCell className="text-right">
+                          {formatadorMoeda.format(c.spend)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatadorNumero.format(c.resultadoPrimario)}
+                        </TableCell>
+                        <TableCell className="text-right">{moeda(c.cpaOuCpl)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Sem campanhas com resultados no período.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
+
+      {/* Sempre ao final: contas soltas (o componente se esconde se vazio) */}
+      <ContasNaoVinculadas contas={contasNaoVinculadas} clientes={clientesParaVinculo} />
     </div>
   )
 }
