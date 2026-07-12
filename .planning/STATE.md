@@ -118,9 +118,10 @@ None yet.
 | 260712-efy | Saúde de Campanhas Parte 2 — criativo rejeitado (effective_status DISAPPROVED/WITH_ISSUES) + fadiga de criativo (frequency), colunas em ad_insights (migration 0006 aplicada), sinais no health score e alertas; degradação graciosa sem os dados | 2026-07-12 | e92a38f | [260712-efy-saude-de-campanhas-parte-2-criativo-reje](./quick/260712-efy-saude-de-campanhas-parte-2-criativo-reje/) |
 | 260712-f82 | Reformular cadastro de clientes completo — 7 secoes visuais, ~25 campos, 2 enums, getProfiles, checkboxes JSONB, migration 0007 (NAO aplicada) | 2026-07-12 | a46d6d1 | [260712-f82-reformular-cadastro-de-clientes-completo](./quick/260712-f82-reformular-cadastro-de-clientes-completo/) |
 | 260712-fq8 | Fix: saudacao dinamica horario Brasilia, bug financeiro so contar status pago, campo linkDrive + botao Drive na ficha, migration 0008 | 2026-07-12 | 17c37ab | [260712-fq8-corrigir-saudacao-dashboard-bug-financei](./quick/260712-fq8-corrigir-saudacao-dashboard-bug-financei/) |
+| 260712-g1c | Reformular modulo financeiro completo — centro de custo, recorrencia com parcelas automaticas, previsao de caixa 30 dias, 4 abas (Visao Geral/A Receber/A Pagar/Previsao), 6 KPIs, migration 0009 (NAO aplicada) | 2026-07-12 | 0a93766 | [260712-g1c-reformular-modulo-financeiro-completo-ce](./quick/260712-g1c-reformular-modulo-financeiro-completo-ce/) |
 
 ## Session Continuity
 
 Last session: 2026-07-12T14:19:29Z
-Stopped at: Completed quick-260712-fq8 (saudacao, bug financeiro, linkDrive)
+Stopped at: Completed quick-260712-g1c (reformular modulo financeiro completo — migration 0009 NAO aplicada)
 Resume file: None
