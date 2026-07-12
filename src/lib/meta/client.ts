@@ -1,3 +1,5 @@
+import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
+
 import { metaAdAccountsResponseSchema, metaAdInsightsResponseSchema, metaInsightsResponseSchema } from './schemas'
 
 const META_BASE_URL = 'https://graph.facebook.com'
@@ -110,15 +112,19 @@ async function metaFetchUrl(url: string): Promise<unknown> {
 }
 
 /**
- * Busca insights de campanhas de uma conta de anuncio (historico diario, ultimos 30 dias).
+ * Busca insights de campanhas de uma conta de anuncio (historico diario, ultimos 30 dias
+ * ATÉ hoje no fuso de Brasília — via time_range, pois date_preset='last_30d' NÃO inclui hoje).
+ * O dado de "hoje" na Meta é PARCIAL e muda ao longo do dia (comportamento esperado).
  * Segue paginação automaticamente (max 500 registros para segurança).
  * @param adAccountId ID numerico da conta (sem prefixo act_)
  */
-export async function fetchCampaignInsights(adAccountId: string, datePreset: string = 'last_30d') {
+export async function fetchCampaignInsights(adAccountId: string) {
+  const until = hojeBrasilia()
+  const since = dataMenosDias(30, until)
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'campaign',
     fields: 'campaign_id,campaign_name,spend,impressions,clicks,reach,cpc,cpm,ctr,actions,action_values',
-    date_preset: datePreset,
+    time_range: JSON.stringify({ since, until }),
     time_increment: '1',
     limit: '100',
   })
@@ -142,14 +148,18 @@ export async function fetchCampaignInsights(adAccountId: string, datePreset: str
 
 /**
  * Busca insights nível anúncio (ad-level) de uma conta. Agregado nos últimos 30 dias
- * (sem time_increment — uma linha por anúncio no período inteiro para limitar volume).
+ * ATÉ hoje no fuso de Brasília (via time_range, pois date_preset='last_30d' NÃO inclui hoje).
+ * Sem time_increment — uma linha por anúncio no período inteiro para limitar volume.
+ * O dado de "hoje" na Meta é PARCIAL e muda ao longo do dia (comportamento esperado).
  * Segue paginação automaticamente (max 400 registros).
  */
-export async function fetchAdInsights(adAccountId: string, datePreset: string = 'last_30d') {
+export async function fetchAdInsights(adAccountId: string) {
+  const until = hojeBrasilia()
+  const since = dataMenosDias(30, until)
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'ad',
     fields: 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,frequency,actions,action_values',
-    date_preset: datePreset,
+    time_range: JSON.stringify({ since, until }),
     limit: '200',
   })
 
