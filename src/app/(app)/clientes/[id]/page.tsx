@@ -11,12 +11,13 @@ import { getAcompanhamentosDoCliente } from '@/actions/acompanhamento'
 import { getCobrancasDoCliente } from '@/actions/financeiro'
 import { getContasDoCliente, getContasNaoVinculadas } from '@/actions/trafego'
 import { getAlertasDoCliente } from '@/actions/alertas'
-import { getResumoCliente } from '@/lib/trafego/aggregate'
+import { getResumoCliente, metricaHeroi } from '@/lib/trafego/aggregate'
 import { ContratoForm } from '@/components/contrato-form'
 import { ChecklistCliente } from '@/components/ficha/checklist-cliente'
 import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
 import { CobrancaCliente } from '@/components/ficha/cobranca-cliente'
 import { VincularContaFicha } from '@/components/ficha/vincular-conta-ficha'
+import { MetasCliente } from '@/components/ficha/metas-cliente'
 import { StatCard } from '@/components/stat-card'
 import {
   AlertDialog,
@@ -378,6 +379,16 @@ export default async function ClienteDetalhePage({
 
         {/* Aba: Contas de anúncio (dados REAIS) */}
         <TabsContent value="contas" className="space-y-4">
+          <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
+            <MetasCliente
+              clienteId={id}
+              metaCpa={cliente.metaCpa}
+              metaCpl={cliente.metaCpl}
+              metaRoas={cliente.metaRoas}
+              heroiLabel={metricaHeroi(cliente.nicho).label}
+            />
+          </section>
+
           {contasDoCliente.length === 0 ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">

@@ -28,12 +28,14 @@ import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
 import { GraficoVerba } from '@/components/trafego/grafico-verba'
 import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
 import { ConjuntosPerformam } from '@/components/trafego/conjuntos-performam'
+import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
 import {
   getContasNaoVinculadas,
   getUltimaSync,
   listarClientes,
 } from '@/actions/trafego'
 import { getResumoCliente, listarClientesComContas, type Periodo } from '@/lib/trafego/aggregate'
+import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -85,6 +87,9 @@ export default async function CampanhasPage({
   const resumo = cliente
     ? await getResumoCliente(cliente, periodo)
     : null
+
+  // Health score do cliente selecionado (só quando há dados reais no período).
+  const saude = cliente && resumo?.temDados ? await getSaudeDoCliente(cliente) : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
@@ -160,10 +165,13 @@ export default async function CampanhasPage({
       {/* Cliente com dados: dashboard premium */}
       {cliente && resumo && resumo.temDados && (
         <div className="space-y-6">
-          <p className="text-sm text-muted-foreground">
-            {resumo.contasUnificadas}{' '}
-            {resumo.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {resumo.contasUnificadas}{' '}
+              {resumo.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
+            </p>
+            {saude && <HealthScoreCliente score={saude.score} rotulo={saude.rotulo} />}
+          </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard

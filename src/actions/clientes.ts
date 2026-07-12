@@ -1,6 +1,7 @@
 'use server'
 
 import { eq } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
 import { clientes, contratos } from '@/lib/db/schema'
@@ -59,6 +60,49 @@ export async function updateCliente(id: string, input: ClienteInput) {
     .where(eq(clientes.id, id))
 
   return { data: { id } }
+}
+
+type MetaInput = { metaCpa: string | null; metaCpl: string | null; metaRoas: string | null }
+
+// Normaliza um campo de meta: vazio → null; caso contrário exige número >= 0.
+// Retorna { valor } (string numérica ou null) ou { erro } se inválido.
+function normalizarMeta(raw: string | null): { valor: string | null } | { erro: true } {
+  if (raw == null) return { valor: null }
+  const trimmed = raw.trim()
+  if (trimmed === '') return { valor: null }
+  const num = Number(trimmed.replace(',', '.'))
+  if (Number.isNaN(num) || num < 0) return { erro: true }
+  return { valor: String(num) }
+}
+
+export async function updateMetasCliente(clienteId: string, input: MetaInput) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessão expirada. Faça login novamente.' }
+  }
+
+  const cpa = normalizarMeta(input.metaCpa)
+  const cpl = normalizarMeta(input.metaCpl)
+  const roas = normalizarMeta(input.metaRoas)
+
+  if ('erro' in cpa || 'erro' in cpl || 'erro' in roas) {
+    return { error: 'As metas devem ser números maiores ou iguais a zero.' }
+  }
+
+  await db
+    .update(clientes)
+    .set({
+      metaCpa: cpa.valor,
+      metaCpl: cpl.valor,
+      metaRoas: roas.valor,
+      updatedAt: new Date(),
+    })
+    .where(eq(clientes.id, clienteId))
+
+  revalidatePath('/clientes/' + clienteId)
+  revalidatePath('/campanhas')
+
+  return { data: { id: clienteId } }
 }
 
 export async function deleteCliente(id: string) {

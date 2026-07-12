@@ -3,7 +3,7 @@ import { Calendar, CheckCircle, UserX, Wallet, AlertTriangle, Info, DollarSign, 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { getAlertas } from '@/actions/alertas'
-import type { Alerta, TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
+import type { TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
 
 const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>> = {
   contrato_vencendo: Calendar,
