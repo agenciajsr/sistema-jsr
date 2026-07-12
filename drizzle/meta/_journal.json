@@ -43,6 +43,13 @@
       "when": 1783833052659,
       "tag": "0005_young_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783863046987,
+      "tag": "0006_cooing_speed",
+      "breakpoints": true
     }
   ]
 }
