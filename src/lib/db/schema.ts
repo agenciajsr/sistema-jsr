@@ -22,6 +22,7 @@ export const clientes = pgTable('clientes', {
   contatoTelefone: text('contato_telefone'),
   contatoEmail: text('contato_email'),
   notas: text('notas'),
+  usaAsaas: boolean('usa_asaas').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -94,10 +95,43 @@ export const campaignInsights = pgTable('campaign_insights', {
   accountDateCampaignIdx: index('ci_account_date_campaign_idx').on(table.adAccountId, table.date, table.campaignId),
 }))
 
+export const frequenciaChecklistEnum = pgEnum('frequencia_checklist', ['diaria', 'semanal', 'mensal'])
+
+export const checklistItems = pgTable('checklist_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  tarefa: text('tarefa').notNull(),
+  frequencia: frequenciaChecklistEnum('frequencia').notNull(),
+  concluido: boolean('concluido').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteIdx: index('checklist_items_cliente_id_idx').on(table.clienteId),
+}))
+
+export const acompanhamentos = pgTable('acompanhamentos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  autorId: uuid('autor_id'),
+  autorNome: text('autor_nome').notNull(),
+  nota: text('nota').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteCreatedIdx: index('acompanhamentos_cliente_created_idx').on(table.clienteId, table.createdAt),
+}))
+
 export const clientesRelations = relations(clientes, ({ many }) => ({
   contratos: many(contratos),
   transacoes: many(transacoes),
   adAccounts: many(adAccounts),
+  checklistItems: many(checklistItems),
+  acompanhamentos: many(acompanhamentos),
+}))
+export const checklistItemsRelations = relations(checklistItems, ({ one }) => ({
+  cliente: one(clientes, { fields: [checklistItems.clienteId], references: [clientes.id] }),
+}))
+export const acompanhamentosRelations = relations(acompanhamentos, ({ one }) => ({
+  cliente: one(clientes, { fields: [acompanhamentos.clienteId], references: [clientes.id] }),
 }))
 export const contratosRelations = relations(contratos, ({ one }) => ({
   cliente: one(clientes, { fields: [contratos.clienteId], references: [clientes.id] }),
