@@ -71,6 +71,7 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
   const user = await getCurrentUser()
   if (!user) return null
 
+  try {
   const agora = new Date()
   const mes = mesParam ?? agora.getMonth() + 1
   const ano = anoParam ?? agora.getFullYear()
@@ -276,5 +277,11 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
     },
     atividadeRecente,
     evolucaoMensal,
+  }
+  } catch (e) {
+    // Blip de conexão / erro transitório: degrada graciosamente (dashboard
+    // renderiza zerado) em vez de derrubar a página inteira com 500.
+    console.error('[getDashboardData] erro ao carregar dados do dashboard — retornando null:', e)
+    return null
   }
 }
