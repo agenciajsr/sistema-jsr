@@ -146,3 +146,57 @@ export const adAccountsRelations = relations(adAccounts, ({ one, many }) => ({
 export const campaignInsightsRelations = relations(campaignInsights, ({ one }) => ({
   adAccount: one(adAccounts, { fields: [campaignInsights.adAccountId], references: [adAccounts.id] }),
 }))
+
+// --- Adset Insights (conjuntos de anúncio) ---
+export const adsetInsights = pgTable('adset_insights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  adsetId: text('adset_id').notNull(),
+  adsetName: text('adset_name').notNull(),
+  campaignId: text('campaign_id'),
+  campaignName: text('campaign_name'),
+  spend: numeric('spend', { precision: 10, scale: 2 }).notNull().default('0'),
+  impressions: integer('impressions').default(0),
+  clicks: integer('clicks').default(0),
+  reach: integer('reach').default(0),
+  ctr: numeric('ctr', { precision: 8, scale: 4 }),
+  actions: jsonb('actions'),
+  actionValues: jsonb('action_values'),
+  dateStart: date('date_start').notNull(),
+  dateStop: date('date_stop').notNull(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  accountAdsetDateIdx: index('adset_account_adset_date_idx').on(table.adAccountId, table.adsetId, table.dateStart),
+}))
+
+// --- Ad Insights (criativos/anúncios individuais) ---
+export const adInsights = pgTable('ad_insights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  adId: text('ad_id').notNull(),
+  adName: text('ad_name').notNull(),
+  adsetId: text('adset_id'),
+  adsetName: text('adset_name'),
+  campaignId: text('campaign_id'),
+  campaignName: text('campaign_name'),
+  thumbnailUrl: text('thumbnail_url'),
+  spend: numeric('spend', { precision: 10, scale: 2 }).notNull().default('0'),
+  impressions: integer('impressions').default(0),
+  clicks: integer('clicks').default(0),
+  reach: integer('reach').default(0),
+  ctr: numeric('ctr', { precision: 8, scale: 4 }),
+  actions: jsonb('actions'),
+  actionValues: jsonb('action_values'),
+  dateStart: date('date_start').notNull(),
+  dateStop: date('date_stop').notNull(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  accountAdDateIdx: index('ad_account_ad_date_idx').on(table.adAccountId, table.adId, table.dateStart),
+}))
+
+export const adsetInsightsRelations = relations(adsetInsights, ({ one }) => ({
+  adAccount: one(adAccounts, { fields: [adsetInsights.adAccountId], references: [adAccounts.id] }),
+}))
+export const adInsightsRelations = relations(adInsights, ({ one }) => ({
+  adAccount: one(adAccounts, { fields: [adInsights.adAccountId], references: [adAccounts.id] }),
+}))
