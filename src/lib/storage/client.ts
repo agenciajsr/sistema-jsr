@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const BUCKET = 'documentos'
 
@@ -10,7 +10,7 @@ export async function uploadFile(
   file: File,
   clienteId: string,
 ): Promise<{ path: string } | { error: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Gera um nome unico para evitar colisoes
   const timestamp = Date.now()
@@ -39,7 +39,7 @@ export async function uploadFile(
 export async function getSignedUrl(
   storagePath: string,
 ): Promise<{ url: string } | { error: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase.storage
     .from(BUCKET)
@@ -58,7 +58,7 @@ export async function getSignedUrl(
 export async function deleteFile(
   storagePath: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { error } = await supabase.storage
     .from(BUCKET)
