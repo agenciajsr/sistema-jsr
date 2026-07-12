@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm'
 import { inngest } from '../client'
 import { db } from '@/lib/db'
 import { adAccounts, adInsights, campaignInsights } from '@/lib/db/schema'
-import { fetchMetaAdAccounts, fetchCampaignInsights, fetchAdInsights, fetchAdThumbnails, fetchAccountBalance } from '@/lib/meta/client'
+import { fetchMetaAdAccounts, fetchCampaignInsights, fetchAdInsights, fetchAdMeta, fetchAccountBalance } from '@/lib/meta/client'
 
 export const syncMetaAds = inngest.createFunction(
   {
@@ -116,9 +116,9 @@ export const syncMetaAds = inngest.createFunction(
 
       // Step: sincronizar ad_insights (nível anúncio/criativo)
       await step.run(`sync-ad-insights-${account.metaAccountId}`, async () => {
-        const [ads, thumbs] = await Promise.all([
+        const [ads, adMeta] = await Promise.all([
           fetchAdInsights(account.metaAccountId),
-          fetchAdThumbnails(account.metaAccountId),
+          fetchAdMeta(account.metaAccountId),
         ])
 
         for (const ad of ads) {
@@ -140,9 +140,12 @@ export const syncMetaAds = inngest.createFunction(
             adsetName: ad.adset_name || null,
             campaignId: ad.campaign_id || null,
             campaignName: ad.campaign_name || null,
-            thumbnailUrl: thumbs.get(ad.ad_id) ?? null,
+            thumbnailUrl: adMeta.get(ad.ad_id)?.thumbnailUrl ?? null,
+            effectiveStatus: adMeta.get(ad.ad_id)?.effectiveStatus ?? null,
             spend: ad.spend,
             impressions: parseInt(ad.impressions, 10),
+            reach: parseInt(ad.reach ?? '0', 10),
+            frequency: ad.frequency ?? null,
             clicks: parseInt(ad.clicks, 10),
             actions: ad.actions.length > 0 ? ad.actions : null,
             actionValues: ad.action_values.length > 0 ? ad.action_values : null,

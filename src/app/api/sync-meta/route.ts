@@ -7,7 +7,7 @@ import {
   fetchMetaAdAccounts,
   fetchCampaignInsights,
   fetchAdInsights,
-  fetchAdThumbnails,
+  fetchAdMeta,
   fetchAccountBalance,
 } from '@/lib/meta/client'
 
@@ -58,11 +58,11 @@ async function syncSingleAccount(account: { id: string; metaAccountId: string })
   }
   insightsCount += insights.length
 
-  // Ad insights (criativos) — em paralelo com thumbnails
+  // Ad insights (criativos) — em paralelo com metadados do anúncio
   try {
-    const [ads, thumbs] = await Promise.all([
+    const [ads, adMeta] = await Promise.all([
       fetchAdInsights(account.metaAccountId),
-      fetchAdThumbnails(account.metaAccountId),
+      fetchAdMeta(account.metaAccountId),
     ])
 
     for (const ad of ads) {
@@ -84,9 +84,12 @@ async function syncSingleAccount(account: { id: string; metaAccountId: string })
         adsetName: ad.adset_name || null,
         campaignId: ad.campaign_id || null,
         campaignName: ad.campaign_name || null,
-        thumbnailUrl: thumbs.get(ad.ad_id) ?? null,
+        thumbnailUrl: adMeta.get(ad.ad_id)?.thumbnailUrl ?? null,
+        effectiveStatus: adMeta.get(ad.ad_id)?.effectiveStatus ?? null,
         spend: ad.spend,
         impressions: parseInt(ad.impressions, 10),
+        reach: parseInt(ad.reach ?? '0', 10),
+        frequency: ad.frequency ?? null,
         clicks: parseInt(ad.clicks, 10),
         actions: ad.actions.length > 0 ? ad.actions : null,
         actionValues: ad.action_values.length > 0 ? ad.action_values : null,
