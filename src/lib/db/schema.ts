@@ -23,6 +23,11 @@ export const clientes = pgTable('clientes', {
   contatoEmail: text('contato_email'),
   notas: text('notas'),
   usaAsaas: boolean('usa_asaas').notNull().default(false),
+  // Metas de performance alvo por cliente (nullable). Nulo = sem meta manual →
+  // a avaliação de saúde cai no baseline automático por histórico.
+  metaCpa: numeric('meta_cpa', { precision: 10, scale: 2 }),
+  metaCpl: numeric('meta_cpl', { precision: 10, scale: 2 }),
+  metaRoas: numeric('meta_roas', { precision: 10, scale: 2 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
