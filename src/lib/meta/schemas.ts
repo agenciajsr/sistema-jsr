@@ -12,6 +12,7 @@ export const metaAdAccountSchema = z.object({
   name: z.string(),
   account_status: z.number(),
   currency: z.string().optional().default('BRL'),
+  funding_source: z.string().optional(),
 })
 
 export const metaAdAccountsResponseSchema = z.object({

@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Banknote,
   Bot,
   CheckSquare,
   ChevronDown,
@@ -53,6 +54,7 @@ const nav: NavItem[] = [
   { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
   { title: 'Clientes', url: '/clientes', icon: Users },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
+  { title: 'Verbas', url: '/verbas', icon: Banknote },
   { title: 'Relatórios', url: '/relatorios', icon: FileText },
   { title: 'Financeiro', url: '/financeiro', icon: Wallet, submenu: true },
   { title: 'Contratos', url: '/contratos', icon: FileSignature },

@@ -78,7 +78,7 @@ export async function fetchAccountBalance(adAccountId: string): Promise<number |
  */
 export async function fetchMetaAdAccounts() {
   const businessId = getEnv('META_BUSINESS_ID')
-  const fields = 'id,name,account_status,currency'
+  const fields = 'id,name,account_status,currency,funding_source'
 
   const [ownedRaw, clientRaw] = await Promise.all([
     metaFetch(`/${businessId}/owned_ad_accounts`, { fields, limit: '100' }),

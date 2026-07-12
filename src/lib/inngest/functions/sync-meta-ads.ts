@@ -37,6 +37,7 @@ export const syncMetaAds = inngest.createFunction(
               nome: acc.name,
               accountStatus: acc.account_status,
               currency: acc.currency,
+              fundingSource: acc.funding_source ?? null,
               updatedAt: new Date(),
             })
             .where(eq(adAccounts.id, existing.id))
@@ -47,6 +48,7 @@ export const syncMetaAds = inngest.createFunction(
             nome: acc.name,
             accountStatus: acc.account_status,
             currency: acc.currency,
+            fundingSource: acc.funding_source ?? null,
           })
         }
       }

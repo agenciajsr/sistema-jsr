@@ -112,6 +112,7 @@ export const adAccounts = pgTable('ad_accounts', {
   accountStatus: integer('account_status'),
   currency: text('currency').default('BRL'),
   saldo: numeric('saldo', { precision: 12, scale: 2 }),
+  fundingSource: text('funding_source'), // 'credit_card', 'prepaid', 'invoice', etc.
   ativo: boolean('ativo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
