@@ -36,9 +36,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { PlanCard } from '@/components/premium/plan-card'
 import { UserProfile } from '@/components/premium/user-profile'
-import { planoAtualMock } from '@/lib/mock/dashboard-ref'
 
 type NavItem = {
   title: string
@@ -155,11 +153,6 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter className="gap-3">
-        <PlanCard
-          nome={planoAtualMock.nome}
-          vence={planoAtualMock.vence}
-          percentUtilizado={planoAtualMock.percentUtilizado}
-        />
         <UserProfile nome={nome} cargo={cargo} />
       </SidebarFooter>
     </Sidebar>
