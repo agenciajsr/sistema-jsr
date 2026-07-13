@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Bell, Mail, Plus, Search } from 'lucide-react'
+import { Bell, Plus, Search } from 'lucide-react'
 
 import { AppSidebar } from '@/components/app-sidebar'
 import { Button } from '@/components/ui/button'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { getCurrentUser } from '@/lib/auth/session'
-import { contadoresHeaderMock } from '@/lib/mock/dashboard-ref'
+import { getAlertas } from '@/actions/alertas'
 
 const CARGO_POR_ROLE: Record<'admin' | 'membro', string> = {
   admin: 'Administrador',
@@ -27,6 +27,15 @@ export default async function AppLayout({
   }
 
   const cargo = CARGO_POR_ROLE[currentUser.role]
+
+  // Contagem real de alertas para o badge do sino. Envolvido em try/catch —
+  // um blip de conexão não pode derrubar o layout inteiro (app todo cai).
+  let totalAlertas = 0
+  try {
+    totalAlertas = (await getAlertas()).length
+  } catch {
+    totalAlertas = 0
+  }
 
   return (
     <SidebarProvider>
@@ -57,26 +66,13 @@ export default async function AppLayout({
 
             <Link
               href="/alertas"
-              aria-label="Notificações"
+              aria-label={`Alertas${totalAlertas > 0 ? ` (${totalAlertas})` : ''}`}
               className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <Bell className="size-5" />
-              {contadoresHeaderMock.notificacoes > 0 && (
+              {totalAlertas > 0 && (
                 <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold leading-none text-destructive-foreground">
-                  {contadoresHeaderMock.notificacoes}
-                </span>
-              )}
-            </Link>
-
-            <Link
-              href="/alertas"
-              aria-label="Mensagens"
-              className="relative inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <Mail className="size-5" />
-              {contadoresHeaderMock.mensagens > 0 && (
-                <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold leading-none text-primary-foreground">
-                  {contadoresHeaderMock.mensagens}
+                  {totalAlertas}
                 </span>
               )}
             </Link>
