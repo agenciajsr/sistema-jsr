@@ -126,7 +126,16 @@ export default async function PainelPage({ searchParams }: Props) {
           <PerformanceGeral clientes={data?.clientesPerformance ?? []} />
         </div>
         <CampanhasSaude clientes={data?.clientesPerformance ?? []} />
-        <AgendaHoje />
+        <Suspense
+          fallback={
+            <div className="rounded-xl bg-card p-4 shadow-[var(--shadow-sm)]">
+              <p className="text-base font-semibold">Agenda de Hoje</p>
+              <p className="mt-6 text-center text-sm text-muted-foreground">Carregando...</p>
+            </div>
+          }
+        >
+          <AgendaHoje />
+        </Suspense>
       </div>
 
       {/* Linha de baixo */}
