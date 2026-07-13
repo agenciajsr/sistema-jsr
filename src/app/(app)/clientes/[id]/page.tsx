@@ -309,25 +309,72 @@ export default async function ClienteDetalhePage({
             </div>
 
             {contratoAtual ? (
-              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-                <p>
-                  <span className="text-muted-foreground">Início: </span>
-                  {formatarData(contratoAtual.dataInicio)}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Vencimento: </span>
-                  {formatarData(contratoAtual.dataVencimento)}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Valor mensal: </span>
-                  {formatadorMoeda.format(Number(contratoAtual.valorMensal))}
-                </p>
-              </div>
+              <>
+                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                  <p>
+                    <span className="text-muted-foreground">Início: </span>
+                    {formatarData(contratoAtual.dataInicio)}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Vencimento: </span>
+                    {formatarData(contratoAtual.dataVencimento)}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Valor mensal: </span>
+                    {formatadorMoeda.format(Number(contratoAtual.valorMensal))}
+                  </p>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ContratoForm
+                      clienteId={id}
+                      contratoId={contratoAtual.id}
+                      defaultValues={{
+                        dataInicio: contratoAtual.dataInicio,
+                        dataVencimento: contratoAtual.dataVencimento,
+                        valorMensal: Number(contratoAtual.valorMensal),
+                      }}
+                      triggerLabel="Editar contrato"
+                      triggerVariant="outline"
+                      triggerSize="sm"
+                    />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                          Excluir contrato
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir contrato</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {'Esta ação não pode ser desfeita. Este registro de contrato será removido permanentemente. Deseja continuar?'}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <form action={excluirContratoAction.bind(null, contratoAtual.id)}>
+                            <AlertDialogAction type="submit" variant="destructive">
+                              Excluir contrato
+                            </AlertDialogAction>
+                          </form>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">Nenhum contrato registrado.</p>
             )}
 
-            <ContratoForm clienteId={id} />
+            <div className="border-t pt-4">
+              <p className="mb-3 text-sm text-muted-foreground">
+                Renovou ou fechou um novo contrato? Registre abaixo — o atual vai para o histórico.
+              </p>
+              <ContratoForm clienteId={id} />
+            </div>
           </section>
 
           <section className="space-y-4">
@@ -358,29 +405,43 @@ export default async function ClienteDetalhePage({
                     </div>
 
                     {isAdmin && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm">
-                            Excluir contrato
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir contrato</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {'Esta ação não pode ser desfeita. Este registro de contrato será removido permanentemente do histórico. Deseja continuar?'}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <form action={excluirContratoAction.bind(null, contrato.id)}>
-                              <AlertDialogAction type="submit" variant="destructive">
-                                Excluir contrato
-                              </AlertDialogAction>
-                            </form>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ContratoForm
+                          clienteId={id}
+                          contratoId={contrato.id}
+                          defaultValues={{
+                            dataInicio: contrato.dataInicio,
+                            dataVencimento: contrato.dataVencimento,
+                            valorMensal: Number(contrato.valorMensal),
+                          }}
+                          triggerLabel="Editar"
+                          triggerVariant="outline"
+                          triggerSize="sm"
+                        />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                              Excluir contrato
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir contrato</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {'Esta ação não pode ser desfeita. Este registro de contrato será removido permanentemente do histórico. Deseja continuar?'}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <form action={excluirContratoAction.bind(null, contrato.id)}>
+                                <AlertDialogAction type="submit" variant="destructive">
+                                  Excluir contrato
+                                </AlertDialogAction>
+                              </form>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     )}
                   </li>
                 ))}
