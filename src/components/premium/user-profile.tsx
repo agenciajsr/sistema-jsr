@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronsUpDown, LogOut } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronsUpDown, LogOut, UserCog } from 'lucide-react'
 
 import { signOut } from '@/actions/auth'
 import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
@@ -47,6 +48,13 @@ export function UserProfile({ nome, cargo }: UserProfileProps) {
           <p className="text-sm font-medium">{nome}</p>
           <p className="text-xs font-normal text-muted-foreground">{cargo}</p>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/perfil" className="w-full cursor-pointer">
+            <UserCog className="size-4" />
+            Meu perfil
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOut}>
           <DropdownMenuItem asChild>
