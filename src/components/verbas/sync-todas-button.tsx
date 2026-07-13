@@ -17,10 +17,12 @@ export function SyncTodasButton() {
 
   async function handleSync() {
     setSyncing(true)
-    toast.info('Sincronizando todas as contas da Meta... pode levar alguns minutos.')
+    toast.info('Atualizando saldos e status das contas...')
 
     try {
-      const res = await fetch('/api/sync-meta', { method: 'POST' })
+      // tipo=saldos: sync LEVE (saldo + status), rápido. O sync pesado de campanhas
+      // fica a cargo do cron diário — aqui a Verba só precisa de saldo/status atualizados.
+      const res = await fetch('/api/sync-meta?tipo=saldos', { method: 'POST' })
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok || !data.ok) {
@@ -28,7 +30,7 @@ export function SyncTodasButton() {
         return
       }
 
-      toast.success(`Sincronização concluída! ${data.contas ?? 0} contas atualizadas.`)
+      toast.success(`Saldos atualizados! ${data.contas ?? 0} contas.`)
       router.refresh()
     } catch {
       toast.error('Erro de conexão ao sincronizar. Tente novamente.')

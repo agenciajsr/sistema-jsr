@@ -217,3 +217,42 @@ export async function sincronizarTudoMeta(): Promise<{ contas: number; insights:
   await atualizarListaContasMeta()
   return sincronizarContasMeta(null)
 }
+
+/**
+ * Sync LEVE para a página de Verbas: atualiza a lista de contas (status/nome/funding)
+ * e o SALDO de cada conta ativa — SEM o sync pesado de insights de campanha/criativo
+ * (que leva ~3 min e não completa de forma confiável numa requisição do navegador).
+ * Rápido (~10s) e confiável para o botão "Sincronizar contas" da Verba.
+ * `updatedAt` é sempre atualizado (reflete a "Última Sync"); `saldo` só quando não-nulo.
+ */
+export async function sincronizarVerbas(): Promise<{ contas: number }> {
+  // 1. Atualiza lista/status/funding (e descobre contas novas). Não pode derrubar o resto.
+  try {
+    await atualizarListaContasMeta()
+  } catch (err) {
+    console.warn('[sync-verbas] Falha ao atualizar lista de contas:', err)
+  }
+
+  // 2. Atualiza o saldo de cada conta ativa (fetchAccountBalance é rápido).
+  const accounts = await db
+    .select({ id: adAccounts.id, metaAccountId: adAccounts.metaAccountId })
+    .from(adAccounts)
+    .where(and(eq(adAccounts.ativo, true), eq(adAccounts.plataforma, 'meta')))
+
+  for (const account of accounts) {
+    try {
+      const saldo = await fetchAccountBalance(account.metaAccountId)
+      await db
+        .update(adAccounts)
+        .set({
+          ...(saldo !== null ? { saldo: saldo.toFixed(2) } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(adAccounts.id, account.id))
+    } catch (err) {
+      console.warn(`[sync-verbas] Erro no saldo da conta ${account.metaAccountId}:`, err)
+    }
+  }
+
+  return { contas: accounts.length }
+}
