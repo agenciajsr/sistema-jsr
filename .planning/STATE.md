@@ -124,9 +124,10 @@ None yet.
 | 260712-nb8 | Modulo Verbas completo: pagina propria /verbas, sync funding_source, KPIs, alertas, menu lateral | 2026-07-12 | eca6309 | [260712-nb8-modulo-verbas-completo-menu-sync-funding](./quick/260712-nb8-modulo-verbas-completo-menu-sync-funding/) |
 | (fast) | Reconciliar migrations 0010 duplicadas — remove orfao 0010_add_funding_source, torna 0010_calm_starbolt idempotente, commita artefatos drizzle (documentos/funding_source ja existem em prod, verificado read-only) | 2026-07-12 | 3e20038 | — (gsd:fast) |
 | (fast) | Header: badge do sino com contagem real de alertas (getAlertas().length com try/catch), remove icone de Mensagens fake | 2026-07-12 | 8a88ba8 | — (gsd:fast) |
+| 260712-uc1 | Integracao completa com Google Calendar (OAuth 2 duas vias): tabela google_credentials single-tenant + migration 0011 (NAO aplicada), fluxo start/callback com CSRF, refresh automatico, client REST Calendar validado por Zod (fuso Brasilia), card de agenda real, pagina /agenda (criar/editar), /integracoes Conectar/Desconectar. Pendente credenciais Google Cloud do usuario | 2026-07-12 | f8bb9fc | [260712-uc1-integracao-completa-com-google-calendar-](./quick/260712-uc1-integracao-completa-com-google-calendar-/) |
 
 ## Session Continuity
 
-Last session: 2026-07-12T14:19:29Z
-Stopped at: Completed quick-260712-g1c (reformular modulo financeiro completo — migration 0009 NAO aplicada)
+Last session: 2026-07-13T01:06:08Z
+Stopped at: Completed quick-260712-uc1 (integracao Google Calendar — migration 0011 NAO aplicada, credenciais Google pendentes do usuario)
 Resume file: None
