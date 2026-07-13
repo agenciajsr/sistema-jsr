@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { adAccounts, adInsights, campaignInsights } from '@/lib/db/schema'
 import {
+  fetchMetaAdAccounts,
   fetchCampaignInsights,
   fetchAdInsights,
   fetchAdMeta,
@@ -159,4 +160,60 @@ export async function sincronizarContasMeta(
   }
 
   return { contas: accountsToSync.length, insights: totalInsights }
+}
+
+/**
+ * Descobre/atualiza a lista de contas de anúncio da Meta (owned + client) e faz o
+ * upsert em `adAccounts`. Espelha o passo 'sync-ad-accounts' da função Inngest.
+ * Pode lançar se a API da Meta falhar inteira — quem chama trata (a rota de cron
+ * envolve em try/catch). Retorna a quantidade de contas retornadas pela Meta.
+ */
+export async function atualizarListaContasMeta(): Promise<number> {
+  const metaAccounts = await fetchMetaAdAccounts()
+
+  for (const acc of metaAccounts) {
+    // Remover prefixo "act_" do id
+    const numericId = acc.id.replace(/^act_/, '')
+
+    const [existing] = await db
+      .select({ id: adAccounts.id })
+      .from(adAccounts)
+      .where(eq(adAccounts.metaAccountId, numericId))
+      .limit(1)
+
+    if (existing) {
+      await db
+        .update(adAccounts)
+        .set({
+          nome: acc.name,
+          accountStatus: acc.account_status,
+          currency: acc.currency,
+          fundingSource: acc.funding_source ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(adAccounts.id, existing.id))
+    } else {
+      await db.insert(adAccounts).values({
+        plataforma: 'meta',
+        metaAccountId: numericId,
+        nome: acc.name,
+        accountStatus: acc.account_status,
+        currency: acc.currency,
+        fundingSource: acc.funding_source ?? null,
+      })
+    }
+  }
+
+  return metaAccounts.length
+}
+
+/**
+ * Orquestrador completo do sync Meta: descobre/atualiza as contas ANTES de
+ * sincronizar insights + saldo de todas as contas ativas. Usado pela rota de cron
+ * (/api/cron/sync-meta). Reaproveita `sincronizarContasMeta` — não duplica a lógica
+ * de insights.
+ */
+export async function sincronizarTudoMeta(): Promise<{ contas: number; insights: number }> {
+  await atualizarListaContasMeta()
+  return sincronizarContasMeta(null)
 }
