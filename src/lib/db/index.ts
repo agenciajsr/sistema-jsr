@@ -16,11 +16,18 @@ import * as schema from './schema'
 // - connect_timeout → falha rápido (10s) se o DB/pooler não responder (cold
 //                     start / DB acordando) em vez de travar até o default e
 //                     estourar o timeout serverless (504).
+// - statement_timeout → aborta qualquer query que passe de 12s (parametro de
+//                     conexão do Postgres, em ms). Fail-fast: durante um soluço
+//                     do Supabase, uma query lenta erra rapido em vez de deixar
+//                     a função serverless pendurada ate os 300s da Vercel.
 const client = postgres(process.env.DATABASE_URL!, {
   prepare: false,
   max: 3,
   idle_timeout: 20,
   max_lifetime: 60 * 30,
   connect_timeout: 10,
+  connection: {
+    statement_timeout: 12_000,
+  },
 })
 export const db = drizzle({ client, schema })
