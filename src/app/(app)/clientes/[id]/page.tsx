@@ -12,7 +12,7 @@ import { getCobrancasDoCliente } from '@/actions/financeiro'
 import { getContasDoCliente, getContasNaoVinculadas } from '@/actions/trafego'
 import { getAlertasDoCliente } from '@/actions/alertas'
 import { listarDocumentos } from '@/actions/documentos'
-import { getResumoCliente, metricaHeroi } from '@/lib/trafego/aggregate'
+import { getResumoCliente, heroiDoObjetivo } from '@/lib/trafego/aggregate'
 import { ContratoForm } from '@/components/contrato-form'
 import { ChecklistCliente } from '@/components/ficha/checklist-cliente'
 import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
@@ -463,7 +463,7 @@ export default async function ClienteDetalhePage({
               metaCpa={cliente.metaCpa}
               metaCpl={cliente.metaCpl}
               metaRoas={cliente.metaRoas}
-              heroiLabel={metricaHeroi(cliente.nicho).label}
+              heroiLabel={heroiDoObjetivo(cliente.objetivoPrincipal, cliente.nicho).label}
             />
           </section>
 

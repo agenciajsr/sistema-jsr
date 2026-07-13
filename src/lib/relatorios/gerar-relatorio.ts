@@ -8,6 +8,7 @@ import { eq, and, gte, lte, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { adAccounts, campaignInsights, clientes } from '@/lib/db/schema'
 import { dataMenosDias } from '@/lib/date-br'
+import { classificarObjetivo } from '@/lib/trafego/aggregate'
 import { parseActionsRelatorio, parseReceitaRelatorio, type MetricasRelatorio } from './parse-actions-extended'
 
 // --- Tipos ---
@@ -58,15 +59,16 @@ export type RelatorioGerado = {
 // --- Mapear nicho/objetivo do cliente ---
 
 function detectarObjetivo(cliente: { nicho: string; objetivoPrincipal: string | null }): ObjetivoCliente {
+  // Mesma classificação usada em Painel/Campanhas (fonte única), para todos concordarem.
+  const classe = classificarObjetivo(cliente.objetivoPrincipal)
   const obj = (cliente.objetivoPrincipal ?? '').toLowerCase()
-  if (obj.includes('compra') || obj.includes('venda') || obj.includes('ecommerce')) return 'compras'
-  if (obj.includes('formulario') || obj.includes('formulário')) return 'leads_formulario'
-  if (obj.includes('lead')) return 'leads'
-  if (obj.includes('whatsapp') || obj.includes('conversa') || obj.includes('mensag')) return 'whatsapp'
-  if (obj.includes('engajamento') || obj.includes('perfil') || obj.includes('seguid')) return 'engajamento'
-  if (obj.includes('trafego') || obj.includes('tráfego') || obj.includes('visita')) return 'trafego'
+  if (classe === 'vendas') return 'compras'
+  if (classe === 'leads') return /formul/.test(obj) ? 'leads_formulario' : 'leads'
+  if (classe === 'conversas') return 'whatsapp'
+  if (classe === 'engajamento') return 'engajamento'
+  if (classe === 'trafego') return 'trafego'
 
-  // Fallback pelo nicho
+  // Fallback pelo nicho quando o texto não classifica.
   switch (cliente.nicho) {
     case 'ecommerce': return 'compras'
     case 'negocio_local': return 'whatsapp'

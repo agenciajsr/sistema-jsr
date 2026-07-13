@@ -3,7 +3,7 @@ import { eq, and, sql, gte, desc, count } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { adAccounts, campaignInsights, clientes, contratos, transacoes, acompanhamentos } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
-import { getResumoCliente, listarClientesComContas, parseActions, type Nicho, type ChaveHeroi, metricaHeroi } from '@/lib/trafego/aggregate'
+import { getResumoCliente, listarClientesComContas, parseActions, type Nicho, type ChaveHeroi, heroiDoObjetivo } from '@/lib/trafego/aggregate'
 
 export type DashboardKpis = {
   mrr: number
@@ -191,7 +191,7 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       const resumo = await getResumoCliente(c.id, '30d')
       if (!resumo || !resumo.temDados) continue
 
-      const heroi = metricaHeroi(c.nicho)
+      const heroi = heroiDoObjetivo(c.objetivoPrincipal, c.nicho)
       const resultado = heroi.chave === 'vendas'
         ? resumo.totais.vendas
         : heroi.chave === 'conversas'

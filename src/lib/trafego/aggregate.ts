@@ -112,15 +112,56 @@ export function metricaHeroi(nicho: Nicho): Heroi {
   }
 }
 
-export type ClienteComContas = { id: string; nome: string; nicho: Nicho; metaCpa: string | null; metaRoas: string | null }
+export type ClasseObjetivo = 'vendas' | 'leads' | 'conversas' | 'engajamento' | 'trafego'
 
 /**
- * Lista clientes (id, nome, nicho, metas) que possuem ao menos uma conta Meta ativa vinculada.
- * Distinct por cliente, ordenado por nome.
+ * Classifica o OBJETIVO PRINCIPAL do cliente (texto livre digitado no cadastro)
+ * na métrica de negócio correspondente. Fonte única de verdade usada por Painel,
+ * Campanhas, avaliação de saúde e relatório — para todos concordarem.
+ *
+ * Prioridade proposital: mensageria (WhatsApp) primeiro, porque o MEIO define a
+ * métrica real na Meta mesmo quando o texto diz "leads" (ex.: "leads iniciando no
+ * WhatsApp" = conversas iniciadas, não action 'lead'). Retorna null se nada casar.
+ */
+export function classificarObjetivo(objetivoPrincipal: string | null): ClasseObjetivo | null {
+  const obj = (objetivoPrincipal ?? '').toLowerCase()
+  if (!obj.trim()) return null
+  if (/whats|conversa|mensag|direct|clique para|click to message/.test(obj)) return 'conversas'
+  if (/venda|vender|compra|comprar|card[aá]pio|checkout|\bcota|e-?commerce|\bloja|faturar/.test(obj)) return 'vendas'
+  if (/lead|formul|cadastr|agendam|or[çc]ament|inscri/.test(obj)) return 'leads'
+  if (/engajamento|seguidor|perfil|reconhecim/.test(obj)) return 'engajamento'
+  if (/tr[aá]fego|visita|acesso ao site/.test(obj)) return 'trafego'
+  return null
+}
+
+const LABEL_HEROI: Record<ChaveHeroi, string> = {
+  vendas: 'Vendas',
+  conversas: 'Conversas',
+  leads: 'Leads',
+}
+
+/**
+ * Métrica-herói do cliente derivada do OBJETIVO cadastrado (com fallback pelo
+ * nicho quando o texto não classifica). Substitui metricaHeroi(nicho) puro.
+ */
+export function heroiDoObjetivo(objetivoPrincipal: string | null, nicho: Nicho): Heroi {
+  const classe = classificarObjetivo(objetivoPrincipal)
+  if (classe === 'vendas' || classe === 'conversas' || classe === 'leads') {
+    return { chave: classe, label: LABEL_HEROI[classe] }
+  }
+  // engajamento/trafego/null não são chaves-herói de conversão → usa o nicho.
+  return metricaHeroi(nicho)
+}
+
+export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetivoPrincipal: string | null; metaCpa: string | null; metaRoas: string | null }
+
+/**
+ * Lista clientes (id, nome, nicho, objetivo, metas) que possuem ao menos uma conta
+ * Meta ativa vinculada. Distinct por cliente, ordenado por nome.
  */
 export async function listarClientesComContas(): Promise<ClienteComContas[]> {
   const rows = await db
-    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas })
+    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, objetivoPrincipal: clientes.objetivoPrincipal, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas })
     .from(clientes)
     .innerJoin(adAccounts, eq(adAccounts.clienteId, clientes.id))
     .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
@@ -226,9 +267,9 @@ export async function getResumoCliente(
   // Nicho do cliente -> metrica-heroi
   const cliente = await db.query.clientes.findFirst({
     where: eq(clientes.id, clienteId),
-    columns: { id: true, nicho: true },
+    columns: { id: true, nicho: true, objetivoPrincipal: true },
   })
-  const heroi = metricaHeroi((cliente?.nicho ?? 'infoproduto') as Nicho)
+  const heroi = heroiDoObjetivo(cliente?.objetivoPrincipal ?? null, (cliente?.nicho ?? 'infoproduto') as Nicho)
 
   if (!cliente) return resumoVazio(clienteId, heroi, 0)
 
@@ -508,9 +549,9 @@ export async function getMetricasIntervalo(
 ): Promise<MetricasIntervalo> {
   const cliente = await db.query.clientes.findFirst({
     where: eq(clientes.id, clienteId),
-    columns: { id: true, nicho: true },
+    columns: { id: true, nicho: true, objetivoPrincipal: true },
   })
-  const heroi = metricaHeroi((cliente?.nicho ?? 'infoproduto') as Nicho)
+  const heroi = heroiDoObjetivo(cliente?.objetivoPrincipal ?? null, (cliente?.nicho ?? 'infoproduto') as Nicho)
 
   if (!cliente) return metricasVazias(heroi)
 
