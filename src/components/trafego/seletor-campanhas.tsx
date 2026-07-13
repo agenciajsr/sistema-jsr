@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import {
   Select,
@@ -22,11 +22,21 @@ export function SeletorCampanhas({
   periodoAtual: string
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
-  function navegar(cliente: string | null, periodo: string) {
+  // Navega preservando o outro parâmetro lido FRESCO da URL. Antes, navegar()
+  // usava os props (clienteAtual/periodoAtual), que refletem o último render do
+  // servidor. Ao trocar o período logo após escolher o cliente, o prop
+  // clienteAtual ainda vinha null e a URL era reconstruída SEM o cliente — o
+  // SyncButton passava a avisar "selecione um cliente" e os dados sumiam.
+  // Lendo da URL garantimos que mexer em UM seletor nunca apaga o valor do OUTRO.
+  function navegar({ cliente, periodo }: { cliente?: string | null; periodo?: string }) {
+    const clienteFinal = cliente !== undefined ? cliente : searchParams.get('cliente')
+    const periodoFinal = periodo !== undefined ? periodo : searchParams.get('periodo') ?? periodoAtual
+
     const params = new URLSearchParams()
-    if (cliente) params.set('cliente', cliente)
-    params.set('periodo', periodo)
+    if (clienteFinal) params.set('cliente', clienteFinal)
+    params.set('periodo', periodoFinal)
     router.push(`/campanhas?${params.toString()}`)
   }
 
@@ -34,7 +44,7 @@ export function SeletorCampanhas({
     <div className="flex flex-wrap items-center gap-2">
       <Select
         value={clienteAtual ?? undefined}
-        onValueChange={(id) => navegar(id, periodoAtual)}
+        onValueChange={(id) => navegar({ cliente: id })}
       >
         <SelectTrigger className="w-52">
           <SelectValue placeholder="Selecione um cliente" />
@@ -56,7 +66,7 @@ export function SeletorCampanhas({
 
       <Select
         value={periodoAtual}
-        onValueChange={(p) => navegar(clienteAtual, p)}
+        onValueChange={(p) => navegar({ periodo: p })}
       >
         <SelectTrigger className="w-40">
           <SelectValue />
