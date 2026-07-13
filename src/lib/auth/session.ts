@@ -4,6 +4,12 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
 import { createClient } from '@/lib/supabase/server'
+import { withTimeout } from '@/lib/utils/with-timeout'
+
+// Teto para a revalidação de sessão contra o Supabase. Se estourar, propagamos
+// o erro (tratado pelo error.tsx do grupo (app)) em vez de virar null → redirect
+// para /login com usuário logado (evita loop e não expõe rota logada).
+const AUTH_TIMEOUT_MS = 8_000
 
 export type CurrentUser = {
   id: string
@@ -23,9 +29,12 @@ export type CurrentUser = {
 export const getCurrentUser = cache(
   async (): Promise<CurrentUser | null> => {
     const supabase = await createClient()
+    // Fail-fast: se o Supabase Auth pendurar (soluço/incidente), o withTimeout
+    // rejeita em 8s e o erro sobe para o error.tsx do grupo (app), em vez de a
+    // função serverless congelar ate os 300s da Vercel.
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS, 'auth.getUser')
     if (!user) return null
 
     const profile = await db.query.profiles.findFirst({
