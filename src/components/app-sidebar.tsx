@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   Banknote,
   Bot,
+  CalendarDays,
   CheckSquare,
   ChevronDown,
   FileSignature,
@@ -59,6 +60,7 @@ const nav: NavItem[] = [
   { title: 'Financeiro', url: '/financeiro', icon: Wallet, submenu: true },
   { title: 'Contratos', url: '/contratos', icon: FileSignature },
   { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
+  { title: 'Agenda', url: '/agenda', icon: CalendarDays },
   { title: 'Checklists', url: '/checklist', icon: CheckSquare },
   { title: 'Documentos', url: '/documentos', icon: Folder },
   { title: 'Equipe', url: '/equipe', icon: Users2 },
