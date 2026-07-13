@@ -7,12 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { CalendarPlus } from 'lucide-react'
 
-import {
-  criarEventoAction,
-  editarEventoAction,
-  eventoSchema,
-  type EventoInput,
-} from '@/actions/agenda'
+import { criarEventoAction, editarEventoAction } from '@/actions/agenda'
+import { eventoSchema, type EventoInput } from '@/lib/validations/agenda'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

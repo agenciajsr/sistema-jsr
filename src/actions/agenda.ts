@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { z } from 'zod'
 
 import { getCurrentUser } from '@/lib/auth/session'
 import {
@@ -11,26 +10,10 @@ import {
   NAO_CONECTADO,
   type EventoAgenda,
 } from '@/lib/google/calendar'
+import { eventoSchema, type EventoInput } from '@/lib/validations/agenda'
 
 // Offset fixo de Brasília (sem horário de verão desde 2019).
 const OFFSET_BRASILIA = '-03:00'
-
-// Schema do formulário de evento. inicio/fim vêm do input datetime-local
-// no formato 'YYYY-MM-DDTHH:mm' (hora local, interpretada como Brasília).
-export const eventoSchema = z
-  .object({
-    titulo: z.string().min(1, 'Título é obrigatório'),
-    descricao: z.string().optional(),
-    local: z.string().optional(),
-    inicio: z.string().min(1, 'Início é obrigatório'),
-    fim: z.string().min(1, 'Fim é obrigatório'),
-  })
-  .refine((v) => v.fim > v.inicio, {
-    message: 'O fim deve ser depois do início.',
-    path: ['fim'],
-  })
-
-export type EventoInput = z.infer<typeof eventoSchema>
 
 /** Converte 'YYYY-MM-DDTHH:mm' (datetime-local) em RFC3339 com offset de Brasília. */
 function paraRfc3339(valor: string): string {
