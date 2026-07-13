@@ -54,23 +54,25 @@ export async function AgendaHoje() {
             Nenhum compromisso para hoje.
           </p>
         ) : (
-          eventos.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-3 rounded-r-xl border-l-4 border-l-primary bg-background py-2.5 pl-3 pr-3"
-            >
-              <div className="min-w-0">
-                <p className={cn('text-sm font-semibold tabular-nums text-primary')}>
-                  {formatarHorario(item)}
-                </p>
-                <p className="truncate text-sm font-medium">{item.titulo}</p>
-                {item.local && (
-                  <p className="truncate text-xs text-muted-foreground">{item.local}</p>
-                )}
+          <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+            {eventos.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-r-xl border-l-4 border-l-primary bg-background py-2.5 pl-3 pr-3"
+              >
+                <div className="min-w-0">
+                  <p className={cn('text-sm font-semibold tabular-nums text-primary')}>
+                    {formatarHorario(item)}
+                  </p>
+                  <p className="truncate text-sm font-medium">{item.titulo}</p>
+                  {item.local && (
+                    <p className="truncate text-xs text-muted-foreground">{item.local}</p>
+                  )}
+                </div>
+                <Clock className="size-4 shrink-0 text-muted-foreground" />
               </div>
-              <Clock className="size-4 shrink-0 text-muted-foreground" />
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
