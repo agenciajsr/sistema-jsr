@@ -16,7 +16,6 @@ import {
   ListChecks,
   Megaphone,
   Plug,
-  ShieldCheck,
   Users,
   Users2,
   Wallet,
@@ -29,7 +28,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -68,11 +66,9 @@ const nav: NavItem[] = [
 ]
 
 export function AppSidebar({
-  isAdmin,
   nome,
   cargo,
 }: {
-  isAdmin: boolean
   nome: string
   cargo: string
 }) {
@@ -128,28 +124,6 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {isAdmin && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Administração</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith('/usuarios')}
-                    tooltip="Usuários"
-                  >
-                    <Link href="/usuarios">
-                      <ShieldCheck className="size-4" />
-                      <span>Usuários</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
       </SidebarContent>
 
       <SidebarFooter className="gap-3">

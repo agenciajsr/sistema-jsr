@@ -31,11 +31,7 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar
-        isAdmin={currentUser.role === 'admin'}
-        nome={currentUser.nome}
-        cargo={cargo}
-      />
+      <AppSidebar nome={currentUser.nome} cargo={cargo} />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-border/70 bg-card/70 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-2">

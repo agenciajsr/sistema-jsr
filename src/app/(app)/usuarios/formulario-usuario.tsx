@@ -25,7 +25,7 @@ const valoresPadrao: UsuarioInput = {
   role: 'membro',
 }
 
-export function FormularioUsuario() {
+export function FormularioUsuario({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [isPending, startTransition] = useTransition()
 
   const {
@@ -48,6 +48,7 @@ export function FormularioUsuario() {
       }
       toast.success(`Usuário ${result.data.email} criado com sucesso.`)
       reset(valoresPadrao)
+      onSuccess?.()
     })
   }
 

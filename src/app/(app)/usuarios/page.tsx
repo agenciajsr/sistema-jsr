@@ -1,43 +1,7 @@
 import { redirect } from 'next/navigation'
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { getCurrentUser } from '@/lib/auth/session'
-
-import { FormularioUsuario } from './formulario-usuario'
-
-// Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
-// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
-export const maxDuration = 25
-
-export default async function UsuariosPage() {
-  const usuario = await getCurrentUser()
-
-  // D-02: apenas Admin pode criar novos usuários — Membro não deve ver este
-  // formulário.
-  if (!usuario || usuario.role !== 'admin') {
-    redirect('/clientes')
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-lg">
-      <Card>
-        <CardHeader>
-          <CardTitle>Adicionar Usuário</CardTitle>
-          <CardDescription>
-            Crie uma nova conta de acesso para a equipe da JSR (Admin ou
-            Membro).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FormularioUsuario />
-        </CardContent>
-      </Card>
-    </div>
-  )
+// Consolidado: a gestão de pessoas agora vive em /equipe (listar, adicionar e
+// remover membros). Esta rota é mantida apenas para não quebrar links antigos.
+export default function UsuariosPage() {
+  redirect('/equipe')
 }
