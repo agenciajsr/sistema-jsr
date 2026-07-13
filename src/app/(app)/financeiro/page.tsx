@@ -24,7 +24,7 @@ import { MonthSelector } from './month-selector'
 
 // Cinto de segurança: teto de execução da função serverless (rede de proteção
 // contra 504 em cold start). Não é a cura — a causa é a amplificação de auth/DB.
-export const maxDuration = 25
+export const maxDuration = 60
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',

@@ -29,7 +29,7 @@ import { ptBR } from 'date-fns/locale/pt-BR'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
-export const maxDuration = 25
+export const maxDuration = 60
 
 // Meta account_status: 1=Ativa, 2=Desabilitada, 3=Pendente, 7=Pending Closure, 9=In Grace Period, 100=Pending Risk Review, 101=Pending Settlement, 201=Any Active, 202=Any Closed
 const STATUS_MAP: Record<number, { label: string; nivel: 'ok' | 'atencao' | 'critico' }> = {

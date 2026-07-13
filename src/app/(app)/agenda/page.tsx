@@ -9,7 +9,7 @@ import type { EventoAgenda } from '@/lib/google/calendar'
 
 // Cinto de segurança: teto de execução da função serverless (rede de proteção
 // contra 504 em cold start). Agenda soma latência do Google Calendar por cima.
-export const maxDuration = 25
+export const maxDuration = 60
 
 const TZ = 'America/Sao_Paulo'
 
