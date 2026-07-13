@@ -13,10 +13,14 @@ import * as schema from './schema'
 // - idle_timeout    → fecha conexões ociosas após 20s, devolvendo-as ao pooler
 //                     em vez de acumular (principal causa do esgotamento).
 // - max_lifetime    → recicla conexões periodicamente (evita conexões zumbis).
+// - connect_timeout → falha rápido (10s) se o DB/pooler não responder (cold
+//                     start / DB acordando) em vez de travar até o default e
+//                     estourar o timeout serverless (504).
 const client = postgres(process.env.DATABASE_URL!, {
   prepare: false,
   max: 3,
   idle_timeout: 20,
   max_lifetime: 60 * 30,
+  connect_timeout: 10,
 })
 export const db = drizzle({ client, schema })
