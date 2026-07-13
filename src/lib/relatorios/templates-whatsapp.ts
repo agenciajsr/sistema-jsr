@@ -226,6 +226,34 @@ function blocoConsolidado(c: MetricasConta, contas: MetricasConta[], objetivo: O
   }
 }
 
+// Linha com os resultados que NÃO são o foco primário mas têm valor > 0.
+// Garante que objetivos SECUNDÁRIOS sempre apareçam no relatório (ex.: conversas
+// num cliente de vendas, leads num cliente de compras) — os números já são
+// calculados; aqui só garantimos que fiquem visíveis.
+function linhaSecundarios(c: MetricasConta, objetivo: ObjetivoCliente): string | null {
+  const partes: string[] = []
+  if (objetivo !== 'compras' && c.compras > 0) {
+    partes.push(`🛍 ${fmtNumero(c.compras)} compras${c.receita > 0 ? ` (${fmtMoeda(c.receita)})` : ''}`)
+  }
+  if (objetivo !== 'leads' && objetivo !== 'leads_formulario' && c.leads > 0) {
+    partes.push(`📋 ${fmtNumero(c.leads)} leads`)
+  }
+  if (objetivo !== 'whatsapp' && c.conversas > 0) {
+    partes.push(`💬 ${fmtNumero(c.conversas)} conversas`)
+  }
+  if (objetivo !== 'compras' && c.addToCart > 0) {
+    partes.push(`🛒 ${fmtNumero(c.addToCart)} add to cart`)
+  }
+  if (partes.length === 0) return null
+  return `📊 Outros resultados: ${partes.join(' · ')}`
+}
+
+// Anexa a linha de resultados secundários a um bloco, quando houver.
+function comSecundarios(bloco: string, c: MetricasConta, objetivo: ObjetivoCliente): string {
+  const sec = linhaSecundarios(c, objetivo)
+  return sec ? `${bloco}\n${sec}` : bloco
+}
+
 // --- Montagem final ---
 
 export function formatarRelatorioWhatsapp(input: TemplateInput): string {
@@ -246,16 +274,16 @@ export function formatarRelatorioWhatsapp(input: TemplateInput): string {
   // Blocos por conta (se mais de 1 conta, mostrar separado)
   if (contas.length > 1) {
     for (let i = 0; i < contas.length; i++) {
-      sections.push(blocoConta(contas[i], i, objetivo))
+      sections.push(comSecundarios(blocoConta(contas[i], i, objetivo), contas[i], objetivo))
     }
   }
 
   // Consolidado (sempre mostra)
   if (contas.length === 1) {
     // Se só tem 1 conta, mostra direto sem "Conta 1" separado
-    sections.push(blocoConta(contas[0], 0, objetivo))
+    sections.push(comSecundarios(blocoConta(contas[0], 0, objetivo), contas[0], objetivo))
   } else {
-    sections.push(blocoConsolidado(consolidado, contas, objetivo))
+    sections.push(comSecundarios(blocoConsolidado(consolidado, contas, objetivo), consolidado, objetivo))
   }
 
   return sections.join('\n\n')
