@@ -2,6 +2,10 @@ import { Suspense } from 'react'
 
 import { RelatoriosContent } from './relatorios-content'
 
+// Cinto de segurança: teto de execução da função serverless (rede de proteção
+// contra 504 em cold start). Relatórios somam latência de Meta/Google por cima.
+export const maxDuration = 30
+
 export default function RelatoriosPage() {
   return (
     <div className="space-y-6">

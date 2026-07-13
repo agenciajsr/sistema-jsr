@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { EventoAgenda } from '@/lib/google/calendar'
 
+// Cinto de segurança: teto de execução da função serverless (rede de proteção
+// contra 504 em cold start). Agenda soma latência do Google Calendar por cima.
+export const maxDuration = 30
+
 const TZ = 'America/Sao_Paulo'
 
 // Rótulo do dia (ex.: "sábado, 12 de julho") a partir do início do evento.
