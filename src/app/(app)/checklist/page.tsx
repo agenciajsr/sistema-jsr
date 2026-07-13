@@ -10,6 +10,10 @@ import { MockNotice } from '@/components/mock-notice'
 import { StatCard } from '@/components/stat-card'
 import { checklistMock } from '@/lib/mock/extra'
 
+// Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
+// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+export const maxDuration = 25
+
 const FREQ_LABEL: Record<string, string> = {
   diária: 'Diária',
   semanal: 'Semanal',

@@ -22,6 +22,10 @@ import { FiltroPeriodo } from '@/components/dashboard/filtro-periodo'
 import { getDashboardData } from '@/lib/dashboard/data'
 import { getCurrentUser } from '@/lib/auth/session'
 
+// Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
+// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+export const maxDuration = 25
+
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',

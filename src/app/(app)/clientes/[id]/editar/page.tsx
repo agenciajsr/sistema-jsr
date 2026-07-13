@@ -5,6 +5,10 @@ import { ClienteForm } from '@/components/cliente-form'
 import { db } from '@/lib/db'
 import { clientes } from '@/lib/db/schema'
 
+// Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
+// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+export const maxDuration = 25
+
 export default async function EditarClientePage({
   params,
 }: {

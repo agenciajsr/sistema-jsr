@@ -9,6 +9,10 @@ import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
+// Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
+// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+export const maxDuration = 25
+
 // Interface de chat premium do Copilot. Client component. Consome a rota
 // protegida /api/chat como um stream de texto simples (fetch + reader) — o
 // projeto usa apenas `ai` + `@ai-sdk/openai` no servidor, sem hook de client.
