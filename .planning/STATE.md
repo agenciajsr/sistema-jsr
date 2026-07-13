@@ -122,6 +122,8 @@ None yet.
 | 260712-h4y | Melhorar dashboard: grafico evolucao, atividade recente expandida, filtro periodo, campanhas saude com metas, responsividade mobile | 2026-07-12 | 200bf5c | [260712-h4y-melhorar-dashboard-grafico-evolucao-ativ](./quick/260712-h4y-melhorar-dashboard-grafico-evolucao-ativ/) |
 | 260712-mro | Incorporar controle de verbas como aba em /campanhas, remover /verbas-ads placeholder | 2026-07-12 | b0cef77 | [260712-mro-incorporar-controle-de-verbas-como-aba-e](./quick/260712-mro-incorporar-controle-de-verbas-como-aba-e/) |
 | 260712-nb8 | Modulo Verbas completo: pagina propria /verbas, sync funding_source, KPIs, alertas, menu lateral | 2026-07-12 | eca6309 | [260712-nb8-modulo-verbas-completo-menu-sync-funding](./quick/260712-nb8-modulo-verbas-completo-menu-sync-funding/) |
+| (fast) | Reconciliar migrations 0010 duplicadas — remove orfao 0010_add_funding_source, torna 0010_calm_starbolt idempotente, commita artefatos drizzle (documentos/funding_source ja existem em prod, verificado read-only) | 2026-07-12 | 3e20038 | — (gsd:fast) |
+| (fast) | Header: badge do sino com contagem real de alertas (getAlertas().length com try/catch), remove icone de Mensagens fake | 2026-07-12 | 8a88ba8 | — (gsd:fast) |
 
 ## Session Continuity
 
