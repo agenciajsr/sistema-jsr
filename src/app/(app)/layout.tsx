@@ -4,6 +4,7 @@ import { Plus, Search } from 'lucide-react'
 
 import { AppSidebar } from '@/components/app-sidebar'
 import { AlertasBell } from '@/components/layout/alertas-bell'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { getCurrentUser } from '@/lib/auth/session'
@@ -54,6 +55,8 @@ export default async function AppLayout({
                 ⌘K
               </kbd>
             </div>
+
+            <ThemeToggle />
 
             <AlertasBell />
 
