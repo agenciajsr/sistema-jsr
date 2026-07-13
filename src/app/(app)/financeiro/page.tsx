@@ -77,7 +77,7 @@ export default async function FinanceiroPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Financeiro</h1>
           <p className="text-sm text-muted-foreground">
@@ -131,7 +131,7 @@ export default async function FinanceiroPage({
 
       {/* Abas */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="geral">Visao Geral</TabsTrigger>
           <TabsTrigger value="receber">A Receber ({contasReceber.length})</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar ({contasPagar.length})</TabsTrigger>
