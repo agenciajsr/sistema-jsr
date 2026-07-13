@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/table'
 import { db } from '@/lib/db'
 import { adAccounts, clientes } from '@/lib/db/schema'
+import { SyncTodasButton } from '@/components/verbas/sync-todas-button'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
@@ -90,11 +91,14 @@ export default async function VerbasPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Verbas</h1>
-        <p className="text-sm text-muted-foreground">
-          Controle operacional de contas de anúncio — saldo, status e alertas de pagamento.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Verbas</h1>
+          <p className="text-sm text-muted-foreground">
+            Controle operacional de contas de anúncio — saldo, status e alertas de pagamento.
+          </p>
+        </div>
+        <SyncTodasButton />
       </div>
 
       {/* KPIs */}
