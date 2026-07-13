@@ -275,3 +275,18 @@ export const documentosRelations = relations(documentos, ({ one }) => ({
   cliente: one(clientes, { fields: [documentos.clienteId], references: [clientes.id] }),
   uploadPor: one(profiles, { fields: [documentos.uploadPorId], references: [profiles.id] }),
 }))
+
+// --- Credenciais do Google (integração com o Google Calendar) ---
+// Tabela SINGLE-TENANT: o app tem UM único usuário, então esta tabela guarda
+// no máximo UMA linha (a conta Google conectada). NÃO há coluna de tenant/org.
+// O refresh_token é indispensável para renovar o access_token automaticamente.
+export const googleCredentials = pgTable('google_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email'), // e-mail da conta Google conectada (best-effort, pode faltar)
+  accessToken: text('access_token'), // token de curta duração (renovável)
+  refreshToken: text('refresh_token').notNull(), // usado para renovar o access_token
+  expiry: timestamp('expiry', { withTimezone: true }), // quando o access_token expira
+  scope: text('scope'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
