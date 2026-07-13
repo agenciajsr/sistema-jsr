@@ -1,73 +1,49 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { triggerMetaSync } from '@/actions/trafego'
 
 export function SyncButton() {
   const [syncing, setSyncing] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const clienteId = searchParams.get('cliente') ?? undefined
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }, [])
 
   async function handleSync() {
     // Guard: sync manual só com cliente selecionado — evita puxar TODAS as contas
-    // e abusar do limite da API da Meta. O cron/Inngest agendado continua inalterado.
+    // e abusar do limite da API da Meta.
     if (!clienteId) {
-      toast.warning('Selecione um cliente antes de sincronizar — assim você puxa só as contas dele e não abusa do limite da Meta.')
+      toast.warning('Selecione um cliente antes de sincronizar — assim você puxa só as contas dele.')
       return
     }
 
     setSyncing(true)
-    const result = await triggerMetaSync(clienteId)
+    toast.info('Sincronizando dados da Meta... pode levar até 1 minuto.')
 
-    if ('error' in result) {
-      toast.error(result.error)
-      setSyncing(false)
-      return
-    }
+    try {
+      // Chamada DIRETA (URL relativa) e AGUARDADA — sem depender de NEXT_PUBLIC_APP_URL
+      // nem de "fire-and-forget" (o motivo de o sync antigo não completar).
+      const res = await fetch(`/api/sync-meta?clienteId=${encodeURIComponent(clienteId)}`, {
+        method: 'POST',
+      })
+      const data = await res.json().catch(() => ({}))
 
-    toast.info('Sincronizando dados da Meta... Aguarde.')
-
-    // Polling: verificar a cada 5s se a sync terminou (max 90s)
-    const startTime = Date.now()
-    const initialSyncTime = new Date().toISOString()
-
-    pollRef.current = setInterval(async () => {
-      // Timeout de 90s
-      if (Date.now() - startTime > 90_000) {
-        stopPolling()
-        setSyncing(false)
-        toast.success('Sincronização pode ter finalizado. Recarregando...')
-        router.refresh()
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? 'Não foi possível sincronizar. Tente novamente.')
         return
       }
 
-      try {
-        const res = await fetch(`/api/sync-meta/status?after=${initialSyncTime}`)
-        const data = await res.json()
-        if (data.done) {
-          stopPolling()
-          setSyncing(false)
-          toast.success(`Sincronização concluída! ${data.insights ?? ''} registros atualizados.`)
-          router.refresh()
-        }
-      } catch {
-        // Ignorar erros de polling
-      }
-    }, 5000)
+      toast.success(`Sincronização concluída! ${data.insights ?? 0} registros atualizados.`)
+      router.refresh()
+    } catch {
+      toast.error('Erro de conexão ao sincronizar. Tente novamente.')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   return (
