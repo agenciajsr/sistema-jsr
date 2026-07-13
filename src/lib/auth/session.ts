@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { eq } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
@@ -11,25 +12,35 @@ export type CurrentUser = {
   role: 'admin' | 'membro'
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return null
+// Memoizado com React cache(): dedupe dentro do MESMO render de requisição.
+// Sem isto, uma única carga de página (ex.: /financeiro) dispara ~6 chamadas
+// independentes de supabase.auth.getUser() — 1 no layout + 1 por server action
+// no Promise.all — e cada getUser() é um round-trip de rede que revalida a
+// sessão contra o servidor Supabase. Colapsar para 1 por request corta a
+// amplificação de latência que estourava o timeout serverless (504) em cold start.
+// cache() é por-request: NÃO afeta server actions mutativas (rodam em requests
+// separadas) nem vaza sessão entre usuários.
+export const getCurrentUser = cache(
+  async (): Promise<CurrentUser | null> => {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return null
 
-  const profile = await db.query.profiles.findFirst({
-    where: eq(profiles.id, user.id),
-  })
-  if (!profile) return null
+    const profile = await db.query.profiles.findFirst({
+      where: eq(profiles.id, user.id),
+    })
+    if (!profile) return null
 
-  return {
-    id: user.id,
-    email: user.email,
-    nome: profile.nome,
-    role: profile.role,
+    return {
+      id: user.id,
+      email: user.email,
+      nome: profile.nome,
+      role: profile.role,
+    }
   }
-}
+)
 
 export async function requireAdmin(): Promise<
   { user: CurrentUser } | { error: string }
