@@ -43,7 +43,7 @@ export async function criarTarefa(input: TarefaInput) {
 
   try {
     // Recorrente ⇒ nasce o MOLDE (nunca aparece na lista). NÃO materializamos
-    // aqui: o próximo getTarefasDoDia faz isso e é o ÚNICO caminho de
+    // aqui: o próximo getTarefasDoPeriodo faz isso e é o ÚNICO caminho de
     // materialização — uma fonte de verdade só (D-05).
     const [criada] = await db
       .insert(tarefas)
@@ -163,7 +163,7 @@ export async function atualizarRecorrencia(id: string, input: RecorrenciaInput) 
         recorrencia: v.recorrencia,
         recorrenciaDias: v.recorrencia === 'personalizada' ? (v.recorrenciaDias ?? []) : null,
         // Uma avulsa que vira recorrente precisa virar MOLDE, senão nunca
-        // materializa (getTarefasDoDia só olha para eh_molde = true).
+        // materializa (getTarefasDoPeriodo só olha para eh_molde = true).
         ehMolde: v.recorrencia !== 'nenhuma',
         ...(v.ativa !== undefined ? { ativa: v.ativa } : {}),
         updatedAt: new Date(),

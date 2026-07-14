@@ -36,20 +36,13 @@ import {
   type TarefaStatus,
   type TarefaPrioridade,
 } from '@/lib/tarefas/recorrencia'
-import type { TarefaCard } from '@/lib/tarefas/dados'
-import {
-  criarTarefa,
-  atualizarTarefa,
-  atualizarRecorrencia,
-  deletarTarefa,
-  addChecklistItemTarefa,
-  toggleChecklistItemTarefa,
-  deleteChecklistItemTarefa,
-  getChecklistDaTarefa,
-} from '@/actions/tarefas'
+import { COLUNAS_ORDEM } from '@/lib/tarefas/quadro'
+import { criarTarefa } from '@/actions/tarefas'
 
 // ⚠️ Sheet, NUNCA Dialog: o componente `dialog` do shadcn não está instalado
 // neste repo e não deve ser adicionado (mesmo precedente do ContratoForm).
+//
+// D-11: este sheet SÓ CRIA. A edição inteira mora em /tarefas/[id].
 
 const RECORRENCIAS: TarefaRecorrencia[] = [
   'nenhuma',
@@ -62,98 +55,76 @@ const RECORRENCIAS: TarefaRecorrencia[] = [
   'personalizada',
 ]
 
-const STATUS: TarefaStatus[] = ['a_fazer', 'em_andamento', 'concluida', 'nao_realizada']
-
 /** Valor sentinela do Select: o Radix não aceita SelectItem com value="". */
 const NENHUM = '__nenhum__'
 
-type ItemChecklist = { id: string; texto: string; concluido: boolean }
+type ItemNovo = { id: string; texto: string }
 
-export function TarefaSheet({
+export function NovaTarefaSheet({
   aberto,
   onOpenChange,
-  tarefa,
   clientes,
   responsaveis,
-  diaPadrao,
+  dataPadrao,
+  statusPadrao,
 }: {
   aberto: boolean
   onOpenChange: (v: boolean) => void
-  /** Ausente = criação. Presente = edição. */
-  tarefa?: TarefaCard
   clientes: { id: string; nome: string }[]
   responsaveis: { id: string; nome: string }[]
-  /** Data pré-preenchida na criação (o dia que o usuário está olhando). */
-  diaPadrao: string
+  /** Data pré-preenchida (o início do intervalo que o usuário está olhando). */
+  dataPadrao: string
+  /** A coluna que chamou o "+ Adicionar tarefa" — a tarefa já nasce nela. */
+  statusPadrao: TarefaStatus
 }) {
   const router = useRouter()
   const [salvando, startSalvar] = useTransition()
-  const editando = Boolean(tarefa)
 
   const [titulo, setTitulo] = useState('')
-  const [notas, setNotas] = useState('')
-  const [data, setData] = useState(diaPadrao)
+  const [descricao, setDescricao] = useState('')
+  const [data, setData] = useState(dataPadrao)
+  const [dataInicio, setDataInicio] = useState('')
   const [clienteId, setClienteId] = useState<string>(NENHUM)
   const [responsavelId, setResponsavelId] = useState<string>(NENHUM)
   const [prioridade, setPrioridade] = useState<TarefaPrioridade>('media')
-  const [status, setStatus] = useState<TarefaStatus>('a_fazer')
+  const [status, setStatus] = useState<TarefaStatus>(statusPadrao)
+  const [tempoEstimado, setTempoEstimado] = useState('')
+  const [etiquetasTexto, setEtiquetasTexto] = useState('')
   const [recorrencia, setRecorrencia] = useState<TarefaRecorrencia>('nenhuma')
   const [dias, setDias] = useState<number[]>([])
 
-  // Criação: os itens vivem em useState e vão junto no criarTarefa.
-  // Edição: são carregados sob demanda (só quando o sheet abre) e cada ação
-  // chama a Server Action correspondente. Carregar aqui — em vez de trazer os
-  // itens de TODAS as tarefas na query da página — mantém a listagem barata.
-  const [itens, setItens] = useState<ItemChecklist[]>([])
+  // Os itens vivem em useState e vão junto no criarTarefa (ainda não há tarefa).
+  const [itens, setItens] = useState<ItemNovo[]>([])
   const [novoItem, setNovoItem] = useState('')
-  const [carregandoItens, setCarregandoItens] = useState(false)
 
-  // Sincroniza o form ao abrir (e ao trocar de tarefa).
+  // Sincroniza o form ao abrir (a coluna/data de origem pode ter mudado).
   useEffect(() => {
     if (!aberto) return
-
-    setTitulo(tarefa?.titulo ?? '')
-    setNotas(tarefa?.notas ?? '')
-    setData(tarefa?.data ?? diaPadrao)
-    setClienteId(tarefa?.clienteId ?? NENHUM)
-    setResponsavelId(tarefa?.responsavelId ?? NENHUM)
-    setPrioridade(tarefa?.prioridade ?? 'media')
-    setStatus(tarefa?.status ?? 'a_fazer')
-    setRecorrencia(tarefa?.recorrencia ?? 'nenhuma')
-    setDias(tarefa?.recorrenciaDias ?? [])
-    setNovoItem('')
+    setTitulo('')
+    setDescricao('')
+    setData(dataPadrao)
+    setDataInicio('')
+    setClienteId(NENHUM)
+    setResponsavelId(NENHUM)
+    setPrioridade('media')
+    setStatus(statusPadrao)
+    setTempoEstimado('')
+    setEtiquetasTexto('')
+    setRecorrencia('nenhuma')
+    setDias([])
     setItens([])
-
-    if (!tarefa) return
-
-    let cancelado = false
-    setCarregandoItens(true)
-    getChecklistDaTarefa(tarefa.id)
-      .then((r) => {
-        if (cancelado) return
-        const carregados = 'data' in r ? r.data : undefined
-        if (carregados) {
-          setItens(carregados.map((i) => ({ id: i.id, texto: i.texto, concluido: i.concluido })))
-        }
-      })
-      .finally(() => {
-        if (!cancelado) setCarregandoItens(false)
-      })
-
-    return () => {
-      cancelado = true
-    }
-  }, [aberto, tarefa, diaPadrao])
-
-  const ehOcorrencia = Boolean(tarefa?.tarefaMaeId)
+    setNovoItem('')
+  }, [aberto, dataPadrao, statusPadrao])
 
   function toggleDia(d: number) {
     setDias((atual) => (atual.includes(d) ? atual.filter((x) => x !== d) : [...atual, d].sort()))
   }
 
-  function fechar() {
-    onOpenChange(false)
-    router.refresh()
+  function adicionarItem() {
+    const texto = novoItem.trim()
+    if (!texto) return
+    setItens((a) => [...a, { id: `tmp-${Date.now()}-${a.length}`, texto }])
+    setNovoItem('')
   }
 
   function salvar() {
@@ -167,130 +138,34 @@ export function TarefaSheet({
     }
 
     startSalvar(async () => {
-      const base = {
+      const r = await criarTarefa({
         titulo: titulo.trim(),
-        notas: notas.trim(),
+        descricao: descricao.trim(),
         data,
+        dataInicio,
         clienteId: clienteId === NENHUM ? '' : clienteId,
         responsavelId: responsavelId === NENHUM ? '' : responsavelId,
         prioridade,
-      }
-
-      if (!editando) {
-        const r = await criarTarefa({
-          ...base,
-          recorrencia,
-          recorrenciaDias: dias,
-          checklist: itens.map((i) => i.texto),
-        })
-        if ('error' in r) {
-          toast.error(r.error)
-          return
-        }
-        toast.success(
-          recorrencia === 'nenhuma' ? 'Tarefa criada.' : 'Tarefa recorrente criada.'
-        )
-        fechar()
-        return
-      }
-
-      const r = await atualizarTarefa(tarefa!.id, { ...base, status })
-      if ('error' in r) {
-        toast.error(r.error)
-        return
-      }
-
-      // A recorrência tem action própria: ela resolve o alvo (molde) sozinha.
-      if (recorrencia !== tarefa!.recorrencia || ehOcorrencia) {
-        const rr = await atualizarRecorrencia(tarefa!.id, {
-          recorrencia,
-          recorrenciaDias: dias,
-        })
-        if ('error' in rr) {
-          toast.error(rr.error)
-          return
-        }
-      }
-
-      toast.success('Tarefa salva.')
-      fechar()
-    })
-  }
-
-  function encerrarSerie() {
-    if (!tarefa) return
-    startSalvar(async () => {
-      const r = await atualizarRecorrencia(tarefa.id, {
-        recorrencia: tarefa.recorrencia === 'nenhuma' ? 'nenhuma' : tarefa.recorrencia,
+        status,
+        tempoEstimado: tempoEstimado.trim(),
+        etiquetas: etiquetasTexto
+          .split(',')
+          .map((e) => e.trim())
+          .filter(Boolean),
+        recorrencia,
         recorrenciaDias: dias,
-        ativa: false,
+        // D-08: na criação todos os itens caem no grupo padrão.
+        checklist: itens.map((i) => ({ texto: i.texto, grupo: 'Checklist' })),
       })
+
       if ('error' in r) {
         toast.error(r.error)
         return
       }
-      toast.success('Recorrencia encerrada. Nenhuma nova ocorrencia sera criada.')
-      fechar()
-    })
-  }
 
-  function excluir() {
-    if (!tarefa) return
-    startSalvar(async () => {
-      const r = await deletarTarefa(tarefa.id)
-      if ('error' in r) {
-        toast.error(r.error)
-        return
-      }
-      toast.success('Tarefa excluida.')
-      fechar()
-    })
-  }
-
-  function adicionarItem() {
-    const texto = novoItem.trim()
-    if (!texto) return
-
-    if (!editando) {
-      // Ainda não existe tarefa: o item vive só no estado até o criarTarefa.
-      setItens((a) => [...a, { id: `tmp-${Date.now()}-${a.length}`, texto, concluido: false }])
-      setNovoItem('')
-      return
-    }
-
-    startSalvar(async () => {
-      const r = await addChecklistItemTarefa(tarefa!.id, texto)
-      if ('error' in r) {
-        toast.error(r.error)
-        return
-      }
-      setItens((a) => [...a, { id: r.data.id, texto, concluido: false }])
-      setNovoItem('')
-    })
-  }
-
-  function alternarItem(item: ItemChecklist) {
-    const novo = !item.concluido
-    setItens((a) => a.map((i) => (i.id === item.id ? { ...i, concluido: novo } : i)))
-    if (!editando) return
-
-    startSalvar(async () => {
-      const r = await toggleChecklistItemTarefa(item.id, novo)
-      if ('error' in r) {
-        toast.error(r.error)
-        // Desfaz o otimismo se a action falhar.
-        setItens((a) => a.map((i) => (i.id === item.id ? { ...i, concluido: !novo } : i)))
-      }
-    })
-  }
-
-  function removerItem(item: ItemChecklist) {
-    setItens((a) => a.filter((i) => i.id !== item.id))
-    if (!editando) return
-
-    startSalvar(async () => {
-      const r = await deleteChecklistItemTarefa(item.id)
-      if ('error' in r) toast.error(r.error)
+      toast.success(recorrencia === 'nenhuma' ? 'Tarefa criada.' : 'Tarefa recorrente criada.')
+      onOpenChange(false)
+      router.refresh()
     })
   }
 
@@ -298,11 +173,9 @@ export function TarefaSheet({
     <Sheet open={aberto} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{editando ? 'Editar tarefa' : 'Nova tarefa'}</SheetTitle>
+          <SheetTitle>Nova tarefa</SheetTitle>
           <SheetDescription>
-            {editando
-              ? 'Altere os dados, o checklist e a recorrencia desta tarefa.'
-              : 'Crie uma tarefa avulsa ou recorrente, com checklist proprio.'}
+            Crie uma tarefa avulsa ou recorrente, com checklist proprio.
           </SheetDescription>
         </SheetHeader>
 
@@ -319,11 +192,11 @@ export function TarefaSheet({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notas">Notas</Label>
+            <Label htmlFor="descricao">Descrição</Label>
             <Textarea
-              id="notas"
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
+              id="descricao"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
               placeholder="Detalhes, contexto, links..."
               rows={3}
             />
@@ -331,21 +204,25 @@ export function TarefaSheet({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="data">Data</Label>
+              <Label htmlFor="data-inicio">Data de início</Label>
               <Input
-                id="data"
+                id="data-inicio"
                 type="date"
-                value={data}
-                onChange={(e) => setData(e.target.value)}
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="data">Prazo</Label>
+              <Input id="data" type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label>Prioridade</Label>
-              <Select
-                value={prioridade}
-                onValueChange={(v) => setPrioridade(v as TarefaPrioridade)}
-              >
+              <Select value={prioridade} onValueChange={(v) => setPrioridade(v as TarefaPrioridade)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -353,6 +230,22 @@ export function TarefaSheet({
                   {PRIORIDADE_ORDEM.map((p) => (
                     <SelectItem key={p} value={p}>
                       {PRIORIDADE_LABEL[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as TarefaStatus)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLUNAS_ORDEM.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {STATUS_LABEL[s]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -396,30 +289,31 @@ export function TarefaSheet({
             </div>
           </div>
 
-          {editando && (
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as TarefaStatus)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {STATUS_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="tempo">Tempo estimado</Label>
+              <Input
+                id="tempo"
+                value={tempoEstimado}
+                onChange={(e) => setTempoEstimado(e.target.value)}
+                placeholder="4h"
+              />
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="etiquetas">Etiquetas</Label>
+              <Input
+                id="etiquetas"
+                value={etiquetasTexto}
+                onChange={(e) => setEtiquetasTexto(e.target.value)}
+                placeholder="tráfego, urgente"
+              />
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label>Recorrência</Label>
-            <Select
-              value={recorrencia}
-              onValueChange={(v) => setRecorrencia(v as TarefaRecorrencia)}
-            >
+            <Select value={recorrencia} onValueChange={(v) => setRecorrencia(v as TarefaRecorrencia)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -450,45 +344,24 @@ export function TarefaSheet({
                 ))}
               </div>
             )}
-
-            {editando && ehOcorrencia && (
-              <p className="text-xs text-muted-foreground">
-                Alterar a recorrência afeta toda a série.
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
             <Label>Checklist</Label>
 
-            {carregandoItens ? (
-              <p className="text-sm text-muted-foreground">Carregando itens...</p>
-            ) : itens.length === 0 ? (
+            {itens.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum item ainda.</p>
             ) : (
               <ul className="space-y-1.5">
                 {itens.map((item) => (
                   <li key={item.id} className="flex items-center gap-2">
-                    <Checkbox
-                      checked={item.concluido}
-                      onCheckedChange={() => alternarItem(item)}
-                      aria-label={item.texto}
-                    />
-                    <span
-                      className={
-                        item.concluido
-                          ? 'flex-1 text-sm text-muted-foreground line-through'
-                          : 'flex-1 text-sm'
-                      }
-                    >
-                      {item.texto}
-                    </span>
+                    <span className="flex-1 text-sm">{item.texto}</span>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="size-7"
-                      onClick={() => removerItem(item)}
+                      onClick={() => setItens((a) => a.filter((i) => i.id !== item.id))}
                       aria-label={`Remover ${item.texto}`}
                     >
                       <Trash2 className="size-3.5" />
@@ -517,7 +390,7 @@ export function TarefaSheet({
               </Button>
             </div>
 
-            {!editando && recorrencia !== 'nenhuma' && (
+            {recorrencia !== 'nenhuma' && (
               <p className="text-xs text-muted-foreground">
                 Cada ocorrência recebe a própria cópia destes itens, marcável por dia.
               </p>
@@ -525,33 +398,10 @@ export function TarefaSheet({
           </div>
         </div>
 
-        <SheetFooter className="gap-2">
+        <SheetFooter>
           <Button onClick={salvar} disabled={salvando}>
-            {salvando ? 'Salvando...' : 'Salvar'}
+            {salvando ? 'Salvando...' : 'Criar tarefa'}
           </Button>
-
-          {editando && (
-            <div className="flex gap-2">
-              {(ehOcorrencia || tarefa!.recorrencia !== 'nenhuma') && (
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={encerrarSerie}
-                  disabled={salvando}
-                >
-                  Encerrar recorrência
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                className="flex-1 text-destructive hover:text-destructive"
-                onClick={excluir}
-                disabled={salvando}
-              >
-                Excluir
-              </Button>
-            </div>
-          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>
