@@ -134,9 +134,6 @@ export default async function PainelPage({ searchParams }: Props) {
         />
       </div>
 
-      {/* Gráfico de evolução financeira */}
-      <EvolucaoFinanceira dados={data?.evolucaoMensal ?? []} />
-
       {/* Linha do meio — Performance mais larga, Saúde e Agenda ao lado */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="min-w-0 md:col-span-2">
@@ -161,6 +158,9 @@ export default async function PainelPage({ searchParams }: Props) {
         <AlertasImportantes />
         <AtividadeRecente atividades={data?.atividadeRecente ?? []} />
       </div>
+
+      {/* Gráfico de evolução financeira — acima da tabela de performance */}
+      <EvolucaoFinanceira dados={data?.evolucaoMensal ?? []} />
 
       {/* Tabela full width — scroll horizontal em mobile */}
       <div className="min-w-0">
