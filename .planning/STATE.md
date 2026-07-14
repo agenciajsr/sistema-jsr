@@ -126,10 +126,10 @@ None yet.
 | (fast) | Header: badge do sino com contagem real de alertas (getAlertas().length com try/catch), remove icone de Mensagens fake | 2026-07-12 | 8a88ba8 | — (gsd:fast) |
 | 260712-uc1 | Integracao completa com Google Calendar (OAuth 2 duas vias): tabela google_credentials single-tenant + migration 0011 (NAO aplicada), fluxo start/callback com CSRF, refresh automatico, client REST Calendar validado por Zod (fuso Brasilia), card de agenda real, pagina /agenda (criar/editar), /integracoes Conectar/Desconectar. Pendente credenciais Google Cloud do usuario | 2026-07-12 | f8bb9fc | [260712-uc1-integracao-completa-com-google-calendar-](./quick/260712-uc1-integracao-completa-com-google-calendar-/) |
 | 260713-usi | Corrigir de vez o travamento/erro intermitente do /financeiro — loading.tsx com skeleton (financeiro + generico do grupo app), helper withRetry (F5 automatico server-side, 12s → 500ms → 15s), carga em 2 lotes sequenciais de 4 queries (pool max=3); tela de erro vira ultimo recurso | 2026-07-14 | 9a5282b | [260713-usi-corrigir-de-vez-o-travamento-erro-interm](./quick/260713-usi-corrigir-de-vez-o-travamento-erro-interm/) |
+| 260714-fast | Painel: olho de privacidade sem sobrepor icone, alturas uniformes e tendencias/sparklines reais nos 6 KPIs | 2026-07-14 | c764fd8 | — |
 
 ## Session Continuity
 
 Last session: 2026-07-14T01:20:00Z
 Stopped at: Completed quick-260713-usi (estabilidade do /financeiro — loading.tsx, withRetry, 2 lotes)
 Resume file: None
-| 260714-fast | Painel: olho de privacidade sem sobrepor icone, alturas uniformes e tendencias/sparklines reais nos 6 KPIs | 2026-07-14 | c764fd8 | — |
