@@ -17,7 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { gerarRelatorio, gerarRelatoriosEmLote, listarClientesRelatorio, type ClienteParaRelatorio } from '@/actions/relatorios'
+import {
+  gerarRelatorio,
+  gerarRelatoriosEmLote,
+  listarClientesRelatorio,
+  listarHistoricoRelatorios,
+  type ClienteParaRelatorio,
+  type RelatorioHistorico,
+} from '@/actions/relatorios'
 import type { RelatorioGerado } from '@/lib/relatorios/gerar-relatorio'
 
 type RelatorioState = {
@@ -44,6 +51,24 @@ function getDefaultPeriod(): { inicio: string; fim: string } {
   }
 }
 
+/** Formata 'YYYY-MM-DD' como 'dd/mm'. */
+function formatarDiaMes(data: string): string {
+  const [, mes, dia] = data.split('-')
+  return `${dia}/${mes}`
+}
+
+/** Formata um timestamp ISO como data/hora pt-BR (fuso de Brasília). */
+function formatarDataHoraBr(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })
+}
+
 export function RelatoriosContent() {
   const [clientes, setClientes] = useState<ClienteParaRelatorio[]>([])
   const [relatorios, setRelatorios] = useState<Map<string, RelatorioState>>(new Map())
@@ -61,6 +86,10 @@ export function RelatoriosContent() {
   // Textos editáveis por cliente (para edição antes de copiar)
   const [textosEditados, setTextosEditados] = useState<Map<string, string>>(new Map())
 
+  // Histórico de relatórios salvos (cron semanal + gerações manuais)
+  const [historico, setHistorico] = useState<RelatorioHistorico[]>([])
+  const [historicoExpandido, setHistoricoExpandido] = useState<string | null>(null)
+
   useEffect(() => {
     listarClientesRelatorio().then((data) => {
       setClientes(data)
@@ -71,7 +100,13 @@ export function RelatoriosContent() {
       setRelatorios(map)
       setLoaded(true)
     })
+    // Carregar o histórico em paralelo (falha não bloqueia o fluxo manual)
+    listarHistoricoRelatorios().then(setHistorico).catch(() => setHistorico([]))
   }, [])
+
+  function recarregarHistorico() {
+    listarHistoricoRelatorios().then(setHistorico).catch(() => {})
+  }
 
   async function handleGerar(clienteId: string) {
     setRelatorios((prev) => {
@@ -97,6 +132,9 @@ export function RelatoriosContent() {
       }
       return next
     })
+
+    // Geração manual também alimenta o histórico
+    if (result.success) recarregarHistorico()
   }
 
   async function handleGerarTodos() {
@@ -134,6 +172,9 @@ export function RelatoriosContent() {
     })
 
     setGerandoTodos(false)
+
+    // Geração em lote também alimenta o histórico
+    if (result.gerados.length > 0) recarregarHistorico()
   }
 
   async function handleCopiar(clienteId: string) {
@@ -142,6 +183,12 @@ export function RelatoriosContent() {
 
     await navigator.clipboard.writeText(texto)
     setCopiado(clienteId)
+    setTimeout(() => setCopiado(null), 2000)
+  }
+
+  async function handleCopiarHistorico(item: RelatorioHistorico) {
+    await navigator.clipboard.writeText(item.conteudo)
+    setCopiado(item.id)
     setTimeout(() => setCopiado(null), 2000)
   }
 
@@ -369,6 +416,79 @@ export function RelatoriosContent() {
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* Histórico de relatórios salvos (cron semanal + gerações manuais) */}
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base">Histórico</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {historico.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              Nenhum relatório salvo ainda — os relatórios de segunda-feira aparecem aqui automaticamente.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {historico.map((item) => {
+                const isExpanded = historicoExpandido === item.id
+                return (
+                  <div key={item.id} className="rounded-lg border bg-background">
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{item.clienteNome}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {item.tipo === 'semanal' ? 'Semanal' : 'Manual'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatarDiaMes(item.periodoInicio)} → {formatarDiaMes(item.periodoFim)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          gerado em {formatarDataHoraBr(item.geradoEm)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopiarHistorico(item)}
+                        >
+                          {copiado === item.id ? (
+                            <CheckCircle2 className="size-4 text-green-600" />
+                          ) : (
+                            <Copy className="size-4" />
+                          )}
+                          {copiado === item.id ? 'Copiado!' : 'Copiar'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setHistoricoExpandido((prev) => (prev === item.id ? null : item.id))
+                          }
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="size-4" />
+                          ) : (
+                            <ChevronDown className="size-4" />
+                          )}
+                          Ver
+                        </Button>
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="border-t px-4 py-3">
+                        <pre className="max-h-[400px] overflow-auto whitespace-pre-wrap font-mono text-sm text-muted-foreground">
+                          {item.conteudo}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -3,10 +3,29 @@
 import { eq, and, desc } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { clientes, adAccounts } from '@/lib/db/schema'
+import { clientes, adAccounts, relatorios } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { gerarRelatorioCliente, type RelatorioGerado } from '@/lib/relatorios/gerar-relatorio'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
+
+/**
+ * Grava um relatório gerado manualmente no histórico (tipo 'manual').
+ * Falha ao salvar NÃO impede devolver o relatório — loga e segue.
+ */
+async function persistirRelatorioManual(relatorio: RelatorioGerado): Promise<void> {
+  try {
+    await db.insert(relatorios).values({
+      clienteId: relatorio.clienteId,
+      clienteNome: relatorio.clienteNome,
+      tipo: 'manual',
+      periodoInicio: relatorio.periodoInicio,
+      periodoFim: relatorio.periodoFim,
+      conteudo: relatorio.textoWhatsapp,
+    })
+  } catch (err) {
+    console.error('[Relatórios] falha ao salvar histórico — seguindo sem salvar:', err)
+  }
+}
 
 export type ClienteParaRelatorio = {
   id: string
@@ -75,6 +94,7 @@ export async function gerarRelatorio(
     if (!relatorio) {
       return { success: false, error: 'Sem dados para este cliente no período selecionado' }
     }
+    await persistirRelatorioManual(relatorio)
     return { success: true, relatorio }
   } catch (err) {
     console.error('[Relatórios] Erro ao gerar:', err)
@@ -100,6 +120,7 @@ export async function gerarRelatoriosEmLote(
     try {
       const relatorio = await gerarRelatorioCliente(cliente.id, dataInicio, dataFim)
       if (relatorio) {
+        await persistirRelatorioManual(relatorio)
         gerados.push(relatorio)
       } else {
         erros.push({ clienteId: cliente.id, clienteNome: cliente.nome, error: 'Sem dados no período' })
@@ -110,4 +131,38 @@ export async function gerarRelatoriosEmLote(
   }
 
   return { gerados, erros }
+}
+
+export type RelatorioHistorico = {
+  id: string
+  clienteNome: string
+  tipo: string // 'semanal' | 'manual'
+  periodoInicio: string
+  periodoFim: string
+  conteudo: string
+  geradoEm: string // ISO
+}
+
+/**
+ * Histórico de relatórios salvos (cron semanal + gerações manuais), mais recentes primeiro.
+ */
+export async function listarHistoricoRelatorios(): Promise<RelatorioHistorico[]> {
+  const user = await getCurrentUser()
+  if (!user) return []
+
+  const rows = await db
+    .select()
+    .from(relatorios)
+    .orderBy(desc(relatorios.geradoEm))
+    .limit(50)
+
+  return rows.map((r) => ({
+    id: r.id,
+    clienteNome: r.clienteNome,
+    tipo: r.tipo,
+    periodoInicio: r.periodoInicio,
+    periodoFim: r.periodoFim,
+    conteudo: r.conteudo,
+    geradoEm: r.geradoEm.toISOString(),
+  }))
 }
