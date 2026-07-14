@@ -13,15 +13,19 @@ import {
   getContasAReceber,
   getContasAPagar,
   getPrevisaoCaixa,
+  getVisaoAnalitica,
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
 import { getCurrentUser } from '@/lib/auth/session'
 import { withRetry } from '@/lib/utils/with-retry'
+import { hojeBrasilia } from '@/lib/date-br'
+import { progressoDoMes } from '@/lib/financeiro/calculos'
 
 import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
 import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
+import { VisaoAnalitica } from './visao-analitica'
 import { MonthSelector } from './month-selector'
 
 // Cinto de segurança: teto de execução da função serverless (rede de proteção
@@ -65,13 +69,24 @@ export default async function FinanceiroPage({
         .where(eq(clientes.status, 'ativo')),
     ])
     // Lote 2: reaproveita as conexões já quentes do lote 1.
-    const [contasReceber, contasPagar, previsao, profilesList] = await Promise.all([
+    const [contasReceber, contasPagar, previsao, profilesList, visaoAnalitica] = await Promise.all([
       getContasAReceber(),
       getContasAPagar(),
       getPrevisaoCaixa(),
       getProfiles(),
+      getVisaoAnalitica(mes, ano),
     ])
-    return [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] as const
+    return [
+      resumo,
+      mrr,
+      transacoes,
+      clientesAtivos,
+      contasReceber,
+      contasPagar,
+      previsao,
+      profilesList,
+      visaoAnalitica,
+    ] as const
   }
 
   let dados
@@ -101,7 +116,33 @@ export default async function FinanceiroPage({
     )
   }
 
-  const [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] = dados
+  const [
+    resumo,
+    mrr,
+    transacoes,
+    clientesAtivos,
+    contasReceber,
+    contasPagar,
+    previsao,
+    profilesList,
+    visaoAnalitica,
+  ] = dados
+
+  // Chip de progresso só faz sentido no mês corrente (em Brasília).
+  const hoje = hojeBrasilia()
+  const [anoHoje, mesHoje] = hoje.split('-').map(Number)
+  const isMesCorrente = mes === mesHoje && ano === anoHoje
+  const prog = progressoDoMes(hoje)
+
+  // Sem base de comparação (mês anterior zerado) a variação é null => sem trend.
+  const trendDe = (variacao: number | null, subirEBom: boolean) =>
+    variacao === null
+      ? undefined
+      : {
+          value: `${Math.abs(variacao)}%`,
+          direction: (variacao >= 0 ? 'up' : 'down') as 'up' | 'down',
+          positive: subirEBom ? variacao >= 0 : variacao < 0,
+        }
 
   const transacoesParaTabela = transacoes.map((t) => ({
     id: t.id,
@@ -132,7 +173,14 @@ export default async function FinanceiroPage({
             Receitas, despesas, lucro e MRR da agencia em tempo real.
           </p>
         </div>
-        <MonthSelector mes={mes} ano={ano} />
+        <div className="flex items-center gap-2">
+          <MonthSelector mes={mes} ano={ano} />
+          {isMesCorrente && (
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground tabular-nums">
+              Dia {prog.dia}/{prog.diasNoMes} ({prog.percentual}%)
+            </span>
+          )}
+        </div>
       </div>
 
       {/* KPIs - sempre visiveis */}
@@ -142,18 +190,25 @@ export default async function FinanceiroPage({
           value={formatadorMoeda.format(resumo.receita)}
           icon={TrendingUp}
           color="success"
+          helper={`mes ant. ${formatadorMoeda.format(visaoAnalitica.mesAnterior.receita)}`}
+          trend={trendDe(visaoAnalitica.variacao.receita, true)}
         />
         <StatCard
           label="Despesas Pagas"
           value={formatadorMoeda.format(resumo.despesa)}
           icon={TrendingDown}
           color="warning"
+          helper={`mes ant. ${formatadorMoeda.format(visaoAnalitica.mesAnterior.despesa)}`}
+          // Despesa subindo é ruim => trend vermelho quando a variação é positiva.
+          trend={trendDe(visaoAnalitica.variacao.despesa, false)}
         />
         <StatCard
           label="Lucro"
           value={formatadorMoeda.format(resumo.lucro)}
           icon={DollarSign}
           color="primary"
+          helper={`mes ant. ${formatadorMoeda.format(visaoAnalitica.mesAnterior.lucro)}`}
+          trend={trendDe(visaoAnalitica.variacao.lucro, true)}
         />
         <StatCard
           label="MRR"
@@ -166,6 +221,7 @@ export default async function FinanceiroPage({
           value={formatadorMoeda.format(resumo.aReceber)}
           icon={ArrowDownCircle}
           color="success"
+          helper={`${contasReceber.length} cobrancas pendentes`}
         />
         <StatCard
           label="A Pagar"
@@ -184,6 +240,7 @@ export default async function FinanceiroPage({
           <TabsTrigger value="receber">A Receber ({contasReceber.length})</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar ({contasPagar.length})</TabsTrigger>
           <TabsTrigger value="previsao">Previsao</TabsTrigger>
+          <TabsTrigger value="analitica">Visao Analitica</TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral">
@@ -225,6 +282,10 @@ export default async function FinanceiroPage({
 
         <TabsContent value="previsao">
           <PrevisaoCaixa previsao={previsao} />
+        </TabsContent>
+
+        <TabsContent value="analitica">
+          <VisaoAnalitica dados={visaoAnalitica} />
         </TabsContent>
       </Tabs>
     </div>
