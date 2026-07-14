@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, sql, and, lte, gte, desc, inArray } from 'drizzle-orm'
+import { eq, sql, and, lte, gte, gt, desc, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { addMonths, addWeeks } from 'date-fns'
 
@@ -8,6 +8,17 @@ import { db } from '@/lib/db'
 import { transacoes, contratos, clientes, profiles } from '@/lib/db/schema'
 import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transacao'
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
+import { hojeBrasilia } from '@/lib/date-br'
+import {
+  calcularVariacaoPercentual,
+  calcularDespesasVsFaturamento,
+  contarRenovados,
+  calcularTaxaRenovacao,
+  calcularLucroPorCliente,
+  calcularDependencia,
+  periodoMesAnterior,
+  type Faixa,
+} from '@/lib/financeiro/calculos'
 
 const ERRO_VALIDACAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
 
@@ -466,4 +477,150 @@ export async function uploadComprovante(transacaoId: string, url: string) {
 
   revalidatePath('/financeiro')
   return { data: { url } }
+}
+
+// --- Visao Analitica ---
+
+export type VisaoAnaliticaData = {
+  mesAnterior: { receita: number; despesa: number; lucro: number; mrr: number }
+  variacao: { receita: number | null; despesa: number | null; lucro: number | null; mrr: number | null }
+  receitaAvulsa: number
+  lucroPorCliente: number
+  clientesAtivos: number
+  despesasVsFaturamento: { percentual: number | null; faixa: Faixa | null; despesa: number; receita: number }
+  taxaRenovacao: { renovados: number; total: number; percentual: number }
+  dependencia: {
+    mrrTotal: number
+    topClientes: { nome: string; valor: number; percentual: number }[]
+    percentTop5: number
+    percentTop10: number
+  }
+}
+
+const VISAO_ANALITICA_VAZIA: VisaoAnaliticaData = {
+  mesAnterior: { receita: 0, despesa: 0, lucro: 0, mrr: 0 },
+  variacao: { receita: null, despesa: null, lucro: null, mrr: null },
+  receitaAvulsa: 0,
+  lucroPorCliente: 0,
+  clientesAtivos: 0,
+  despesasVsFaturamento: { percentual: null, faixa: null, despesa: 0, receita: 0 },
+  taxaRenovacao: { renovados: 0, total: 0, percentual: 100 },
+  dependencia: { mrrTotal: 0, topClientes: [], percentTop5: 0, percentTop10: 0 },
+}
+
+/**
+ * Indicadores analiticos do mes: comparativo com o mes anterior, taxa de
+ * renovacao, dependencia do MRR e relacao despesa/faturamento.
+ *
+ * CRITICO: as queries rodam SEQUENCIALMENTE (sem Promise.all interno). O pool e
+ * max=3 e esta action ja roda dentro de um Promise.all no LOTE 2 da pagina —
+ * paralelizar aqui dentro estouraria o pool e reintroduziria o travamento
+ * corrigido no quick 260713-usi.
+ */
+export async function getVisaoAnalitica(mes?: number, ano?: number): Promise<VisaoAnaliticaData> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return VISAO_ANALITICA_VAZIA
+
+  const agora = new Date()
+  const m = mes ?? agora.getMonth() + 1
+  const a = ano ?? agora.getFullYear()
+
+  // 1. Mes anterior — reusa a logica ja validada em producao.
+  const { mes: mAnt, ano: aAnt, ultimoDia } = periodoMesAnterior(m, a)
+  const resumoAnterior = await getResumoFinanceiro(mAnt, aAnt)
+
+  // 2. MRR vigente no ultimo dia do mes anterior.
+  const [mrrAntRow] = await db
+    .select({ total: sql<string>`coalesce(sum(${contratos.valorMensal}), '0')` })
+    .from(contratos)
+    .where(and(lte(contratos.dataInicio, ultimoDia), gte(contratos.dataVencimento, ultimoDia)))
+  const mrrAnterior = Number(mrrAntRow.total)
+
+  // 3. Agregado do mes atual em UMA query (receita + despesa + avulsa).
+  const [atual] = await db
+    .select({
+      receita: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'receita' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
+      despesa: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'despesa' and ${transacoes.status} = 'pago' then ${transacoes.valor} else 0 end), '0')`,
+      avulsa: sql<string>`coalesce(sum(case when ${transacoes.tipo} = 'receita' and ${transacoes.status} = 'pago' and ${transacoes.categoria} <> 'mensalidade' then ${transacoes.valor} else 0 end), '0')`,
+    })
+    .from(transacoes)
+    .where(
+      and(
+        sql`extract(month from ${transacoes.data}) = ${m}`,
+        sql`extract(year from ${transacoes.data}) = ${a}`,
+      ),
+    )
+
+  const receitaAtual = Number(atual.receita)
+  const despesaAtual = Number(atual.despesa)
+  const receitaAvulsa = Number(atual.avulsa)
+  const lucroAtual = receitaAtual - despesaAtual
+
+  // 4. Clientes ativos.
+  const [cliRow] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(clientes)
+    .where(eq(clientes.status, 'ativo'))
+  const clientesAtivos = Number(cliRow.total)
+
+  // 5. Taxa de renovacao — contratos vencendo dentro do mes selecionado.
+  const primeiroDiaMes = `${a}-${String(m).padStart(2, '0')}-01`
+  const ultimoDiaMes = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10)
+
+  const vencidos = await db
+    .select({ clienteId: contratos.clienteId, dataVencimento: contratos.dataVencimento })
+    .from(contratos)
+    .where(
+      and(gte(contratos.dataVencimento, primeiroDiaMes), lte(contratos.dataVencimento, ultimoDiaMes)),
+    )
+
+  // Query B so faz sentido se houve vencimentos (evita inArray com lista vazia).
+  // O filtro por data em SQL e um pre-corte; a regra exata (dataInicio > o
+  // dataVencimento DAQUELE contrato) fica na funcao pura testada.
+  let posteriores: { clienteId: string; dataInicio: string }[] = []
+  if (vencidos.length > 0) {
+    posteriores = await db
+      .select({ clienteId: contratos.clienteId, dataInicio: contratos.dataInicio })
+      .from(contratos)
+      .where(
+        and(
+          inArray(contratos.clienteId, [...new Set(vencidos.map((v) => v.clienteId))]),
+          gt(contratos.dataInicio, primeiroDiaMes),
+        ),
+      )
+  }
+
+  const taxaRenovacao = calcularTaxaRenovacao(contarRenovados(vencidos, posteriores), vencidos.length)
+
+  // 6. Dependencia — MRR por cliente vigente hoje (Brasilia).
+  const hoje = hojeBrasilia()
+  const linhas = await db
+    .select({ nome: clientes.nome, valor: sql<string>`sum(${contratos.valorMensal})` })
+    .from(contratos)
+    .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+    .where(and(lte(contratos.dataInicio, hoje), gte(contratos.dataVencimento, hoje)))
+    .groupBy(clientes.id, clientes.nome)
+
+  const dependencia = calcularDependencia(linhas.map((l) => ({ nome: l.nome, valor: Number(l.valor) })))
+
+  return {
+    mesAnterior: {
+      receita: resumoAnterior.receita,
+      despesa: resumoAnterior.despesa,
+      lucro: resumoAnterior.lucro,
+      mrr: mrrAnterior,
+    },
+    variacao: {
+      receita: calcularVariacaoPercentual(receitaAtual, resumoAnterior.receita),
+      despesa: calcularVariacaoPercentual(despesaAtual, resumoAnterior.despesa),
+      lucro: calcularVariacaoPercentual(lucroAtual, resumoAnterior.lucro),
+      mrr: calcularVariacaoPercentual(dependencia.mrrTotal, mrrAnterior),
+    },
+    receitaAvulsa,
+    lucroPorCliente: calcularLucroPorCliente(lucroAtual, clientesAtivos),
+    clientesAtivos,
+    despesasVsFaturamento: calcularDespesasVsFaturamento(despesaAtual, receitaAtual),
+    taxaRenovacao,
+    dependencia,
+  }
 }
