@@ -157,6 +157,65 @@ export const checklistItems = pgTable('checklist_items', {
   clienteIdx: index('checklist_items_cliente_id_idx').on(table.clienteId),
 }))
 
+// --- Módulo Tarefas (estilo ClickUp) ---
+// ⚠️ NÃO confundir com `checklist_items` acima: aquele é o checklist DA FICHA DO
+// CLIENTE e segue vivo e intocado. Este módulo tem o SEU próprio checklist,
+// interno à tarefa (`tarefa_checklist_items`).
+export const tarefaStatusEnum = pgEnum('tarefa_status', ['a_fazer', 'em_andamento', 'concluida', 'nao_realizada'])
+export const tarefaPrioridadeEnum = pgEnum('tarefa_prioridade', ['baixa', 'media', 'alta', 'urgente'])
+export const tarefaRecorrenciaEnum = pgEnum('tarefa_recorrencia', ['nenhuma', 'diaria', 'semanal', 'mensal', 'anual', 'dia_sim_dia_nao', 'dias_uteis', 'personalizada'])
+
+// Modelo MOLDE + ocorrências: a tarefa recorrente é um molde (eh_molde=true) que
+// nunca aparece na lista; as ocorrências (eh_molde=false, tarefa_mae_id=molde)
+// nascem pelo CALENDÁRIO, materializadas preguiçosamente ao abrir /tarefas.
+export const tarefas = pgTable('tarefas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  titulo: text('titulo').notNull(),
+  notas: text('notas'),
+  status: tarefaStatusEnum('status').notNull().default('a_fazer'),
+  prioridade: tarefaPrioridadeEnum('prioridade').notNull().default('media'),
+  data: date('data').notNull(), // vencimento, 'YYYY-MM-DD'
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
+  responsavelId: uuid('responsavel_id').references(() => profiles.id, { onDelete: 'set null' }),
+  recorrencia: tarefaRecorrenciaEnum('recorrencia').notNull().default('nenhuma'),
+  recorrenciaDias: jsonb('recorrencia_dias'), // number[] p/ 'personalizada' (0=dom..6=sab)
+  ehMolde: boolean('eh_molde').notNull().default(false),
+  tarefaMaeId: uuid('tarefa_mae_id').references((): any => tarefas.id, { onDelete: 'cascade' }),
+  ativa: boolean('ativa').notNull().default(true), // no MOLDE: false = série encerrada
+  concluidaEm: timestamp('concluida_em', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  dataStatusIdx: index('tarefas_data_status_idx').on(table.data, table.status),
+  // ⚠️ GARANTIA DE IDEMPOTÊNCIA NO BANCO: uma ocorrência por molde por dia.
+  // NULLs não conflitam entre si no Postgres → tarefas avulsas (tarefa_mae_id
+  // NULL) não são afetadas por esta restrição. É a trava final contra corrida
+  // quando dois requests abrem /tarefas ao mesmo tempo.
+  maeDataIdx: uniqueIndex('tarefas_mae_data_idx').on(table.tarefaMaeId, table.data),
+}))
+
+export const tarefaChecklistItems = pgTable('tarefa_checklist_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tarefaId: uuid('tarefa_id').notNull().references(() => tarefas.id, { onDelete: 'cascade' }),
+  texto: text('texto').notNull(),
+  concluido: boolean('concluido').notNull().default(false),
+  ordem: integer('ordem').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tarefaIdx: index('tarefa_checklist_tarefa_id_idx').on(table.tarefaId),
+}))
+
+export const tarefasRelations = relations(tarefas, ({ one, many }) => ({
+  cliente: one(clientes, { fields: [tarefas.clienteId], references: [clientes.id] }),
+  responsavel: one(profiles, { fields: [tarefas.responsavelId], references: [profiles.id] }),
+  tarefaMae: one(tarefas, { fields: [tarefas.tarefaMaeId], references: [tarefas.id], relationName: 'ocorrencias' }),
+  checklistItems: many(tarefaChecklistItems),
+}))
+
+export const tarefaChecklistItemsRelations = relations(tarefaChecklistItems, ({ one }) => ({
+  tarefa: one(tarefas, { fields: [tarefaChecklistItems.tarefaId], references: [tarefas.id] }),
+}))
+
 export const acompanhamentos = pgTable('acompanhamentos', {
   id: uuid('id').primaryKey().defaultRandom(),
   clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
@@ -176,6 +235,7 @@ export const clientesRelations = relations(clientes, ({ one, many }) => ({
   checklistItems: many(checklistItems),
   acompanhamentos: many(acompanhamentos),
   documentos: many(documentos),
+  tarefas: many(tarefas),
 }))
 export const checklistItemsRelations = relations(checklistItems, ({ one }) => ({
   cliente: one(clientes, { fields: [checklistItems.clienteId], references: [clientes.id] }),
