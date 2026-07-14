@@ -17,6 +17,10 @@ function formatarHorario(evento: EventoAgenda): string {
   })
 }
 
+// Cores que alternam por evento (borda esquerda + horário), para dar variedade.
+const CORES_BARRA = ['border-l-primary', 'border-l-chart-success', 'border-l-chart-purple', 'border-l-chart-warning']
+const CORES_TEXTO = ['text-primary', 'text-chart-success', 'text-chart-purple', 'text-chart-warning']
+
 // Timeline da agenda do dia. Server component — busca eventos REAIS do Google.
 // Nunca deixa exceção escapar (mesmo padrão de getDashboardData): se a leitura
 // falhar (sem conexão / erro), cai no estado "Conecte sua agenda" sem derrubar o painel.
@@ -55,13 +59,16 @@ export async function AgendaHoje() {
           </p>
         ) : (
           <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
-            {eventos.map((item) => (
+            {eventos.map((item, i) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between gap-3 rounded-r-xl border-l-4 border-l-primary bg-background py-2.5 pl-3 pr-3"
+                className={cn(
+                  'flex items-center justify-between gap-3 rounded-r-xl border-l-4 bg-background py-2.5 pl-3 pr-3',
+                  CORES_BARRA[i % CORES_BARRA.length],
+                )}
               >
                 <div className="min-w-0">
-                  <p className={cn('text-sm font-semibold tabular-nums text-primary')}>
+                  <p className={cn('text-sm font-semibold tabular-nums', CORES_TEXTO[i % CORES_TEXTO.length])}>
                     {formatarHorario(item)}
                   </p>
                   <p className="truncate text-sm font-medium">{item.titulo}</p>
