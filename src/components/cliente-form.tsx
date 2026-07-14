@@ -39,6 +39,9 @@ const SERVICO_LABELS: Record<string, string> = {
   criativos: 'Criativos',
   social_media: 'Social Media',
   consultoria: 'Consultoria',
+  gestao_trafego: 'Gestão de Tráfego',
+  landing_page: 'Landing Page',
+  crm_estruturacao: 'CRM / Estruturação',
 }
 
 const ESTADOS_BR = [

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
 export const SERVICOS_DISPONIVEIS = [
-  'meta_ads', 'google_ads', 'site', 'criativos', 'social_media', 'consultoria'
+  'meta_ads', 'google_ads', 'site', 'criativos', 'social_media', 'consultoria',
+  'gestao_trafego', 'landing_page', 'crm_estruturacao'
 ] as const
 
 export const clienteSchema = z.object({
@@ -31,7 +32,7 @@ export const clienteSchema = z.object({
   formaPagamento: z.enum(['pix', 'boleto', 'cartao', 'transferencia']).optional(),
   diaPagamento: z.coerce.number().int().min(1).max(31).optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
   // Serviços
-  servicosContratados: z.array(z.enum(['meta_ads', 'google_ads', 'site', 'criativos', 'social_media', 'consultoria'])).default([]),
+  servicosContratados: z.array(z.enum(['meta_ads', 'google_ads', 'site', 'criativos', 'social_media', 'consultoria', 'gestao_trafego', 'landing_page', 'crm_estruturacao'])).default([]),
   // Operação
   gestorId: z.string().uuid().optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
   verbaMensal: z.coerce.number().min(0).optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
