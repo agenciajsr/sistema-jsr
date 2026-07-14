@@ -7,7 +7,6 @@ import {
   Banknote,
   Bot,
   CalendarDays,
-  CheckSquare,
   ChevronDown,
   FileSignature,
   FileText,
@@ -57,7 +56,7 @@ const nav: NavItem[] = [
   { title: 'Contratos', url: '/contratos', icon: FileSignature },
   { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
   { title: 'Agenda', url: '/agenda', icon: CalendarDays },
-  { title: 'Checklists', url: '/checklist', icon: CheckSquare },
+  // "Checklists" saiu do menu: o checklist agora vive DENTRO da tarefa (/tarefas).
   { title: 'Documentos', url: '/documentos', icon: Folder },
   { title: 'Equipe', url: '/equipe', icon: Users2 },
   { title: 'Ferramentas', url: '/ferramentas', icon: Wrench },

@@ -1,20 +1,33 @@
-import { ListChecks } from 'lucide-react'
+import { asc } from 'drizzle-orm'
 
-import { EmBreve } from '@/components/em-breve'
+import { db } from '@/lib/db'
+import { clientes } from '@/lib/db/schema'
+import { getProfiles } from '@/actions/clientes'
+import { getTarefasDoDia } from '@/lib/tarefas/dados'
+import { TarefasLista } from './tarefas-lista'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
-// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+// mais que o necessário. Coerente com connect_timeout(10s) + statement_timeout(12s).
 export const maxDuration = 60
 
-export default function TarefasPage() {
+export default async function TarefasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dia?: string }>
+}) {
+  // Next 16: searchParams é uma Promise.
+  const { dia } = await searchParams
+
+  // ⚠️ SEQUENCIAL — nada de paralelizar com Promise: pool max=3 com
+  // max_pipeline=0 (ver src/lib/db/index.ts).
+  const dados = await getTarefasDoDia(dia)
+  const clientesLista = await db
+    .select({ id: clientes.id, nome: clientes.nome })
+    .from(clientes)
+    .orderBy(asc(clientes.nome))
+  const responsaveis = await getProfiles()
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Tarefas</h1>
-      <EmBreve
-        titulo="Tarefas da Equipe"
-        descricao="A gestão de tarefas e responsáveis do dia a dia da agência será disponibilizada nesta área."
-        icon={ListChecks}
-      />
-    </div>
+    <TarefasLista dados={dados} clientes={clientesLista} responsaveis={responsaveis} />
   )
 }
