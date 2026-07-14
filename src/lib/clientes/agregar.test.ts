@@ -174,8 +174,14 @@ describe('filtrarClientes', () => {
   })
 
   it('combina busca e aba com AND', () => {
-    const r = filtrarClientes(linhas, { busca: 'a', aba: 'ativo' })
-    expect(r.map((l) => l.id)).toEqual(['c1'])
+    // 'a' casa Acme(ativo), Farmacia Sol(pausado) e Zebra Motors(ativo);
+    // a aba 'ativo' derruba a Farmacia => prova o AND.
+    expect(filtrarClientes(linhas, { busca: 'a', aba: 'ativo' }).map((l) => l.id)).toEqual([
+      'c1',
+      'c3',
+    ])
+    // casa a busca mas nao a aba => vazio.
+    expect(filtrarClientes(linhas, { busca: 'sol', aba: 'ativo' })).toEqual([])
   })
 })
 
