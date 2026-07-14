@@ -1,5 +1,5 @@
 import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index, boolean, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
 export const nichoEnum = pgEnum('nicho', ['ecommerce', 'negocio_local', 'infoproduto'])
@@ -183,10 +183,21 @@ export const tarefas = pgTable('tarefas', {
   tarefaMaeId: uuid('tarefa_mae_id').references((): any => tarefas.id, { onDelete: 'cascade' }),
   ativa: boolean('ativa').notNull().default(true), // no MOLDE: false = série encerrada
   concluidaEm: timestamp('concluida_em', { withTimezone: true }),
+  descricao: text('descricao'),
+  etiquetas: jsonb('etiquetas'), // string[]
+  tempoEstimado: text('tempo_estimado'), // texto livre, ex.: '4h'
+  dataInicio: date('data_inicio'),
+  // D-04: `codigo_num` é a ÚNICA fonte sequencial (identity do Postgres) e
+  // `codigo` é coluna GERADA a partir dela. Zero query extra, zero corrida —
+  // nada de `select max()+1` (que duplicaria sob concorrência) nem de sequence
+  // na mão. O espelho puro para exibição é codigoTarefa() em lib/tarefas/quadro.ts.
+  codigoNum: integer('codigo_num').generatedByDefaultAsIdentity(),
+  codigo: text('codigo').generatedAlwaysAs(sql`'TAR-' || lpad(codigo_num::text, 4, '0')`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   dataStatusIdx: index('tarefas_data_status_idx').on(table.data, table.status),
+  codigoIdx: uniqueIndex('tarefas_codigo_idx').on(table.codigo),
   // ⚠️ GARANTIA DE IDEMPOTÊNCIA NO BANCO: uma ocorrência por molde por dia.
   // NULLs não conflitam entre si no Postgres → tarefas avulsas (tarefa_mae_id
   // NULL) não são afetadas por esta restrição. É a trava final contra corrida
@@ -200,6 +211,9 @@ export const tarefaChecklistItems = pgTable('tarefa_checklist_items', {
   texto: text('texto').notNull(),
   concluido: boolean('concluido').notNull().default(false),
   ordem: integer('ordem').notNull().default(0),
+  // D-08: o nome do grupo do checklist. `ordem` é contada DENTRO do grupo.
+  // Default 'Checklist' mantém os itens já existentes num grupo válido.
+  grupo: text('grupo').notNull().default('Checklist'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   tarefaIdx: index('tarefa_checklist_tarefa_id_idx').on(table.tarefaId),

@@ -17,8 +17,8 @@ import {
 import type { TarefaStatus, TarefaPrioridade } from './recorrencia'
 
 // Helpers de fixture — só os campos que cada função realmente lê.
-function t(status: TarefaStatus, extra: Record<string, unknown> = {}) {
-  return { status, ...extra }
+function t<E extends Record<string, unknown>>(status: TarefaStatus, extra?: E) {
+  return { status, ...(extra ?? ({} as E)) }
 }
 
 function lista(counts: Record<TarefaStatus, number>) {
