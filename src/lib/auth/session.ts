@@ -37,9 +37,16 @@ export const getCurrentUser = cache(
     } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS, 'auth.getUser')
     if (!user) return null
 
-    const profile = await db.query.profiles.findFirst({
-      where: eq(profiles.id, user.id),
-    })
+    // Fail-fast também na consulta ao banco: numa conexão "morta" do pooler
+    // (Supavisor), esta query pode congelar para sempre (o statement_timeout não
+    // dispara em socket morto). Sem este teto, a função inteira trava até o
+    // maxDuration — a causa nº1 dos 504 em TODAS as páginas (getCurrentUser roda
+    // no layout de todas). Em timeout, rejeita → error.tsx (recarregar resolve).
+    const profile = await withTimeout(
+      db.query.profiles.findFirst({ where: eq(profiles.id, user.id) }),
+      AUTH_TIMEOUT_MS,
+      'profiles.findFirst',
+    )
     if (!profile) return null
 
     return {
