@@ -1,4 +1,4 @@
-import { getAlertas } from '@/actions/alertas'
+import { listarAlertasPersistidos } from '@/actions/alertas'
 
 import { AlertasClient } from './alertas-client'
 
@@ -7,7 +7,7 @@ import { AlertasClient } from './alertas-client'
 export const maxDuration = 60
 
 export default async function AlertasPage() {
-  const alertas = await getAlertas()
+  const alertas = await listarAlertasPersistidos()
 
   return <AlertasClient alertas={alertas} />
 }

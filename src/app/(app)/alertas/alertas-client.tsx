@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Calendar,
+  Check,
+  CheckCheck,
   CheckCircle,
   UserX,
   Wallet,
@@ -15,7 +18,8 @@ import {
   Ban,
   ImageOff,
   Repeat,
-  X,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +31,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import type { Alerta, TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
+import {
+  marcarAlertaComoLido,
+  marcarTodosComoLidos,
+  reavaliarAlertasAgora,
+} from '@/actions/alertas'
+import type { AlertaPersistido, StatusAlerta, TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
 
 // --- Constantes de UI ---
 
@@ -81,170 +90,204 @@ const SEVERIDADE_CONFIG: Record<
   },
 }
 
-// --- localStorage helpers ---
+const ABAS: { valor: StatusAlerta; label: string }[] = [
+  { valor: 'novo', label: 'Novos' },
+  { valor: 'lido', label: 'Lidos' },
+  { valor: 'resolvido', label: 'Resolvidos' },
+]
 
-const STORAGE_KEY = 'jsr-alertas-dispensados'
-
-interface DismissedEntry {
-  /** Chave unica do alerta (= alerta.id) */
-  key: string
-  /** Detalhe do alerta no momento do dismiss — se mudar, o alerta reaparece */
-  detalhe: string
-  /** Timestamp de quando foi dispensado */
-  dismissedAt: number
+const MENSAGEM_VAZIA: Record<StatusAlerta, string> = {
+  novo: 'Nenhum alerta no momento — tudo em ordem.',
+  lido: 'Nenhum alerta lido.',
+  resolvido: 'Nenhum alerta resolvido ainda.',
 }
 
-function getDismissedMap(): Map<string, DismissedEntry> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return new Map()
-    const entries: DismissedEntry[] = JSON.parse(raw)
-    return new Map(entries.map((e) => [e.key, e]))
-  } catch {
-    return new Map()
-  }
-}
-
-function saveDismissedMap(map: Map<string, DismissedEntry>) {
-  const entries = Array.from(map.values())
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
-}
-
-function isAlertDismissed(alerta: Alerta, map: Map<string, DismissedEntry>): boolean {
-  const entry = map.get(alerta.id)
-  if (!entry) return false
-  // Se o detalhe mudou (ex.: saldo diferente, dias diferentes), o alerta reaparece
-  return entry.detalhe === alerta.detalhe
+/** Formata um timestamp ISO como data/hora pt-BR (fuso de Brasília). */
+function formatarDataHoraBr(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })
 }
 
 // --- Componente ---
 
 interface AlertasClientProps {
-  alertas: Alerta[]
+  alertas: AlertaPersistido[]
 }
 
 export function AlertasClient({ alertas }: AlertasClientProps) {
-  const [dismissedMap, setDismissedMap] = useState<Map<string, DismissedEntry>>(new Map())
-  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+  const [abaAtiva, setAbaAtiva] = useState<StatusAlerta>('novo')
+  const [isPending, startTransition] = useTransition()
+  const [reavaliando, startReavaliar] = useTransition()
 
-  useEffect(() => {
-    setDismissedMap(getDismissedMap())
-    setMounted(true)
-  }, [])
+  const porStatus: Record<StatusAlerta, AlertaPersistido[]> = {
+    novo: alertas.filter((a) => a.status === 'novo'),
+    lido: alertas.filter((a) => a.status === 'lido'),
+    resolvido: alertas.filter((a) => a.status === 'resolvido'),
+  }
 
-  const dismissAlert = useCallback((alerta: Alerta) => {
-    setDismissedMap((prev) => {
-      const next = new Map(prev)
-      next.set(alerta.id, {
-        key: alerta.id,
-        detalhe: alerta.detalhe,
-        dismissedAt: Date.now(),
-      })
-      saveDismissedMap(next)
-      return next
+  const visiveis = porStatus[abaAtiva]
+
+  function handleMarcarLido(dbId: string) {
+    startTransition(async () => {
+      await marcarAlertaComoLido(dbId)
+      router.refresh()
     })
-  }, [])
+  }
 
-  // Antes de montar, mostra todos (evita flash de "nenhum alerta")
-  const alertasVisiveis = mounted
-    ? alertas.filter((a) => !isAlertDismissed(a, dismissedMap))
-    : alertas
+  function handleMarcarTodos() {
+    startTransition(async () => {
+      await marcarTodosComoLidos()
+      router.refresh()
+    })
+  }
 
-  const totalDismissed = mounted
-    ? alertas.length - alertasVisiveis.length
-    : 0
+  function handleReavaliar() {
+    startReavaliar(async () => {
+      await reavaliarAlertasAgora()
+      router.refresh()
+    })
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Alertas</h1>
-        <p className="text-sm text-muted-foreground">
-          Tudo que precisa de atencao, em um so lugar.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Alertas</h1>
+          <p className="text-sm text-muted-foreground">
+            Tudo que precisa de atencao, em um so lugar.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleReavaliar}
+          disabled={reavaliando}
+        >
+          {reavaliando ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <RefreshCw className="size-4" />
+          )}
+          {reavaliando ? 'Reavaliando...' : 'Reavaliar agora'}
+        </Button>
       </div>
 
-      {alertasVisiveis.length === 0 ? (
+      {/* Abas por status */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {ABAS.map((aba) => (
+            <Button
+              key={aba.valor}
+              variant={abaAtiva === aba.valor ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setAbaAtiva(aba.valor)}
+            >
+              {aba.label}
+              <Badge variant="outline" className="ml-1 px-1.5 text-[11px]">
+                {porStatus[aba.valor].length}
+              </Badge>
+            </Button>
+          ))}
+        </div>
+        {abaAtiva === 'novo' && porStatus.novo.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleMarcarTodos}
+            disabled={isPending}
+            className="text-muted-foreground"
+          >
+            <CheckCheck className="size-4" />
+            Marcar todos como lidos
+          </Button>
+        )}
+      </div>
+
+      {visiveis.length === 0 ? (
         <Card className="border-none shadow-sm">
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12">
             <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
               <CheckCircle className="size-6" />
             </div>
             <p className="text-sm font-medium text-muted-foreground">
-              Nenhum alerta no momento — tudo em ordem.
+              {MENSAGEM_VAZIA[abaAtiva]}
             </p>
-            {totalDismissed > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {totalDismissed} alerta{totalDismissed > 1 ? 's' : ''} dispensado{totalDismissed > 1 ? 's' : ''}.
-              </p>
-            )}
           </CardContent>
         </Card>
       ) : (
-        <>
-          {totalDismissed > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {totalDismissed} alerta{totalDismissed > 1 ? 's' : ''} dispensado{totalDismissed > 1 ? 's' : ''}.
-            </p>
-          )}
-          <div className="space-y-3">
-            <TooltipProvider>
-              {alertasVisiveis.map((alerta) => {
-                const Icon = TIPO_ICON[alerta.tipo]
-                const sevConfig = SEVERIDADE_CONFIG[alerta.severidade]
-                return (
-                  <Card key={alerta.id} className="border-none shadow-sm">
-                    <CardContent className="flex items-start justify-between gap-4 py-4">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`mt-0.5 flex size-9 items-center justify-center rounded-lg ${sevConfig.iconBgClass}`}
-                        >
-                          <Icon className="size-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{alerta.titulo}</p>
-                            <Badge variant="outline">{TIPO_LABEL[alerta.tipo]}</Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {alerta.clienteNome} &middot; {alerta.detalhe}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {alerta.dataRelevante}
-                          </p>
-                        </div>
+        <div className="space-y-3">
+          <TooltipProvider>
+            {visiveis.map((alerta) => {
+              const Icon = TIPO_ICON[alerta.tipo]
+              const sevConfig = SEVERIDADE_CONFIG[alerta.severidade]
+              return (
+                <Card key={alerta.dbId} className="border-none shadow-sm">
+                  <CardContent className="flex items-start justify-between gap-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex size-9 items-center justify-center rounded-lg ${sevConfig.iconBgClass}`}
+                      >
+                        <Icon className="size-4" />
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge
-                          variant="outline"
-                          className={`gap-1 ${sevConfig.badgeClass}`}
-                        >
-                          <sevConfig.icon className="size-3" />
-                          {sevConfig.label}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{alerta.titulo}</p>
+                          <Badge variant="outline">{TIPO_LABEL[alerta.tipo]}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {alerta.clienteNome} &middot; {alerta.detalhe}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {alerta.dataRelevante}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {alerta.status === 'resolvido' && alerta.resolvidoEm && (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          Resolvido em {formatarDataHoraBr(alerta.resolvidoEm)}
                         </Badge>
+                      )}
+                      <Badge
+                        variant="outline"
+                        className={`gap-1 ${sevConfig.badgeClass}`}
+                      >
+                        <sevConfig.icon className="size-3" />
+                        {sevConfig.label}
+                      </Badge>
+                      {alerta.status === 'novo' && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="size-7 text-muted-foreground hover:text-foreground"
-                              onClick={() => dismissAlert(alerta)}
+                              onClick={() => handleMarcarLido(alerta.dbId)}
+                              disabled={isPending}
                             >
-                              <X className="size-3.5" />
-                              <span className="sr-only">Dispensar alerta</span>
+                              <Check className="size-3.5" />
+                              <span className="sr-only">Marcar como lido</span>
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="left">
-                            <p>Dispensar</p>
+                            <p>Marcar como lido</p>
                           </TooltipContent>
                         </Tooltip>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </TooltipProvider>
-          </div>
-        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </TooltipProvider>
+        </div>
       )}
     </div>
   )

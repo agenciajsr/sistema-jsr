@@ -1,126 +1,146 @@
 'use server'
 
-import { eq, lte } from 'drizzle-orm'
-import { addDays, format } from 'date-fns'
+import { eq, ne, and, desc, count } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { contratos, transacoes, clientes, adAccounts } from '@/lib/db/schema'
+import { alertas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
-import {
-  avaliarContratos,
-  avaliarTransacoes,
-  avaliarClientesInativos,
-  avaliarSaldoContas,
-  ordenarPorSeveridade,
-} from '@/lib/alertas/avaliar'
-import { getAlertasCampanhas } from '@/lib/saude/avaliar-campanhas'
-import type { Alerta } from '@/lib/alertas/types'
+import { ordenarPorSeveridade } from '@/lib/alertas/avaliar'
+import { avaliarEPersistirAlertas, type ResumoAvaliacao } from '@/lib/alertas/persistir'
+import type { Alerta, AlertaPersistido, StatusAlerta, TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
 
+// Shape da linha da tabela alertas usado nos mapeamentos abaixo
+type LinhaAlerta = typeof alertas.$inferSelect
+
+/** Converte uma linha do banco para o contrato antigo Alerta (id = chaveDedup). */
+function linhaParaAlerta(row: LinhaAlerta): Alerta {
+  return {
+    id: row.chaveDedup,
+    tipo: row.tipo as TipoAlerta,
+    severidade: row.severidade as SeveridadeAlerta,
+    titulo: row.titulo,
+    detalhe: row.detalhe,
+    clienteNome: row.clienteNome,
+    clienteId: row.clienteId ?? '',
+    dataRelevante: row.dataRelevante,
+  }
+}
+
+function linhaParaAlertaPersistido(row: LinhaAlerta): AlertaPersistido {
+  return {
+    ...linhaParaAlerta(row),
+    dbId: row.id,
+    status: row.status as StatusAlerta,
+    detectadoEm: row.detectadoEm.toISOString(),
+    resolvidoEm: row.resolvidoEm ? row.resolvidoEm.toISOString() : null,
+  }
+}
+
+/**
+ * Alertas abertos (não resolvidos), lidos da tabela `alertas`.
+ * Mantém a assinatura antiga — dashboard e chat IA consomem sem mudanças.
+ */
 export async function getAlertas(): Promise<Alerta[]> {
   const currentUser = await getCurrentUser()
   if (!currentUser) return []
 
-  const hoje = new Date()
-  const limite30d = format(addDays(hoje, 30), 'yyyy-MM-dd')
+  const rows = await db
+    .select()
+    .from(alertas)
+    .where(ne(alertas.status, 'resolvido'))
 
-  // 1. Contratos a vencer (inclui ja vencidos — sem lower bound)
-  const contratosRows = await db
-    .select({
-      id: contratos.id,
-      clienteId: contratos.clienteId,
-      clienteNome: clientes.nome,
-      dataVencimento: contratos.dataVencimento,
-      valorMensal: contratos.valorMensal,
-    })
-    .from(contratos)
-    .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
-    .where(lte(contratos.dataVencimento, limite30d))
-
-  // 2. Transacoes vencidas
-  const transacoesRows = await db
-    .select({
-      id: transacoes.id,
-      clienteId: transacoes.clienteId,
-      clienteNome: clientes.nome,
-      descricao: transacoes.descricao,
-      valor: transacoes.valor,
-      data: transacoes.data,
-      status: transacoes.status,
-    })
-    .from(transacoes)
-    .leftJoin(clientes, eq(transacoes.clienteId, clientes.id))
-    .where(eq(transacoes.status, 'vencido'))
-
-  // 3. Clientes inativos
-  const clientesRows = await db
-    .select({
-      id: clientes.id,
-      nome: clientes.nome,
-      status: clientes.status,
-    })
-    .from(clientes)
-    .where(
-      eq(clientes.status, 'pausado'),
-    )
-
-  // Buscar encerrados separadamente (drizzle nao suporta IN com pgEnum facilmente)
-  const clientesEncerrados = await db
-    .select({
-      id: clientes.id,
-      nome: clientes.nome,
-      status: clientes.status,
-    })
-    .from(clientes)
-    .where(
-      eq(clientes.status, 'encerrado'),
-    )
-
-  const todosClientes = [...clientesRows, ...clientesEncerrados]
-
-  // 4. Contas de anuncio com saldo baixo
-  const contasRows = await db
-    .select({
-      id: adAccounts.id,
-      nome: adAccounts.nome,
-      clienteId: adAccounts.clienteId,
-      clienteNome: clientes.nome,
-      saldo: adAccounts.saldo,
-    })
-    .from(adAccounts)
-    .leftJoin(clientes, eq(adAccounts.clienteId, clientes.id))
-    .where(eq(adAccounts.ativo, true))
-
-  // Avaliar
-  const alertasContratos = avaliarContratos(contratosRows)
-  const alertasTransacoes = avaliarTransacoes(transacoesRows)
-  const alertasClientes = avaliarClientesInativos(todosClientes)
-  const alertasSaldo = avaliarSaldoContas(contasRows)
-
-  // Alertas de saúde de campanha (Meta): comparação de períodos sobre insights.
-  // Envolvido em try/catch — uma falha aqui (ex.: sem dados Meta) NÃO pode
-  // derrubar os demais alertas, que sempre precisam retornar.
-  let alertasCampanhas: Alerta[] = []
-  try {
-    alertasCampanhas = await getAlertasCampanhas()
-  } catch (erro) {
-    console.error('[getAlertas] falha ao avaliar saúde de campanhas — ignorando', erro)
-    alertasCampanhas = []
-  }
-
-  // Unificar e ordenar
-  return ordenarPorSeveridade([
-    ...alertasContratos,
-    ...alertasTransacoes,
-    ...alertasClientes,
-    ...alertasSaldo,
-    ...alertasCampanhas,
-  ])
+  return ordenarPorSeveridade(rows.map(linhaParaAlerta))
 }
 
 /**
- * Alertas relevantes para um cliente especifico (filtra os alertas gerais por clienteId).
+ * Alertas abertos de um cliente específico (query direta no banco).
  */
 export async function getAlertasDoCliente(clienteId: string): Promise<Alerta[]> {
-  const todos = await getAlertas()
-  return todos.filter((a) => a.clienteId === clienteId)
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  const rows = await db
+    .select()
+    .from(alertas)
+    .where(and(eq(alertas.clienteId, clienteId), ne(alertas.status, 'resolvido')))
+
+  return ordenarPorSeveridade(rows.map(linhaParaAlerta))
+}
+
+/**
+ * Todos os alertas (inclusive resolvidos) para a página de triagem com abas.
+ * Abertos ordenados por severidade; resolvidos por resolvidoEm desc.
+ */
+export async function listarAlertasPersistidos(): Promise<AlertaPersistido[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  const rows = await db
+    .select()
+    .from(alertas)
+    .orderBy(desc(alertas.detectadoEm))
+    .limit(200)
+
+  const abertos = rows.filter((r) => r.status !== 'resolvido').map(linhaParaAlertaPersistido)
+  const resolvidos = rows
+    .filter((r) => r.status === 'resolvido')
+    .map(linhaParaAlertaPersistido)
+    .sort((a, b) => (b.resolvidoEm ?? '').localeCompare(a.resolvidoEm ?? ''))
+
+  return [...(ordenarPorSeveridade(abertos) as AlertaPersistido[]), ...resolvidos]
+}
+
+/**
+ * Contagem de alertas com status 'novo' — barata, para o sininho do header.
+ */
+export async function getContagemAlertasNovos(): Promise<number> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return 0
+
+  const [row] = await db
+    .select({ total: count() })
+    .from(alertas)
+    .where(eq(alertas.status, 'novo'))
+
+  return row?.total ?? 0
+}
+
+/** Marca um alerta como lido (novo → lido). */
+export async function marcarAlertaComoLido(dbId: string): Promise<void> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return
+
+  await db
+    .update(alertas)
+    .set({ status: 'lido', updatedAt: new Date() })
+    .where(and(eq(alertas.id, dbId), eq(alertas.status, 'novo')))
+
+  revalidatePath('/alertas')
+}
+
+/** Marca TODOS os alertas novos como lidos. */
+export async function marcarTodosComoLidos(): Promise<void> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return
+
+  await db
+    .update(alertas)
+    .set({ status: 'lido', updatedAt: new Date() })
+    .where(eq(alertas.status, 'novo'))
+
+  revalidatePath('/alertas')
+}
+
+/**
+ * Reavalia os alertas agora (mesmo motor do cron). Cobre o primeiro deploy
+ * (tabela vazia até o cron rodar) e dá um botão manual na página.
+ */
+export async function reavaliarAlertasAgora(): Promise<ResumoAvaliacao | null> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return null
+
+  const resumo = await avaliarEPersistirAlertas()
+  revalidatePath('/alertas')
+  return resumo
 }

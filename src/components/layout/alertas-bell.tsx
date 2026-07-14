@@ -4,18 +4,18 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Bell } from 'lucide-react'
 
-import { getAlertas } from '@/actions/alertas'
+import { getContagemAlertasNovos } from '@/actions/alertas'
 
 // Sino de alertas do cabeçalho. Client component: busca a contagem DEPOIS que a
 // página já renderizou (via server action), para NÃO bloquear a renderização de
-// nenhuma página. getAlertas é pesado (contratos, financeiro, clientes, campanhas),
-// então nunca deve rodar no caminho síncrono do layout.
+// nenhuma página. Conta apenas os alertas com status 'novo' — count(*) barato
+// na tabela alertas (index em status).
 export function AlertasBell() {
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
-    getAlertas()
-      .then((alertas) => setTotal(alertas.length))
+    getContagemAlertasNovos()
+      .then((novos) => setTotal(novos))
       .catch(() => setTotal(0))
   }, [])
 

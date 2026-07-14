@@ -28,3 +28,15 @@ export const SEVERIDADE_ORDEM: Record<SeveridadeAlerta, number> = {
   atencao: 1,
   info: 2,
 }
+
+// --- Alertas persistidos (tabela alertas) ---
+
+export type StatusAlerta = 'novo' | 'lido' | 'resolvido'
+
+/** Alerta como vive no banco: o shape de Alerta + metadados de triagem. */
+export interface AlertaPersistido extends Alerta {
+  dbId: string            // uuid da linha (para as ações de status)
+  status: StatusAlerta
+  detectadoEm: string     // ISO
+  resolvidoEm: string | null
+}
