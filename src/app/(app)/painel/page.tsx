@@ -1,14 +1,12 @@
 import { Suspense } from 'react'
 import {
-  HandCoins,
   Megaphone,
   MessageCircle,
-  TrendingUp,
   Users,
-  Wallet,
 } from 'lucide-react'
 
 import { KpiCard } from '@/components/dashboard/kpi-card'
+import { KpisFinanceiros } from '@/components/dashboard/kpis-financeiros'
 import { PerformanceGeral } from '@/components/dashboard/performance-geral'
 import { CampanhasSaude } from '@/components/dashboard/campanhas-saude'
 import { AgendaHoje } from '@/components/dashboard/agenda-hoje'
@@ -26,10 +24,6 @@ import { getCurrentUser } from '@/lib/auth/session'
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
 export const maxDuration = 60
 
-const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-})
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
 
 type Props = {
@@ -81,25 +75,11 @@ export default async function PainelPage({ searchParams }: Props) {
 
       {/* Faixa de 6 KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <KpiCard
-          label="Faturamento (MRR)"
-          valor={formatadorMoeda.format(data?.kpis.mrr ?? 0)}
-          icon={Wallet}
-          cor="info"
-        />
-        <KpiCard
-          label="Recebimentos (Mês)"
-          valor={formatadorMoeda.format(data?.kpis.receitaMes ?? 0)}
-          icon={HandCoins}
-          cor="success"
-          helper={data ? `${data.financeiro.percentRecebido}% do MRR` : undefined}
-          progresso={data?.financeiro.percentRecebido}
-        />
-        <KpiCard
-          label="Lucro Líquido (Mês)"
-          valor={formatadorMoeda.format(data?.kpis.lucroMes ?? 0)}
-          icon={TrendingUp}
-          cor="purple"
+        <KpisFinanceiros
+          mrr={data?.kpis.mrr ?? 0}
+          receitaMes={data?.kpis.receitaMes ?? 0}
+          percentRecebido={data?.financeiro.percentRecebido ?? 0}
+          lucroMes={data?.kpis.lucroMes ?? 0}
         />
         <KpiCard
           label="Clientes Ativos"
