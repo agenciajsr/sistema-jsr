@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260714-ccl (alertas persistidos + cron de relatórios semanais — migration 0013 NÃO aplicada)
-last_updated: "2026-07-14T12:25:00Z"
-last_activity: "2026-07-14 - Completed quick task 260714-ccl: alertas proativos persistidos no cron diario + relatorio semanal automatico via Vercel Cron"
+stopped_at: Completed quick-260714-ita (aba Visao Analitica no /financeiro — sem migration)
+last_updated: "2026-07-14T13:50:00Z"
+last_activity: "2026-07-14 - Completed quick task 260714-ita: aba Visao Analitica no /financeiro (renovacao, dependencia de MRR, despesas vs faturamento) + KPIs comparando com o mes anterior"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -83,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 01]: z.input/z.output no useForm (3 generics do zodResolver) para resolver incompatibilidade de tipo quando o schema Zod usa .default() em um campo
 - [Phase 01]: Exclusao de cliente/contrato usa Server Actions inline (form action) definidas dentro do proprio Server Component de detalhe, mantendo a checagem role === admin e a copy exata no mesmo arquivo
 - [Phase 01]: ContratoForm evita o componente Dialog do shadcn (fora do Registry Safety do UI-SPEC), controlando visibilidade com useState
+- [quick-260714-ita]: Matematica financeira mora em modulo puro (`@/lib/financeiro/calculos`, zero import de db/auth/react) — actions e UI so consomem. Torna os numeros testaveis sem banco e evita a mesma conta divergir entre telas.
+- [quick-260714-ita]: Actions que rodam dentro de um Promise.all da pagina executam suas queries SEQUENCIALMENTE (pool max=3) — paralelizar por dentro reintroduz o travamento corrigido no 260713-usi.
 
 ### Pending Todos
 
@@ -128,9 +130,10 @@ None yet.
 | 260713-usi | Corrigir de vez o travamento/erro intermitente do /financeiro — loading.tsx com skeleton (financeiro + generico do grupo app), helper withRetry (F5 automatico server-side, 12s → 500ms → 15s), carga em 2 lotes sequenciais de 4 queries (pool max=3); tela de erro vira ultimo recurso | 2026-07-14 | 9a5282b | [260713-usi-corrigir-de-vez-o-travamento-erro-interm](./quick/260713-usi-corrigir-de-vez-o-travamento-erro-interm/) |
 | 260714-ccl | Alertas proativos persistidos — tabelas alertas/relatorios (migration 0013 NAO aplicada), avaliarEPersistirAlertas no cron sync-meta (dedup, reabertura, resolucao automatica), /alertas com abas novos/lidos/resolvidos, sininho conta novos; relatorio semanal automatico via 2o Vercel Cron (segunda 07h BR) com historico em /relatorios; funcao Inngest morta aposentada | 2026-07-14 | fef9b4c | [260714-ccl-acordar-alertas-proativos-tabela-alertas](./quick/260714-ccl-acordar-alertas-proativos-tabela-alertas/) |
 | 260714-fast | Painel: olho de privacidade sem sobrepor icone, alturas uniformes e tendencias/sparklines reais nos 6 KPIs | 2026-07-14 | c764fd8 | — |
+| 260714-ita | Financeiro — aba Visao Analitica (taxa de renovacao, MRR previsto, receita avulsa, lucro/cliente, despesas vs faturamento por faixa, dependencia de MRR Top5/Top10) + KPIs do Overview com "mes ant. R$X" e variacao %, chip "Dia X/Y (Z%)" no mes corrente; matematica isolada em modulo puro testado (30 testes); sem migration | 2026-07-14 | 13c66f3 | [260714-ita-financeiro-aba-visao-analitica-renovacao](./quick/260714-ita-financeiro-aba-visao-analitica-renovacao/) |
 
 ## Session Continuity
 
-Last session: 2026-07-14T12:25:00Z
-Stopped at: Completed quick-260714-ccl (alertas persistidos + cron de relatórios semanais — migration 0013 NÃO aplicada)
+Last session: 2026-07-14T13:50:00Z
+Stopped at: Completed quick-260714-ita (aba Visao Analitica no /financeiro — sem migration)
 Resume file: None
