@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260714-qsy (módulo Tarefas — migration 0015 GERADA, NAO aplicada)
-last_updated: "2026-07-14T19:45:00Z"
-last_activity: "2026-07-14 - Completed quick task 260714-qsy: módulo Tarefas estilo ClickUp em /tarefas (molde recorrente + ocorrências materializadas preguiçosamente, sem cron novo), engine de recorrência pura sob TDD (26 testes), checklist interno por tarefa; /checklist eliminado; migration 0015 NAO aplicada"
+stopped_at: Concluido quick 260714-rnx (Tarefas = quadro Kanban); migration 0016 GERADA e NAO aplicada
+last_updated: "2026-07-14T23:26:32.016Z"
+last_activity: "2026-07-14 - Completed quick task 260714-rnx: /tarefas refeito como QUADRO KANBAN de 4 colunas (mockup 1) + /tarefas/[id] como pagina cheia (mockup 2); modulo puro quadro.ts sob TDD (29 testes); getTarefasDoDia -> getTarefasDoPeriodo; migration 0016 aditiva GERADA, NAO aplicada (a 0015 tambem segue pendente — rodam em ordem)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -141,6 +141,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-14T19:45:00Z
-Stopped at: Completed quick-260714-qsy (módulo Tarefas — migration 0015 GERADA, NAO aplicada)
+Last session: 2026-07-14T23:26:32.011Z
+Stopped at: Concluido quick 260714-rnx (Tarefas = quadro Kanban); migration 0016 GERADA e NAO aplicada
 Resume file: None
