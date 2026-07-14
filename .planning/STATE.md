@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260711-tg5 (Ficha do Cliente real — migration aditiva NÃO aplicada)
-last_updated: "2026-07-12T14:05:00Z"
-last_activity: "2026-07-12 - Completed quick task 260712-mro: Verbas como aba em campanhas, removido /verbas-ads"
+stopped_at: Completed quick-260713-usi (estabilidade do /financeiro — loading.tsx, withRetry, 2 lotes)
+last_updated: "2026-07-14T01:20:00Z"
+last_activity: "2026-07-14 - Completed quick task 260713-usi: skeleton instantaneo, retry automatico e carga em 2 lotes no financeiro"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -125,9 +125,10 @@ None yet.
 | (fast) | Reconciliar migrations 0010 duplicadas — remove orfao 0010_add_funding_source, torna 0010_calm_starbolt idempotente, commita artefatos drizzle (documentos/funding_source ja existem em prod, verificado read-only) | 2026-07-12 | 3e20038 | — (gsd:fast) |
 | (fast) | Header: badge do sino com contagem real de alertas (getAlertas().length com try/catch), remove icone de Mensagens fake | 2026-07-12 | 8a88ba8 | — (gsd:fast) |
 | 260712-uc1 | Integracao completa com Google Calendar (OAuth 2 duas vias): tabela google_credentials single-tenant + migration 0011 (NAO aplicada), fluxo start/callback com CSRF, refresh automatico, client REST Calendar validado por Zod (fuso Brasilia), card de agenda real, pagina /agenda (criar/editar), /integracoes Conectar/Desconectar. Pendente credenciais Google Cloud do usuario | 2026-07-12 | f8bb9fc | [260712-uc1-integracao-completa-com-google-calendar-](./quick/260712-uc1-integracao-completa-com-google-calendar-/) |
+| 260713-usi | Corrigir de vez o travamento/erro intermitente do /financeiro — loading.tsx com skeleton (financeiro + generico do grupo app), helper withRetry (F5 automatico server-side, 12s → 500ms → 15s), carga em 2 lotes sequenciais de 4 queries (pool max=3); tela de erro vira ultimo recurso | 2026-07-14 | 9a5282b | [260713-usi-corrigir-de-vez-o-travamento-erro-interm](./quick/260713-usi-corrigir-de-vez-o-travamento-erro-interm/) |
 
 ## Session Continuity
 
-Last session: 2026-07-13T01:06:08Z
-Stopped at: Completed quick-260712-uc1 (integracao Google Calendar — migration 0011 NAO aplicada, credenciais Google pendentes do usuario)
+Last session: 2026-07-14T01:20:00Z
+Stopped at: Completed quick-260713-usi (estabilidade do /financeiro — loading.tsx, withRetry, 2 lotes)
 Resume file: None
