@@ -15,6 +15,8 @@ import {
   getPrevisaoCaixa,
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
+import { getCurrentUser } from '@/lib/auth/session'
+import { withTimeout } from '@/lib/utils/with-timeout'
 
 import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
@@ -41,19 +43,51 @@ export default async function FinanceiroPage({
   const mes = params.mes ? Number(params.mes) : agora.getMonth() + 1
   const ano = params.ano ? Number(params.ano) : agora.getFullYear()
 
-  const [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] = await Promise.all([
-    getResumoFinanceiro(mes, ano),
-    calcularMrr(),
-    listTransacoes({ mes, ano }),
-    db
-      .select({ id: clientes.id, nome: clientes.nome })
-      .from(clientes)
-      .where(eq(clientes.status, 'ativo')),
-    getContasAReceber(),
-    getContasAPagar(),
-    getPrevisaoCaixa(),
-    getProfiles(),
-  ])
+  // Aquece UMA conexão + valida a sessão ANTES de disparar as 8 queries em
+  // paralelo. Abrir 3 conexões frias simultâneas no cold start estava travando
+  // só nesta página (a mais pesada); com 1 conexão já quente, o pooler lida melhor.
+  await getCurrentUser()
+
+  let dados
+  try {
+    dados = await withTimeout(
+      Promise.all([
+        getResumoFinanceiro(mes, ano),
+        calcularMrr(),
+        listTransacoes({ mes, ano }),
+        db
+          .select({ id: clientes.id, nome: clientes.nome })
+          .from(clientes)
+          .where(eq(clientes.status, 'ativo')),
+        getContasAReceber(),
+        getContasAPagar(),
+        getPrevisaoCaixa(),
+        getProfiles(),
+      ]),
+      15_000,
+      'financeiro-load',
+    )
+  } catch {
+    // Soluço de conexão do pooler: falha rápido com uma tela limpa de "recarregar"
+    // em vez de congelar até o maxDuration e virar 504.
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+        <h1 className="text-xl font-semibold">Financeiro indisponível no momento</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Houve uma instabilidade momentânea ao carregar os dados. Recarregue a página — costuma
+          resolver na hora.
+        </p>
+        <a
+          href="/financeiro"
+          className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+        >
+          Recarregar
+        </a>
+      </div>
+    )
+  }
+
+  const [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] = dados
 
   const transacoesParaTabela = transacoes.map((t) => ({
     id: t.id,
