@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260714-j92 (lista compacta de clientes — migration 0014 GERADA, NAO aplicada)
-last_updated: "2026-07-14T14:10:00Z"
-last_activity: "2026-07-14 - Completed quick task 260714-j92: /clientes vira lista compacta com busca e abas por status, N+1 removido (6 queries agregadas sequenciais), status aguardando_inicio/em_aviso + migration 0014 NAO aplicada"
+stopped_at: Completed quick-260714-qsy (módulo Tarefas — migration 0015 GERADA, NAO aplicada)
+last_updated: "2026-07-14T19:45:00Z"
+last_activity: "2026-07-14 - Completed quick task 260714-qsy: módulo Tarefas estilo ClickUp em /tarefas (molde recorrente + ocorrências materializadas preguiçosamente, sem cron novo), engine de recorrência pura sob TDD (26 testes), checklist interno por tarefa; /checklist eliminado; migration 0015 NAO aplicada"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -87,6 +87,9 @@ Recent decisions affecting current work:
 - [quick-260714-j92]: Padrao de funcao de dados = poucas queries AGREGADAS sequenciais + merge em memoria via modulo puro testado (pool max=3, max_pipeline=0). Mesmo padrao do 260714-ita. Nada de paralelismo dentro da mesma funcao.
 - [quick-260714-ita]: Matematica financeira mora em modulo puro (`@/lib/financeiro/calculos`, zero import de db/auth/react) — actions e UI so consomem. Torna os numeros testaveis sem banco e evita a mesma conta divergir entre telas.
 - [quick-260714-ita]: Actions que rodam dentro de um Promise.all da pagina executam suas queries SEQUENCIALMENTE (pool max=3) — paralelizar por dentro reintroduz o travamento corrigido no 260713-usi.
+- [quick-260714-qsy]: Tarefas recorrentes nascem pelo CALENDARIO, nunca pelo check — a de ontem em aberto vira `nao_realizada` e a de hoje aparece do mesmo jeito. Modelo MOLDE (eh_molde=true, nunca listado) + ocorrencias via tarefa_mae_id; a regra vive SO no molde.
+- [quick-260714-qsy]: Materializacao de ocorrencias e PREGUICOSA (ao abrir /tarefas), nao por cron — os 2 slots de cron do plano Hobby da Vercel ja estao ocupados (sync-meta + relatorios-semanais). Se o plano virar Pro, um cron diario pode assumir sem reescrever: getTarefasDoDia e idempotente pelo indice unico (tarefa_mae_id, data).
+- [quick-260714-qsy]: Janela de materializacao = hoje-30 .. hoje+60 (teto proposital: navegar para 2030 nao explode linhas).
 
 ### Pending Todos
 
@@ -134,9 +137,10 @@ None yet.
 | 260714-fast | Painel: olho de privacidade sem sobrepor icone, alturas uniformes e tendencias/sparklines reais nos 6 KPIs | 2026-07-14 | c764fd8 | — |
 | 260714-ita | Financeiro — aba Visao Analitica (taxa de renovacao, MRR previsto, receita avulsa, lucro/cliente, despesas vs faturamento por faixa, dependencia de MRR Top5/Top10) + KPIs do Overview com "mes ant. R$X" e variacao %, chip "Dia X/Y (Z%)" no mes corrente; matematica isolada em modulo puro testado (30 testes); sem migration | 2026-07-14 | 13c66f3 | [260714-ita-financeiro-aba-visao-analitica-renovacao](./quick/260714-ita-financeiro-aba-visao-analitica-renovacao/) |
 | 260714-j92 | Clientes — /clientes vira lista compacta (1 linha/cliente) com busca por nome e abas por status (Ativos/Aguardando Inicio/Em Aviso/Pausados/Inativos/Todos); N+1 removido: getClientesLista() faz 6 queries AGREGADAS sequenciais + merge em modulo puro testado (14 testes); status novos aguardando_inicio/em_aviso + migration 0014 GERADA e NAO aplicada; cliente-card.tsx removido | 2026-07-14 | 773d120 | [260714-j92-clientes-lista-compacta-com-abas-por-sta](./quick/260714-j92-clientes-lista-compacta-com-abas-por-sta/) |
+| 260714-qsy | Modulo Tarefas estilo ClickUp — tabelas tarefas/tarefa_checklist_items (migration 0015 GERADA, NAO aplicada); modelo MOLDE + ocorrencias materializadas PREGUICOSAMENTE ao abrir /tarefas (sem cron novo: 2 slots do Hobby ocupados), idempotente por engine pura + indice unico (tarefa_mae_id, data) com onConflictDoNothing; engine de recorrencia PURA sob TDD (26 testes: dias uteis, dia sim/dia nao, mensal grampeando 31 jan->28 fev, anual 29/fev); getTarefasDoDia com 10 queries sequenciais agregadas; tela /tarefas (seletor de dia, blocos Atrasadas/Dia/Concluidas, sheet com checklist interno e recorrencia); D-03: ocorrencia atrasada vira nao_realizada e a do dia nasce pelo calendario; /checklist DELETADO do menu e das rotas (checklist da ficha do cliente intocado, V2) | 2026-07-14 | 88892a3 | [260714-qsy-modulo-tarefas-estilo-clickup-checklist-](./quick/260714-qsy-modulo-tarefas-estilo-clickup-checklist-/) |
 
 ## Session Continuity
 
-Last session: 2026-07-14T14:10:00Z
-Stopped at: Completed quick-260714-j92 (lista compacta de clientes — migration 0014 GERADA, NAO aplicada)
+Last session: 2026-07-14T19:45:00Z
+Stopped at: Completed quick-260714-qsy (módulo Tarefas — migration 0015 GERADA, NAO aplicada)
 Resume file: None
