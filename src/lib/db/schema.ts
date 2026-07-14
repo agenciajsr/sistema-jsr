@@ -276,6 +276,56 @@ export const documentosRelations = relations(documentos, ({ one }) => ({
   uploadPor: one(profiles, { fields: [documentos.uploadPorId], references: [profiles.id] }),
 }))
 
+// --- Alertas persistidos ---
+// Alimentada pelo cron diário (avaliarEPersistirAlertas). A identidade lógica de
+// um alerta é a chaveDedup (o mesmo id estável que os avaliadores já produzem,
+// ex.: `verba-${contaId}`) — uma única linha por chave, com ciclo de vida
+// novo → lido → resolvido (e reabertura automática se o problema voltar).
+export const alertas = pgTable('alertas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // text (não pgEnum) de propósito: novos tipos de alerta não podem exigir migration
+  tipo: text('tipo').notNull(),
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'cascade' }),
+  clienteNome: text('cliente_nome').notNull(), // denormalizado — evita join na leitura
+  titulo: text('titulo').notNull(),
+  detalhe: text('detalhe').notNull(),
+  severidade: text('severidade').notNull(), // 'critico' | 'atencao' | 'info'
+  status: text('status').notNull().default('novo'), // 'novo' | 'lido' | 'resolvido'
+  chaveDedup: text('chave_dedup').notNull(), // identidade lógica (única)
+  dataRelevante: text('data_relevante').notNull(), // YYYY-MM-DD (mesmo formato do tipo Alerta)
+  detectadoEm: timestamp('detectado_em', { withTimezone: true }).notNull().defaultNow(),
+  resolvidoEm: timestamp('resolvido_em', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  chaveDedupIdx: uniqueIndex('alertas_chave_dedup_idx').on(table.chaveDedup),
+  statusIdx: index('alertas_status_idx').on(table.status), // contagem barata do sininho
+}))
+
+export const alertasRelations = relations(alertas, ({ one }) => ({
+  cliente: one(clientes, { fields: [alertas.clienteId], references: [clientes.id] }),
+}))
+
+// --- Relatórios persistidos (histórico) ---
+// Gravados pelo cron semanal (segunda 07h BR) e também pela geração manual.
+export const relatorios = pgTable('relatorios', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  clienteNome: text('cliente_nome').notNull(), // denormalizado — evita join na leitura
+  tipo: text('tipo').notNull(), // 'semanal' | 'manual'
+  periodoInicio: date('periodo_inicio').notNull(),
+  periodoFim: date('periodo_fim').notNull(),
+  conteudo: text('conteudo').notNull(), // texto pronto para WhatsApp
+  geradoEm: timestamp('gerado_em', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteGeradoIdx: index('relatorios_cliente_gerado_idx').on(table.clienteId, table.geradoEm),
+}))
+
+export const relatoriosRelations = relations(relatorios, ({ one }) => ({
+  cliente: one(clientes, { fields: [relatorios.clienteId], references: [clientes.id] }),
+}))
+
 // --- Credenciais do Google (integração com o Google Calendar) ---
 // Tabela SINGLE-TENANT: o app tem UM único usuário, então esta tabela guarda
 // no máximo UMA linha (a conta Google conectada). NÃO há coluna de tenant/org.
