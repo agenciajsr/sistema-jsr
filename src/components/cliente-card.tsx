@@ -11,12 +11,16 @@ type Cliente = typeof clientes.$inferSelect
 // D-10: cores exatas de badge de status (01-UI-SPEC.md § Status Badge Colors).
 const STATUS_LABEL: Record<Cliente['status'], string> = {
   ativo: 'Ativo',
+  aguardando_inicio: 'Aguardando Início',
+  em_aviso: 'Em Aviso',
   pausado: 'Pausado',
   encerrado: 'Encerrado',
 }
 
 const STATUS_COLOR: Record<Cliente['status'], string> = {
   ativo: '#16A34A',
+  aguardando_inicio: '#2563EB',
+  em_aviso: '#D97706',
   pausado: '#D97706',
   encerrado: '#71717A',
 }

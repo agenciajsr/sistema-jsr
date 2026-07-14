@@ -10,7 +10,7 @@ export const clienteSchema = z.object({
   nicho: z.enum(['ecommerce', 'negocio_local', 'infoproduto'], {
     message: 'Selecione um nicho válido',
   }),
-  status: z.enum(['ativo', 'pausado', 'encerrado']).default('ativo'),
+  status: z.enum(['ativo', 'pausado', 'encerrado', 'aguardando_inicio', 'em_aviso']).default('ativo'),
   // Contato
   contatoNome: z.string().optional(),
   contatoTelefone: z.string().optional(),

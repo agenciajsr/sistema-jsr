@@ -659,6 +659,8 @@ function ClienteFormEditar({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ativo">Ativo</SelectItem>
+                    <SelectItem value="aguardando_inicio">Aguardando Início</SelectItem>
+                    <SelectItem value="em_aviso">Em Aviso</SelectItem>
                     <SelectItem value="pausado">Pausado</SelectItem>
                     <SelectItem value="encerrado">Encerrado</SelectItem>
                   </SelectContent>

@@ -3,7 +3,10 @@ import { relations } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
 export const nichoEnum = pgEnum('nicho', ['ecommerce', 'negocio_local', 'infoproduto'])
-export const clienteStatusEnum = pgEnum('cliente_status', ['ativo', 'pausado', 'encerrado'])
+// `aguardando_inicio` = lead que já fechou contrato mas está em onboarding.
+// `em_aviso` = cliente ativo porém sinalizado (risco/atenção).
+// Valores novos vão no FIM: `ALTER TYPE ... ADD VALUE` só acrescenta, nunca reordena.
+export const clienteStatusEnum = pgEnum('cliente_status', ['ativo', 'pausado', 'encerrado', 'aguardando_inicio', 'em_aviso'])
 export const tipoPessoaEnum = pgEnum('tipo_pessoa', ['fisica', 'juridica'])
 export const formaPagamentoEnum = pgEnum('forma_pagamento', ['pix', 'boleto', 'cartao', 'transferencia'])
 
