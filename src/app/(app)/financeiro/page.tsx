@@ -16,7 +16,7 @@ import {
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
 import { getCurrentUser } from '@/lib/auth/session'
-import { withTimeout } from '@/lib/utils/with-timeout'
+import { withRetry } from '@/lib/utils/with-retry'
 
 import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
@@ -43,32 +43,46 @@ export default async function FinanceiroPage({
   const mes = params.mes ? Number(params.mes) : agora.getMonth() + 1
   const ano = params.ano ? Number(params.ano) : agora.getFullYear()
 
-  // Aquece UMA conexão + valida a sessão ANTES de disparar as 8 queries em
-  // paralelo. Abrir 3 conexões frias simultâneas no cold start estava travando
-  // só nesta página (a mais pesada); com 1 conexão já quente, o pooler lida melhor.
+  // Estratégia anti-travamento (nesta ordem):
+  // 1. Aquecimento: valida a sessão e abre UMA conexão antes das queries.
+  // 2. Carga em 2 lotes sequenciais de 4 (achata o pico de conexões frias).
+  // 3. Retry automático (withRetry) — o "F5 automático" — antes de desistir.
+  // 4. Tela de erro estática só como ÚLTIMO recurso (2 tentativas falharam).
   await getCurrentUser()
+
+  // Factory (não Promise pronta): cada tentativa do withRetry redispara as
+  // queries do zero — a 2ª tentativa pega as conexões já quentes do pool.
+  const carregarDados = async () => {
+    // Lote 1: com pool max=3, disparar 8 queries de uma vez força 2 conexões
+    // frias extras no pico do cold start — 2 lotes de 4 achatam esse pico.
+    const [resumo, mrr, transacoes, clientesAtivos] = await Promise.all([
+      getResumoFinanceiro(mes, ano),
+      calcularMrr(),
+      listTransacoes({ mes, ano }),
+      db
+        .select({ id: clientes.id, nome: clientes.nome })
+        .from(clientes)
+        .where(eq(clientes.status, 'ativo')),
+    ])
+    // Lote 2: reaproveita as conexões já quentes do lote 1.
+    const [contasReceber, contasPagar, previsao, profilesList] = await Promise.all([
+      getContasAReceber(),
+      getContasAPagar(),
+      getPrevisaoCaixa(),
+      getProfiles(),
+    ])
+    return [resumo, mrr, transacoes, clientesAtivos, contasReceber, contasPagar, previsao, profilesList] as const
+  }
 
   let dados
   try {
-    dados = await withTimeout(
-      Promise.all([
-        getResumoFinanceiro(mes, ano),
-        calcularMrr(),
-        listTransacoes({ mes, ano }),
-        db
-          .select({ id: clientes.id, nome: clientes.nome })
-          .from(clientes)
-          .where(eq(clientes.status, 'ativo')),
-        getContasAReceber(),
-        getContasAPagar(),
-        getPrevisaoCaixa(),
-        getProfiles(),
-      ]),
-      15_000,
-      'financeiro-load',
-    )
+    dados = await withRetry(carregarDados, {
+      timeoutMs: 12_000, // 1ª tentativa: falha rápido no soluço do pooler
+      retryTimeoutMs: 15_000, // 2ª tentativa: conexões já quentes — o "F5 automático"
+      label: 'financeiro-load',
+    })
   } catch {
-    // Soluço de conexão do pooler: falha rápido com uma tela limpa de "recarregar"
+    // Último recurso: as DUAS tentativas falharam. Tela limpa de "recarregar"
     // em vez de congelar até o maxDuration e virar 504.
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
