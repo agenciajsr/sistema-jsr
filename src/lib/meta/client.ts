@@ -5,9 +5,18 @@ import { metaAdAccountsResponseSchema, metaAdInsightsResponseSchema, metaInsight
 const META_BASE_URL = 'https://graph.facebook.com'
 
 function getEnv(key: string): string {
-  const val = process.env[key]
+  const val = process.env[key]?.trim()
   if (!val) throw new Error(`Variavel de ambiente ${key} nao configurada. Verifique o .env.local.`)
   return val
+}
+
+// Normaliza a versão da Graph API: aceita "v25.0", "25.0", com espaços/aspas
+// acidentais do painel da Vercel — qualquer forma vira "v25.0". Sem isto, um
+// valor sem o "v" gera o erro criptico "Unknown path components" (code 2500)
+// em TODAS as chamadas, como aconteceu em produção em 14/jul/2026.
+function getApiVersion(): string {
+  const bruto = getEnv('META_API_VERSION').replace(/["']/g, '').trim()
+  return bruto.startsWith('v') ? bruto : `v${bruto}`
 }
 
 /**
@@ -15,7 +24,7 @@ function getEnv(key: string): string {
  * Adiciona access_token, pina versao, monitora rate limit.
  */
 async function metaFetch(path: string, params: Record<string, string> = {}): Promise<unknown> {
-  const version = getEnv('META_API_VERSION')
+  const version = getApiVersion()
   const token = getEnv('META_SYSTEM_USER_TOKEN')
 
   const url = new URL(`${META_BASE_URL}/${version}${path}`)
