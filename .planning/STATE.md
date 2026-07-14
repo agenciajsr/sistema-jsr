@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed quick-260714-ita (aba Visao Analitica no /financeiro — sem migration)
-last_updated: "2026-07-14T13:50:00Z"
-last_activity: "2026-07-14 - Completed quick task 260714-ita: aba Visao Analitica no /financeiro (renovacao, dependencia de MRR, despesas vs faturamento) + KPIs comparando com o mes anterior"
+stopped_at: Completed quick-260714-j92 (lista compacta de clientes — migration 0014 GERADA, NAO aplicada)
+last_updated: "2026-07-14T14:10:00Z"
+last_activity: "2026-07-14 - Completed quick task 260714-j92: /clientes vira lista compacta com busca e abas por status, N+1 removido (6 queries agregadas sequenciais), status aguardando_inicio/em_aviso + migration 0014 NAO aplicada"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -83,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 01]: z.input/z.output no useForm (3 generics do zodResolver) para resolver incompatibilidade de tipo quando o schema Zod usa .default() em um campo
 - [Phase 01]: Exclusao de cliente/contrato usa Server Actions inline (form action) definidas dentro do proprio Server Component de detalhe, mantendo a checagem role === admin e a copy exata no mesmo arquivo
 - [Phase 01]: ContratoForm evita o componente Dialog do shadcn (fora do Registry Safety do UI-SPEC), controlando visibilidade com useState
+- [quick-260714-j92]: Status novos (aguardando_inicio, em_aviso) sao ADITIVOS — nenhuma consulta status='ativo' (dashboard, financeiro, relatorios, alertas, copilot) foi alterada. Mudar a semantica de "cliente ativo" agora alteraria numeros de outras telas sem o usuario pedir. Revisitar quando o CRM entrar.
+- [quick-260714-j92]: Padrao de funcao de dados = poucas queries AGREGADAS sequenciais + merge em memoria via modulo puro testado (pool max=3, max_pipeline=0). Mesmo padrao do 260714-ita. Nada de paralelismo dentro da mesma funcao.
 - [quick-260714-ita]: Matematica financeira mora em modulo puro (`@/lib/financeiro/calculos`, zero import de db/auth/react) — actions e UI so consomem. Torna os numeros testaveis sem banco e evita a mesma conta divergir entre telas.
 - [quick-260714-ita]: Actions que rodam dentro de um Promise.all da pagina executam suas queries SEQUENCIALMENTE (pool max=3) — paralelizar por dentro reintroduz o travamento corrigido no 260713-usi.
 
@@ -131,9 +133,10 @@ None yet.
 | 260714-ccl | Alertas proativos persistidos — tabelas alertas/relatorios (migration 0013 NAO aplicada), avaliarEPersistirAlertas no cron sync-meta (dedup, reabertura, resolucao automatica), /alertas com abas novos/lidos/resolvidos, sininho conta novos; relatorio semanal automatico via 2o Vercel Cron (segunda 07h BR) com historico em /relatorios; funcao Inngest morta aposentada | 2026-07-14 | fef9b4c | [260714-ccl-acordar-alertas-proativos-tabela-alertas](./quick/260714-ccl-acordar-alertas-proativos-tabela-alertas/) |
 | 260714-fast | Painel: olho de privacidade sem sobrepor icone, alturas uniformes e tendencias/sparklines reais nos 6 KPIs | 2026-07-14 | c764fd8 | — |
 | 260714-ita | Financeiro — aba Visao Analitica (taxa de renovacao, MRR previsto, receita avulsa, lucro/cliente, despesas vs faturamento por faixa, dependencia de MRR Top5/Top10) + KPIs do Overview com "mes ant. R$X" e variacao %, chip "Dia X/Y (Z%)" no mes corrente; matematica isolada em modulo puro testado (30 testes); sem migration | 2026-07-14 | 13c66f3 | [260714-ita-financeiro-aba-visao-analitica-renovacao](./quick/260714-ita-financeiro-aba-visao-analitica-renovacao/) |
+| 260714-j92 | Clientes — /clientes vira lista compacta (1 linha/cliente) com busca por nome e abas por status (Ativos/Aguardando Inicio/Em Aviso/Pausados/Inativos/Todos); N+1 removido: getClientesLista() faz 6 queries AGREGADAS sequenciais + merge em modulo puro testado (14 testes); status novos aguardando_inicio/em_aviso + migration 0014 GERADA e NAO aplicada; cliente-card.tsx removido | 2026-07-14 | 773d120 | [260714-j92-clientes-lista-compacta-com-abas-por-sta](./quick/260714-j92-clientes-lista-compacta-com-abas-por-sta/) |
 
 ## Session Continuity
 
-Last session: 2026-07-14T13:50:00Z
-Stopped at: Completed quick-260714-ita (aba Visao Analitica no /financeiro — sem migration)
+Last session: 2026-07-14T14:10:00Z
+Stopped at: Completed quick-260714-j92 (lista compacta de clientes — migration 0014 GERADA, NAO aplicada)
 Resume file: None
