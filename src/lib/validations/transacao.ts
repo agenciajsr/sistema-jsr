@@ -11,7 +11,7 @@ export const transacaoSchema = z.object({
   diaVencto: z.coerce.number().int().min(1).max(31).optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
   notas: z.string().optional(),
   centroCusto: z.enum(['operacao', 'midia', 'infraestrutura']).optional().or(z.literal('')).transform(v => v || undefined),
-  recorrencia: z.enum(['mensal', 'trimestral', 'avulsa']).default('avulsa'),
+  recorrencia: z.enum(['semanal', 'mensal', 'trimestral', 'avulsa']).default('avulsa'),
   formaPagamento: z.enum(['pix', 'boleto', 'cartao', 'transferencia']).optional().or(z.literal('')).transform(v => v || undefined),
   responsavelId: z.string().uuid().optional().or(z.literal('')).transform(v => v || undefined),
   comprovanteUrl: z.string().url().optional().or(z.literal('')).transform(v => v || undefined),

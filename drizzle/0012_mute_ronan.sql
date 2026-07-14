@@ -1,0 +1,1 @@
+ALTER TYPE "public"."recorrencia" ADD VALUE 'semanal' BEFORE 'mensal';

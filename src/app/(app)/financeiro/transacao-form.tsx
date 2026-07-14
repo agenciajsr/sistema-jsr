@@ -264,6 +264,7 @@ export function TransacaoForm({
           <Label htmlFor="recorrencia">Recorrencia</Label>
           <select id="recorrencia" {...register('recorrencia')} className={SELECT_CLASS}>
             <option value="avulsa">Avulsa</option>
+            <option value="semanal">Semanal (toda semana)</option>
             <option value="mensal">Mensal</option>
             <option value="trimestral">Trimestral</option>
           </select>

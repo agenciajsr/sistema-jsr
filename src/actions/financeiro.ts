@@ -2,7 +2,7 @@
 
 import { eq, sql, and, lte, gte, desc, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { addMonths } from 'date-fns'
+import { addMonths, addWeeks } from 'date-fns'
 
 import { db } from '@/lib/db'
 import { transacoes, contratos, clientes, profiles } from '@/lib/db/schema'
@@ -72,11 +72,14 @@ export async function gerarParcelasRecorrentes(transacaoPaiId: string, input: Tr
     dataFinal = addMonths(hoje, 12)
   }
 
+  // Semanal avança 7 dias; mensal/trimestral avançam meses. 'avulsa' não gera parcelas.
+  const isSemanal = input.recorrencia === 'semanal'
   const incrementoMeses = input.recorrencia === 'trimestral' ? 3 : 1
+  const proximaData = (d: Date) => (isSemanal ? addWeeks(d, 1) : addMonths(d, incrementoMeses))
   const dataBase = new Date(input.data)
   const parcelas: (typeof transacoes.$inferInsert)[] = []
 
-  let dataParcela = addMonths(dataBase, incrementoMeses)
+  let dataParcela = proximaData(dataBase)
   while (dataParcela <= dataFinal) {
     parcelas.push({
       tipo: input.tipo,
@@ -94,7 +97,7 @@ export async function gerarParcelasRecorrentes(transacaoPaiId: string, input: Tr
       responsavelId: input.responsavelId ?? null,
       transacaoPaiId,
     })
-    dataParcela = addMonths(dataParcela, incrementoMeses)
+    dataParcela = proximaData(dataParcela)
   }
 
   if (parcelas.length > 0) {

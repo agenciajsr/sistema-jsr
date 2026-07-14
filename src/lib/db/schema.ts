@@ -76,7 +76,7 @@ export const tipoTransacaoEnum = pgEnum('tipo_transacao', ['receita', 'despesa']
 export const categoriaTransacaoEnum = pgEnum('categoria_transacao', ['mensalidade', 'projeto', 'outro', 'ferramenta', 'ads_agencia', 'salario'])
 export const statusTransacaoEnum = pgEnum('status_transacao', ['pago', 'pendente', 'vencido'])
 export const centroCustoEnum = pgEnum('centro_custo', ['operacao', 'midia', 'infraestrutura'])
-export const recorrenciaEnum = pgEnum('recorrencia', ['mensal', 'trimestral', 'avulsa'])
+export const recorrenciaEnum = pgEnum('recorrencia', ['semanal', 'mensal', 'trimestral', 'avulsa'])
 
 export const transacoes = pgTable('transacoes', {
   id: uuid('id').primaryKey().defaultRandom(),
