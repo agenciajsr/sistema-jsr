@@ -10,6 +10,7 @@ import {
   type TarefaPrioridade,
   type TarefaRecorrencia,
 } from '@/lib/tarefas/recorrencia'
+import { intervaloPadrao } from '@/lib/tarefas/quadro'
 
 // Módulo server comum — SEM 'use server': é chamado direto pelo Server Component
 // da página, não pelo client. Evita expor um endpoint desnecessário.
@@ -26,14 +27,24 @@ import {
 // /tarefas é o ÚNICO caminho que materializa ocorrências — e é idempotente:
 // a engine pura filtra o que já existe e o índice único (tarefa_mae_id, data)
 // derruba qualquer duplicata que escape por corrida entre requests.
+//
+// D-05: o RECORTE é um INTERVALO (o quadro mostra 7 dias por padrão), e a lista
+// volta CRUA — quem agrupa por status/estatísticas é o módulo puro ./quadro no
+// client. Mesmo desenho de clientes/lista.ts + agregar.ts.
 
 export type TarefaCard = {
   id: string
   titulo: string
   notas: string | null
+  descricao: string | null
   status: TarefaStatus
   prioridade: TarefaPrioridade
   data: string
+  dataInicio: string | null
+  tempoEstimado: string | null
+  etiquetas: string[]
+  codigo: string | null
+  codigoNum: number | null
   clienteId: string | null
   clienteNome: string | null
   responsavelId: string | null
@@ -45,16 +56,27 @@ export type TarefaCard = {
   checklistConcluidos: number
 }
 
-export type TarefasDoDia = {
-  dia: string
+export type TarefasDoPeriodo = {
+  inicio: string
+  fim: string
   hoje: string
-  atrasadas: TarefaCard[]
-  doDia: TarefaCard[]
-  concluidas: TarefaCard[]
+  tarefas: TarefaCard[]
 }
 
+export type ItemChecklist = {
+  id: string
+  texto: string
+  concluido: boolean
+  ordem: number
+  grupo: string
+}
+
+export type TarefaDetalhe = TarefaCard & { checklist: ItemChecklist[] }
+
 /** Linha crua vinda das SELECTs de tarefa (antes do merge do checklist). */
-type TarefaRow = Omit<TarefaCard, 'checklistTotal' | 'checklistConcluidos'>
+type TarefaRow = Omit<TarefaCard, 'checklistTotal' | 'checklistConcluidos' | 'etiquetas'> & {
+  etiquetas: unknown
+}
 
 /** ORDER BY prioridade: urgente primeiro. Enum do PG ordena pela ordem de
  *  declaração ('baixa','media','alta','urgente') → DESC dá urgente→baixa. */
@@ -64,9 +86,15 @@ const camposCard = {
   id: tarefas.id,
   titulo: tarefas.titulo,
   notas: tarefas.notas,
+  descricao: tarefas.descricao,
   status: tarefas.status,
   prioridade: tarefas.prioridade,
   data: tarefas.data,
+  dataInicio: tarefas.dataInicio,
+  tempoEstimado: tarefas.tempoEstimado,
+  etiquetas: tarefas.etiquetas,
+  codigo: tarefas.codigo,
+  codigoNum: tarefas.codigoNum,
   clienteId: tarefas.clienteId,
   clienteNome: clientes.nome,
   responsavelId: tarefas.responsavelId,
@@ -76,28 +104,60 @@ const camposCard = {
   tarefaMaeId: tarefas.tarefaMaeId,
 }
 
-function vazio(dia: string, hoje: string): TarefasDoDia {
-  return { dia, hoje, atrasadas: [], doDia: [], concluidas: [] }
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+/** Normaliza os params da URL para um intervalo sempre válido (D-01). */
+function resolverIntervalo(
+  hoje: string,
+  inicioParam?: string,
+  fimParam?: string
+): { inicio: string; fim: string } {
+  const padrao = intervaloPadrao(hoje)
+  const inicio = DATA_ISO.test(inicioParam ?? '') ? inicioParam! : padrao.inicio
+  const fimBruto = DATA_ISO.test(fimParam ?? '') ? fimParam! : padrao.fim
+  // Intervalo invertido na URL não devolve lista vazia sem explicação.
+  return { inicio, fim: fimBruto < inicio ? inicio : fimBruto }
 }
 
-export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasDoDia> {
+/** Converte a linha crua no card, aplicando o progresso agregado. */
+function paraCard(row: TarefaRow, progresso: Map<string, { total: number; feitos: number }>) {
+  const p = progresso.get(row.id)
+  return {
+    ...row,
+    // jsonb volta como unknown: normalizamos para array sempre.
+    etiquetas: (row.etiquetas as string[] | null) ?? [],
+    recorrenciaDias: (row.recorrenciaDias as number[] | null) ?? null,
+    checklistTotal: p?.total ?? 0,
+    checklistConcluidos: p?.feitos ?? 0,
+  }
+}
+
+export async function getTarefasDoPeriodo(
+  inicioParam?: string,
+  fimParam?: string
+): Promise<TarefasDoPeriodo> {
   // "Hoje" SEMPRE via hojeBrasilia(): o relógio cru do server roda em UTC na
   // Vercel e viraria o dia a partir das 21h BR. Datas comparadas como string ISO.
   const hoje = hojeBrasilia()
-  const dia = /^\d{4}-\d{2}-\d{2}$/.test(diaSelecionado ?? '') ? diaSelecionado! : hoje
+  const { inicio, fim } = resolverIntervalo(hoje, inicioParam, fimParam)
 
   try {
-    // 1. Janela da materialização — puro, sem query.
-    const { de, ate } = janelaMaterializacao(hoje, dia)
+    // 1. Janela da materialização — puro, sem query. O FIM do intervalo visível
+    //    é o "dia selecionado": o teto hoje+60 já mora na engine, então navegar
+    //    para 2030 continua não explodindo linhas.
+    const { de, ate } = janelaMaterializacao(hoje, fim)
 
-    // 2. Moldes ativos (a regra da série vive só aqui — D-04).
+    // 2. Moldes ativos (a regra da série vive só aqui — D-04 do quick anterior).
     const moldes = await db
       .select({
         id: tarefas.id,
         titulo: tarefas.titulo,
         notas: tarefas.notas,
+        descricao: tarefas.descricao,
         data: tarefas.data,
         prioridade: tarefas.prioridade,
+        tempoEstimado: tarefas.tempoEstimado,
+        etiquetas: tarefas.etiquetas,
         clienteId: tarefas.clienteId,
         responsavelId: tarefas.responsavelId,
         recorrencia: tarefas.recorrencia,
@@ -139,11 +199,14 @@ export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasD
         }).map((dataOcorrencia) => ({
           titulo: molde.titulo,
           notas: molde.notas,
+          descricao: molde.descricao,
           prioridade: molde.prioridade,
+          tempoEstimado: molde.tempoEstimado,
+          etiquetas: molde.etiquetas,
           clienteId: molde.clienteId,
           responsavelId: molde.responsavelId,
           data: dataOcorrencia,
-          // A ocorrência não carrega a regra: ela vive só no molde (D-04).
+          // A ocorrência não carrega a regra: ela vive só no molde.
           recorrencia: 'nenhuma' as const,
           ehMolde: false,
           tarefaMaeId: molde.id,
@@ -170,17 +233,22 @@ export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasD
               tarefaId: tarefaChecklistItems.tarefaId,
               texto: tarefaChecklistItems.texto,
               ordem: tarefaChecklistItems.ordem,
+              grupo: tarefaChecklistItems.grupo,
             })
             .from(tarefaChecklistItems)
             .where(inArray(tarefaChecklistItems.tarefaId, moldeIds))
             .orderBy(asc(tarefaChecklistItems.ordem))
 
           if (itensDosMoldes.length > 0) {
-            const itensPorMolde = new Map<string, { texto: string; ordem: number }[]>()
+            const itensPorMolde = new Map<
+              string,
+              { texto: string; ordem: number; grupo: string }[]
+            >()
             for (const it of itensDosMoldes) {
+              const item = { texto: it.texto, ordem: it.ordem, grupo: it.grupo }
               const lista = itensPorMolde.get(it.tarefaId)
-              if (lista) lista.push({ texto: it.texto, ordem: it.ordem })
-              else itensPorMolde.set(it.tarefaId, [{ texto: it.texto, ordem: it.ordem }])
+              if (lista) lista.push(item)
+              else itensPorMolde.set(it.tarefaId, [item])
             }
 
             const copias = nascidas.flatMap((ocorrencia) =>
@@ -189,6 +257,8 @@ export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasD
                   tarefaId: ocorrencia.id,
                   texto: item.texto,
                   ordem: item.ordem,
+                  // O agrupamento (D-08) precisa sobreviver à materialização.
+                  grupo: item.grupo,
                 })
               )
             )
@@ -201,10 +271,11 @@ export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasD
       }
     }
 
-    // 7. Varredura (D-03): ocorrência aberta de dia passado vira `nao_realizada`.
+    // 7. Varredura: ocorrência aberta de dia passado vira `nao_realizada`.
     //    A próxima nasce pelo CALENDÁRIO, não pelo check.
     //    ⚠️ Só ocorrências (tarefa_mae_id IS NOT NULL): tarefas AVULSAS atrasadas
-    //    continuam abertas de propósito — são elas que alimentam "Atrasadas".
+    //    continuam abertas de propósito — elas aparecem em Pendentes quando o
+    //    intervalo as alcança.
     await db
       .update(tarefas)
       .set({ status: 'nao_realizada', updatedAt: new Date() })
@@ -216,74 +287,74 @@ export async function getTarefasDoDia(diaSelecionado?: string): Promise<TarefasD
         )
       )
 
-    // 8. As tarefas do dia selecionado (moldes nunca aparecem na lista).
-    const doDiaRows = (await db
+    // 8. As tarefas do INTERVALO (moldes nunca aparecem no quadro).
+    const linhas = (await db
       .select(camposCard)
       .from(tarefas)
       .leftJoin(clientes, eq(tarefas.clienteId, clientes.id))
       .leftJoin(profiles, eq(tarefas.responsavelId, profiles.id))
-      .where(and(eq(tarefas.ehMolde, false), eq(tarefas.data, dia)))
+      .where(and(eq(tarefas.ehMolde, false), gte(tarefas.data, inicio), lte(tarefas.data, fim)))
       .orderBy(ORDEM_PRIORIDADE, asc(tarefas.createdAt))) as TarefaRow[]
 
-    // 9. Atrasadas — relativo ao HOJE real, não ao dia selecionado.
-    const atrasadasRows = (await db
-      .select(camposCard)
-      .from(tarefas)
-      .leftJoin(clientes, eq(tarefas.clienteId, clientes.id))
-      .leftJoin(profiles, eq(tarefas.responsavelId, profiles.id))
-      .where(
-        and(
-          eq(tarefas.ehMolde, false),
-          lt(tarefas.data, hoje),
-          inArray(tarefas.status, ['a_fazer', 'em_andamento'])
-        )
-      )
-      .orderBy(ORDEM_PRIORIDADE, asc(tarefas.createdAt))) as TarefaRow[]
-
-    // 10. Progresso do checklist AGREGADO — 1 query, nunca N+1.
-    const todosOsIds = [...new Set([...doDiaRows, ...atrasadasRows].map((t) => t.id))]
+    // 9. Progresso do checklist AGREGADO — 1 query, nunca N+1.
+    const ids = linhas.map((t) => t.id)
     const progresso = new Map<string, { total: number; feitos: number }>()
 
-    if (todosOsIds.length > 0) {
-      const linhas = await db
+    if (ids.length > 0) {
+      const agregados = await db
         .select({
           tarefaId: tarefaChecklistItems.tarefaId,
           total: sql<number>`count(*)::int`,
           feitos: sql<number>`count(*) filter (where ${tarefaChecklistItems.concluido})::int`,
         })
         .from(tarefaChecklistItems)
-        .where(inArray(tarefaChecklistItems.tarefaId, todosOsIds))
+        .where(inArray(tarefaChecklistItems.tarefaId, ids))
         .groupBy(tarefaChecklistItems.tarefaId)
 
-      for (const l of linhas) progresso.set(l.tarefaId, { total: l.total, feitos: l.feitos })
+      for (const a of agregados) progresso.set(a.tarefaId, { total: a.total, feitos: a.feitos })
     }
 
-    const paraCard = (row: TarefaRow): TarefaCard => {
-      const p = progresso.get(row.id)
-      return {
-        ...row,
-        recorrenciaDias: (row.recorrenciaDias as number[] | null) ?? null,
-        checklistTotal: p?.total ?? 0,
-        checklistConcluidos: p?.feitos ?? 0,
-      }
-    }
-
-    // Separação dos blocos em memória — sem query extra.
-    return {
-      dia,
-      hoje,
-      atrasadas: atrasadasRows.map(paraCard),
-      doDia: doDiaRows
-        .filter((t) => t.status === 'a_fazer' || t.status === 'em_andamento')
-        .map(paraCard),
-      // `nao_realizada` mora aqui junto das concluídas, com badge próprio na UI.
-      concluidas: doDiaRows
-        .filter((t) => t.status === 'concluida' || t.status === 'nao_realizada')
-        .map(paraCard),
-    }
+    // Lista CRUA (D-05): o client agrupa/filtra com o módulo puro ./quadro.
+    return { inicio, fim, hoje, tarefas: linhas.map((l) => paraCard(l, progresso)) }
   } catch (e) {
     // Nunca lança: a página degrada para o estado vazio em vez de quebrar.
-    console.error('[getTarefasDoDia]', e)
-    return vazio(dia, hoje)
+    console.error('[getTarefasDoPeriodo]', e)
+    return { inicio, fim, hoje, tarefas: [] }
+  }
+}
+
+/** A tarefa + seu checklist, para a página cheia /tarefas/[id]. */
+export async function getTarefa(id: string): Promise<TarefaDetalhe | null> {
+  try {
+    // 2 queries SEQUENCIAIS (nada de paralelizar com Promise — ver o cabeçalho).
+    const [linha] = (await db
+      .select(camposCard)
+      .from(tarefas)
+      .leftJoin(clientes, eq(tarefas.clienteId, clientes.id))
+      .leftJoin(profiles, eq(tarefas.responsavelId, profiles.id))
+      .where(eq(tarefas.id, id))) as TarefaRow[]
+
+    if (!linha) return null
+
+    const checklist = await db
+      .select({
+        id: tarefaChecklistItems.id,
+        texto: tarefaChecklistItems.texto,
+        concluido: tarefaChecklistItems.concluido,
+        ordem: tarefaChecklistItems.ordem,
+        grupo: tarefaChecklistItems.grupo,
+      })
+      .from(tarefaChecklistItems)
+      .where(eq(tarefaChecklistItems.tarefaId, id))
+      .orderBy(asc(tarefaChecklistItems.grupo), asc(tarefaChecklistItems.ordem))
+
+    const total = checklist.length
+    const feitos = checklist.filter((i) => i.concluido).length
+    const progresso = new Map([[id, { total, feitos }]])
+
+    return { ...paraCard(linha, progresso), checklist }
+  } catch (e) {
+    console.error('[getTarefa]', e)
+    return null
   }
 }

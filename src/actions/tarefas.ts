@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
@@ -50,23 +50,36 @@ export async function criarTarefa(input: TarefaInput) {
       .values({
         titulo: v.titulo,
         notas: v.notas || null,
+        descricao: v.descricao || null,
         data: v.data,
+        dataInicio: v.dataInicio ?? null,
         clienteId: v.clienteId ?? null,
         responsavelId: v.responsavelId ?? null,
         prioridade: v.prioridade,
+        tempoEstimado: v.tempoEstimado || null,
+        etiquetas: v.etiquetas ?? [],
         recorrencia: v.recorrencia,
         recorrenciaDias: v.recorrencia === 'personalizada' ? (v.recorrenciaDias ?? []) : null,
         ehMolde: ehRecorrente,
         ativa: true,
-        status: 'a_fazer',
+        // O "+ Adicionar tarefa" da coluna já nasce no status dela.
+        status: v.status,
+        // ⚠️ `codigo`/`codigoNum` NÃO entram aqui: são gerados pelo banco (D-04).
       })
       .returning({ id: tarefas.id })
 
-    const itens = (v.checklist ?? []).filter((t) => t.trim().length > 0)
+    const itens = (v.checklist ?? []).filter((i) => i.texto.trim().length > 0)
     if (itens.length > 0) {
       // Na recorrente os itens moram no MOLDE e são copiados para cada ocorrência.
+      // A `ordem` é contada DENTRO do grupo (D-08).
+      const ordemPorGrupo = new Map<string, number>()
       await db.insert(tarefaChecklistItems).values(
-        itens.map((texto, i) => ({ tarefaId: criada.id, texto: texto.trim(), ordem: i }))
+        itens.map((item) => {
+          const grupo = item.grupo?.trim() || 'Checklist'
+          const ordem = ordemPorGrupo.get(grupo) ?? 0
+          ordemPorGrupo.set(grupo, ordem + 1)
+          return { tarefaId: criada.id, texto: item.texto.trim(), ordem, grupo }
+        })
       )
     }
 
@@ -92,11 +105,15 @@ export async function atualizarTarefa(id: string, campos: AtualizarTarefaInput) 
 
     if (v.titulo !== undefined) set.titulo = v.titulo
     if (v.notas !== undefined) set.notas = v.notas || null
+    if (v.descricao !== undefined) set.descricao = v.descricao || null
     if (v.data !== undefined) set.data = v.data
     if (v.prioridade !== undefined) set.prioridade = v.prioridade
+    if (v.etiquetas !== undefined) set.etiquetas = v.etiquetas
+    if (v.tempoEstimado !== undefined) set.tempoEstimado = v.tempoEstimado || null
     // '' já virou undefined no schema; a chave só existe se veio no input.
     if ('clienteId' in campos) set.clienteId = v.clienteId ?? null
     if ('responsavelId' in campos) set.responsavelId = v.responsavelId ?? null
+    if ('dataInicio' in campos) set.dataInicio = v.dataInicio ?? null
 
     if (v.status !== undefined) {
       set.status = v.status
@@ -107,6 +124,8 @@ export async function atualizarTarefa(id: string, campos: AtualizarTarefaInput) 
     await db.update(tarefas).set(set).where(eq(tarefas.id, id))
 
     revalidatePath('/tarefas')
+    // Sem isto a página de detalhe serve dado velho depois de salvar.
+    revalidatePath(`/tarefas/${id}`)
     return { data: { ok: true } }
   } catch (e) {
     console.error('[atualizarTarefa]', e)
@@ -152,6 +171,7 @@ export async function atualizarRecorrencia(id: string, input: RecorrenciaInput) 
       .where(eq(tarefas.id, alvo))
 
     revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${id}`)
     return { data: { ok: true, alvo } }
   } catch (e) {
     console.error('[atualizarRecorrencia]', e)
@@ -159,25 +179,35 @@ export async function atualizarRecorrencia(id: string, input: RecorrenciaInput) 
   }
 }
 
-export async function addChecklistItemTarefa(tarefaId: string, texto: string) {
+export async function addChecklistItemTarefa(
+  tarefaId: string,
+  texto: string,
+  grupo: string = 'Checklist'
+) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
 
   const limpo = texto.trim()
   if (!limpo) return { error: 'Informe o item do checklist.' }
 
+  const grupoLimpo = grupo.trim() || 'Checklist'
+
   try {
+    // D-08: a ordem é contada DENTRO do grupo, não na tarefa inteira.
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)::int` })
       .from(tarefaChecklistItems)
-      .where(eq(tarefaChecklistItems.tarefaId, tarefaId))
+      .where(
+        and(eq(tarefaChecklistItems.tarefaId, tarefaId), eq(tarefaChecklistItems.grupo, grupoLimpo))
+      )
 
     const [item] = await db
       .insert(tarefaChecklistItems)
-      .values({ tarefaId, texto: limpo, ordem: total })
+      .values({ tarefaId, texto: limpo, ordem: total, grupo: grupoLimpo })
       .returning({ id: tarefaChecklistItems.id })
 
     revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${tarefaId}`)
     return { data: { id: item.id } }
   } catch (e) {
     console.error('[addChecklistItemTarefa]', e)
@@ -190,12 +220,15 @@ export async function toggleChecklistItemTarefa(id: string, concluido: boolean) 
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
 
   try {
-    await db
+    // O returning devolve a tarefa dona — sem ela não dá para revalidar o detalhe.
+    const [item] = await db
       .update(tarefaChecklistItems)
       .set({ concluido })
       .where(eq(tarefaChecklistItems.id, id))
+      .returning({ tarefaId: tarefaChecklistItems.tarefaId })
 
     revalidatePath('/tarefas')
+    if (item) revalidatePath(`/tarefas/${item.tarefaId}`)
     return { data: { ok: true } }
   } catch (e) {
     console.error('[toggleChecklistItemTarefa]', e)
@@ -208,9 +241,13 @@ export async function deleteChecklistItemTarefa(id: string) {
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
 
   try {
-    await db.delete(tarefaChecklistItems).where(eq(tarefaChecklistItems.id, id))
+    const [item] = await db
+      .delete(tarefaChecklistItems)
+      .where(eq(tarefaChecklistItems.id, id))
+      .returning({ tarefaId: tarefaChecklistItems.tarefaId })
 
     revalidatePath('/tarefas')
+    if (item) revalidatePath(`/tarefas/${item.tarefaId}`)
     return { data: { ok: true } }
   } catch (e) {
     console.error('[deleteChecklistItemTarefa]', e)
@@ -247,10 +284,11 @@ export async function getChecklistDaTarefa(tarefaId: string) {
         texto: tarefaChecklistItems.texto,
         concluido: tarefaChecklistItems.concluido,
         ordem: tarefaChecklistItems.ordem,
+        grupo: tarefaChecklistItems.grupo,
       })
       .from(tarefaChecklistItems)
       .where(eq(tarefaChecklistItems.tarefaId, tarefaId))
-      .orderBy(tarefaChecklistItems.ordem)
+      .orderBy(tarefaChecklistItems.grupo, tarefaChecklistItems.ordem)
 
     return { data: itens }
   } catch (e) {
