@@ -17,14 +17,27 @@ import { PerformanceClienteTable } from '@/components/dashboard/performance-clie
 import { AiInsightFloat } from '@/components/dashboard/ai-insight-float'
 import { EvolucaoFinanceira } from '@/components/dashboard/evolucao-financeira'
 import { FiltroPeriodo } from '@/components/dashboard/filtro-periodo'
-import { getDashboardData } from '@/lib/dashboard/data'
+import { getDashboardData, type TendenciaKpi } from '@/lib/dashboard/data'
 import { getCurrentUser } from '@/lib/auth/session'
+import type { Tendencia } from '@/lib/mock/dashboard-ref'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
 export const maxDuration = 60
 
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
+const formatadorPct = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
+
+// TendenciaKpi (dados) → Tendencia (exibição): "14,6%" com direção da seta.
+function exibirTendencia(t: TendenciaKpi | null | undefined): Tendencia | undefined {
+  if (!t) return undefined
+  return { valor: `${formatadorPct.format(t.pct)}%`, direcao: t.direcao }
+}
+
+// Sparkline só quando a série tem algum dado real — série toda zerada é ruído.
+function exibirSerie(serie: number[] | undefined): number[] | undefined {
+  return serie && serie.some((v) => v !== 0) ? serie : undefined
+}
 
 type Props = {
   searchParams: Promise<{ periodo?: string }>
@@ -80,24 +93,44 @@ export default async function PainelPage({ searchParams }: Props) {
           receitaMes={data?.kpis.receitaMes ?? 0}
           percentRecebido={data?.financeiro.percentRecebido ?? 0}
           lucroMes={data?.kpis.lucroMes ?? 0}
+          tendencias={{
+            mrr: exibirTendencia(data?.tendencias.mrr),
+            receita: exibirTendencia(data?.tendencias.receita),
+            lucro: exibirTendencia(data?.tendencias.lucro),
+          }}
+          series={{
+            mrr: exibirSerie(data?.series.mrr),
+            lucro: exibirSerie(data?.series.lucro),
+          }}
         />
         <KpiCard
           label="Clientes Ativos"
           valor={formatadorNumero.format(data?.kpis.clientesAtivos ?? 0)}
           icon={Users}
           cor="info"
+          tendencia={
+            data && data.novosClientesMes > 0
+              ? { valor: `${data.novosClientesMes} este mês`, direcao: 'up' }
+              : undefined
+          }
         />
         <KpiCard
           label="Campanhas Ativas"
           valor={formatadorNumero.format(data?.kpis.campanhasAtivas ?? 0)}
           icon={Megaphone}
           cor="orange"
+          helper={
+            data && data.clientesComCampanhas > 0
+              ? `Em ${data.clientesComCampanhas} cliente${data.clientesComCampanhas > 1 ? 's' : ''}`
+              : undefined
+          }
         />
         <KpiCard
           label="Conversas (7d)"
           valor={formatadorNumero.format(data?.kpis.conversasTotais ?? 0)}
           icon={MessageCircle}
           cor="whatsapp"
+          helper="últimos 7 dias"
         />
       </div>
 

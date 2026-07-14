@@ -55,12 +55,23 @@ export type EvolucaoMensal = {
   despesa: number
 }
 
+// Variação percentual vs mês anterior (para as setas ↗/↘ dos KPIs).
+export type TendenciaKpi = { pct: number; direcao: 'up' | 'down' }
+
 export type DashboardData = {
   kpis: DashboardKpis
   clientesPerformance: ClientePerformance[]
   financeiro: ResumoFinanceiroDash
   atividadeRecente: AtividadeItem[]
   evolucaoMensal: EvolucaoMensal[]
+  /** Séries dos últimos 6 meses (sparklines dos KPIs) — dados reais, mais antigo → atual. */
+  series: { mrr: number[]; receita: number[]; lucro: number[] }
+  /** Variação vs mês anterior; null quando não há base de comparação. */
+  tendencias: { mrr: TendenciaKpi | null; receita: TendenciaKpi | null; lucro: TendenciaKpi | null }
+  /** Clientes novos no mês corrente (helper "↑ N este mês"). */
+  novosClientesMes: number
+  /** Nº de clientes distintos com campanhas ativas nos últimos 7 dias. */
+  clientesComCampanhas: number
 }
 
 /**
@@ -88,6 +99,8 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
     atividadeTransResult,
     atividadeClientesResult,
     evolucaoResult,
+    contratosHistResult,
+    novosClientesResult,
   ] = await Promise.all([
     // MRR: soma de contratos ativos
     db.select({
@@ -115,11 +128,14 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       .from(clientes)
       .where(eq(clientes.status, 'ativo')),
 
-    // Campanhas ativas (distinct campaign_id nos últimos 7 dias)
+    // Campanhas ativas (distinct campaign_id nos últimos 7 dias) + em quantos
+    // clientes distintos elas rodam (helper "Em N clientes" do KPI)
     db.select({
       total: sql<string>`count(distinct ${campaignInsights.campaignId})`,
+      clientes: sql<string>`count(distinct ${adAccounts.clienteId})`,
     })
       .from(campaignInsights)
+      .innerJoin(adAccounts, eq(campaignInsights.adAccountId, adAccounts.id))
       .where(gte(campaignInsights.date, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10))),
 
     // Clientes com contas (para performance)
@@ -171,6 +187,20 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       .where(sql`${transacoes.data}::date >= (current_date - interval '6 months')`)
       .groupBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`)
       .orderBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`),
+
+    // Contratos vigentes nos últimos 6 meses (série histórica do MRR)
+    db.select({
+      valorMensal: contratos.valorMensal,
+      dataInicio: contratos.dataInicio,
+      dataVencimento: contratos.dataVencimento,
+    })
+      .from(contratos)
+      .where(sql`${contratos.dataVencimento} >= (current_date - interval '6 months')`),
+
+    // Clientes novos no mês corrente (helper "↑ N este mês")
+    db.select({ total: count() })
+      .from(clientes)
+      .where(sql`${clientes.createdAt} >= date_trunc('month', current_date)`),
   ])
 
   const mrr = Number(mrrResult[0]?.total ?? 0)
@@ -257,6 +287,42 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
     despesa: Number(r.despesa),
   }))
 
+  // --- Séries e tendências dos KPIs (últimos 6 meses, terminando no período selecionado) ---
+  // Chaves 'YYYY-MM' do mais antigo ao selecionado; meses sem transação entram como 0.
+  const chavesMeses: string[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ano, mes - 1 - i, 1)
+    chavesMeses.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  const evolucaoPorMes = new Map(evolucaoMensal.map((e) => [e.mes, e]))
+  const serieReceita = chavesMeses.map((k) => evolucaoPorMes.get(k)?.receita ?? 0)
+  const serieLucro = chavesMeses.map((k) => {
+    const e = evolucaoPorMes.get(k)
+    return e ? e.receita - e.despesa : 0
+  })
+
+  // MRR histórico: soma dos contratos vigentes em cada mês (datas ISO comparam como string).
+  const serieMrr = chavesMeses.map((k) => {
+    const [ka, km] = k.split('-').map(Number)
+    const primeiroDia = `${k}-01`
+    const ultimoDia = `${k}-${String(new Date(ka, km, 0).getDate()).padStart(2, '0')}`
+    return contratosHistResult.reduce((soma, c) => {
+      const vigente = c.dataInicio <= ultimoDia && c.dataVencimento >= primeiroDia
+      return vigente ? soma + Number(c.valorMensal) : soma
+    }, 0)
+  })
+
+  // Variação % vs mês anterior — só quando há base positiva de comparação
+  // (evita % sem sentido sobre base zero/negativa). Nunca inventa número.
+  const calcTendencia = (serie: number[]): TendenciaKpi | null => {
+    const atual = serie[serie.length - 1]
+    const anterior = serie[serie.length - 2]
+    if (anterior === undefined || anterior <= 0) return null
+    const pct = Math.round(((atual - anterior) / anterior) * 1000) / 10
+    return { pct: Math.abs(pct), direcao: pct >= 0 ? 'up' : 'down' }
+  }
+
   return {
     kpis: {
       mrr,
@@ -277,6 +343,14 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
     },
     atividadeRecente,
     evolucaoMensal,
+    series: { mrr: serieMrr, receita: serieReceita, lucro: serieLucro },
+    tendencias: {
+      mrr: calcTendencia(serieMrr),
+      receita: calcTendencia(serieReceita),
+      lucro: calcTendencia(serieLucro),
+    },
+    novosClientesMes: novosClientesResult[0]?.total ?? 0,
+    clientesComCampanhas: Number(campanhasResult[0]?.clientes ?? 0),
   }
   } catch (e) {
     // Blip de conexão / erro transitório: degrada graciosamente (dashboard

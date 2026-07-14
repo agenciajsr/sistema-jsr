@@ -24,6 +24,8 @@ type KpiCardProps = {
   helper?: string
   serie?: number[]
   progresso?: number
+  /** Slot opcional no cabeçalho (à esquerda do ícone) — ex.: botão de privacidade. */
+  acao?: React.ReactNode
 }
 
 // Card da faixa superior do Painel: ícone colorido, valor grande, tendência e
@@ -37,15 +39,19 @@ export function KpiCard({
   helper,
   serie,
   progresso,
+  acao,
 }: KpiCardProps) {
   const config = CONFIG_COR[cor]
 
   return (
-    <Card className="gap-3 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]">
-      <div className="flex items-start justify-between">
+    <Card className="h-full gap-3 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]">
+      <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <div className={cn('flex size-9 items-center justify-center rounded-xl', config.icone)}>
-          <Icon className="size-4.5" />
+        <div className="flex shrink-0 items-center gap-1">
+          {acao}
+          <div className={cn('flex size-9 items-center justify-center rounded-xl', config.icone)}>
+            <Icon className="size-4.5" />
+          </div>
         </div>
       </div>
 
@@ -70,15 +76,17 @@ export function KpiCard({
 
       {helper && <p className="-mt-1 text-xs text-muted-foreground">{helper}</p>}
 
+      {/* mt-auto ancora o mini-visual no rodapé — cards da mesma linha ficam
+          com alturas e alinhamento uniformes mesmo com conteúdos diferentes. */}
       {serie && serie.length > 0 && (
-        <div className="mt-1">
+        <div className="mt-auto pt-1">
           <Sparkline data={serie} cor={config.traco} tipo="area" />
         </div>
       )}
       {typeof progresso === 'number' && (
         <Progress
           value={progresso}
-          className="mt-1 h-2 bg-chart-success/15 [&>[data-slot=progress-indicator]]:bg-chart-success"
+          className="mt-auto h-2 bg-chart-success/15 [&>[data-slot=progress-indicator]]:bg-chart-success"
         />
       )}
     </Card>
