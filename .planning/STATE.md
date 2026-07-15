@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-15 - Completed quick task 260715-ibf: Tarefas visão diária (botão Hoje + calendário popover, Concluídas só do dia)
+Last activity: 2026-07-15 - Completed quick task 260715-la8: Relatórios configuráveis (blocos por conta, cron diário único, dialog Novo Relatório)
 
 Progress: [████████░░] 83%
 
