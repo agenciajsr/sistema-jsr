@@ -1,7 +1,15 @@
-import { eq, and, asc, sql, lt, lte, gte, inArray, isNotNull } from 'drizzle-orm'
+import { eq, and, asc, desc, sql, lt, lte, gte, inArray, isNotNull } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { clientes, profiles, tarefas, tarefaChecklistItems } from '@/lib/db/schema'
+import {
+  clientes,
+  profiles,
+  tarefas,
+  tarefaChecklistItems,
+  tarefaComentarios,
+  tarefaAnexos,
+  tarefaAtividades,
+} from '@/lib/db/schema'
 import { hojeBrasilia } from '@/lib/date-br'
 import {
   janelaMaterializacao,
@@ -52,6 +60,7 @@ export type TarefaCard = {
   recorrencia: TarefaRecorrencia
   recorrenciaDias: number[] | null
   tarefaMaeId: string | null
+  fixada: boolean
   checklistTotal: number
   checklistConcluidos: number
 }
@@ -71,7 +80,42 @@ export type ItemChecklist = {
   grupo: string
 }
 
-export type TarefaDetalhe = TarefaCard & { checklist: ItemChecklist[] }
+export type ComentarioTarefa = {
+  id: string
+  texto: string
+  autorId: string | null
+  autorNome: string
+  createdAt: string
+}
+
+export type AnexoTarefa = {
+  id: string
+  nome: string
+  tamanhoBytes: number
+  mimeType: string
+  storagePath: string
+  uploadPorNome: string
+  createdAt: string
+}
+
+export type AtividadeTarefa = {
+  id: string
+  tipo: string
+  campo: string | null
+  de: string | null
+  para: string | null
+  detalhe: string | null
+  autorId: string | null
+  autorNome: string
+  createdAt: string
+}
+
+export type TarefaDetalhe = TarefaCard & {
+  checklist: ItemChecklist[]
+  comentarios: ComentarioTarefa[]
+  anexos: AnexoTarefa[]
+  atividades: AtividadeTarefa[]
+}
 
 /** Linha crua vinda das SELECTs de tarefa (antes do merge do checklist). */
 type TarefaRow = Omit<TarefaCard, 'checklistTotal' | 'checklistConcluidos' | 'etiquetas'> & {
@@ -102,6 +146,7 @@ const camposCard = {
   recorrencia: tarefas.recorrencia,
   recorrenciaDias: tarefas.recorrenciaDias,
   tarefaMaeId: tarefas.tarefaMaeId,
+  fixada: tarefas.fixada,
 }
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -294,7 +339,8 @@ export async function getTarefasDoPeriodo(
       .leftJoin(clientes, eq(tarefas.clienteId, clientes.id))
       .leftJoin(profiles, eq(tarefas.responsavelId, profiles.id))
       .where(and(eq(tarefas.ehMolde, false), gte(tarefas.data, inicio), lte(tarefas.data, fim)))
-      .orderBy(ORDEM_PRIORIDADE, asc(tarefas.createdAt))) as TarefaRow[]
+      // D-08: fixada sobe ao topo da coluna; depois prioridade, depois criação.
+      .orderBy(desc(tarefas.fixada), ORDEM_PRIORIDADE, asc(tarefas.createdAt))) as TarefaRow[]
 
     // 9. Progresso do checklist AGREGADO — 1 query, nunca N+1.
     const ids = linhas.map((t) => t.id)
@@ -352,9 +398,87 @@ export async function getTarefa(id: string): Promise<TarefaDetalhe | null> {
     const feitos = checklist.filter((i) => i.concluido).length
     const progresso = new Map([[id, { total, feitos }]])
 
-    return { ...paraCard(linha, progresso), checklist }
+    // D-10: cada leitura nova degrada sozinha. Se a 0017 ainda não foi aplicada,
+    // a tabela não existe → devolvemos [] e o detalhe abre com a aba vazia, em
+    // vez de derrubar a página inteira. Queries SEQUENCIAIS (nada de Promise).
+    const comentarios = await lerComentarios(id)
+    const anexos = await lerAnexos(id)
+    const atividades = await lerAtividades(id)
+
+    return { ...paraCard(linha, progresso), checklist, comentarios, anexos, atividades }
   } catch (e) {
     console.error('[getTarefa]', e)
     return null
+  }
+}
+
+/** Comentários ASC por data. Try/catch próprio (D-10): tabela ausente → []. */
+async function lerComentarios(tarefaId: string): Promise<ComentarioTarefa[]> {
+  try {
+    const linhas = await db
+      .select({
+        id: tarefaComentarios.id,
+        texto: tarefaComentarios.texto,
+        autorId: tarefaComentarios.autorId,
+        autorNome: tarefaComentarios.autorNome,
+        createdAt: tarefaComentarios.createdAt,
+      })
+      .from(tarefaComentarios)
+      .where(eq(tarefaComentarios.tarefaId, tarefaId))
+      .orderBy(asc(tarefaComentarios.createdAt))
+    // createdAt atravessa a fronteira server→client: serializa para ISO string.
+    return linhas.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() }))
+  } catch (e) {
+    console.error('[lerComentarios]', e)
+    return []
+  }
+}
+
+/** Anexos DESC por data. Try/catch próprio (D-10): tabela ausente → []. */
+async function lerAnexos(tarefaId: string): Promise<AnexoTarefa[]> {
+  try {
+    const linhas = await db
+      .select({
+        id: tarefaAnexos.id,
+        nome: tarefaAnexos.nome,
+        tamanhoBytes: tarefaAnexos.tamanhoBytes,
+        mimeType: tarefaAnexos.mimeType,
+        storagePath: tarefaAnexos.storagePath,
+        uploadPorNome: tarefaAnexos.uploadPorNome,
+        createdAt: tarefaAnexos.createdAt,
+      })
+      .from(tarefaAnexos)
+      .where(eq(tarefaAnexos.tarefaId, tarefaId))
+      .orderBy(desc(tarefaAnexos.createdAt))
+    return linhas.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() }))
+  } catch (e) {
+    console.error('[lerAnexos]', e)
+    return []
+  }
+}
+
+/** Atividades DESC por data, últimas 50. Try/catch próprio (D-10): ausente → []. */
+async function lerAtividades(tarefaId: string): Promise<AtividadeTarefa[]> {
+  try {
+    const linhas = await db
+      .select({
+        id: tarefaAtividades.id,
+        tipo: tarefaAtividades.tipo,
+        campo: tarefaAtividades.campo,
+        de: tarefaAtividades.de,
+        para: tarefaAtividades.para,
+        detalhe: tarefaAtividades.detalhe,
+        autorId: tarefaAtividades.autorId,
+        autorNome: tarefaAtividades.autorNome,
+        createdAt: tarefaAtividades.createdAt,
+      })
+      .from(tarefaAtividades)
+      .where(eq(tarefaAtividades.tarefaId, tarefaId))
+      .orderBy(desc(tarefaAtividades.createdAt))
+      .limit(50)
+    return linhas.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() }))
+  } catch (e) {
+    console.error('[lerAtividades]', e)
+    return []
   }
 }

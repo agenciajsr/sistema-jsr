@@ -187,6 +187,8 @@ export const tarefas = pgTable('tarefas', {
   etiquetas: jsonb('etiquetas'), // string[]
   tempoEstimado: text('tempo_estimado'), // texto livre, ex.: '4h'
   dataInicio: date('data_inicio'),
+  // D-08: o pin do mockup. Fixada sobe no topo da coluna do quadro (ORDER BY).
+  fixada: boolean('fixada').notNull().default(false),
   // D-04: `codigo_num` é a ÚNICA fonte sequencial (identity do Postgres) e
   // `codigo` é coluna GERADA a partir dela. Zero query extra, zero corrida —
   // nada de `select max()+1` (que duplicaria sob concorrência) nem de sequence
@@ -219,15 +221,79 @@ export const tarefaChecklistItems = pgTable('tarefa_checklist_items', {
   tarefaIdx: index('tarefa_checklist_tarefa_id_idx').on(table.tarefaId),
 }))
 
+// Comentários da tarefa (a aba "Comentários" do detalhe). `autor_nome` é
+// denormalizado: evita o join na leitura, que roda sequencial e agregada.
+export const tarefaComentarios = pgTable('tarefa_comentarios', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tarefaId: uuid('tarefa_id').notNull().references(() => tarefas.id, { onDelete: 'cascade' }),
+  autorId: uuid('autor_id').references(() => profiles.id, { onDelete: 'set null' }),
+  autorNome: text('autor_nome').notNull(),
+  texto: text('texto').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tarefaCreatedIdx: index('tarefa_comentarios_tarefa_created_idx').on(table.tarefaId, table.createdAt),
+}))
+
+// Anexos da tarefa. D-04: reutilizam o bucket `documentos` com prefixo
+// `tarefas/{tarefaId}/` — zero setup novo de storage.
+export const tarefaAnexos = pgTable('tarefa_anexos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tarefaId: uuid('tarefa_id').notNull().references(() => tarefas.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  tamanhoBytes: integer('tamanho_bytes').notNull(),
+  mimeType: text('mime_type').notNull(),
+  storagePath: text('storage_path').notNull(),
+  uploadPorId: uuid('upload_por_id').references(() => profiles.id, { onDelete: 'set null' }),
+  uploadPorNome: text('upload_por_nome').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tarefaIdx: index('tarefa_anexos_tarefa_id_idx').on(table.tarefaId),
+}))
+
+// Histórico da tarefa (o card "Atividade Recente"). D-03: `tipo` é text, não
+// pgEnum — um tipo de atividade novo não pode exigir migration.
+export const tarefaAtividades = pgTable('tarefa_atividades', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tarefaId: uuid('tarefa_id').notNull().references(() => tarefas.id, { onDelete: 'cascade' }),
+  autorId: uuid('autor_id').references(() => profiles.id, { onDelete: 'set null' }),
+  autorNome: text('autor_nome').notNull(),
+  tipo: text('tipo').notNull(),
+  campo: text('campo'),
+  de: text('de'),
+  para: text('para'),
+  detalhe: text('detalhe'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  tarefaCreatedIdx: index('tarefa_atividades_tarefa_created_idx').on(table.tarefaId, table.createdAt),
+}))
+
 export const tarefasRelations = relations(tarefas, ({ one, many }) => ({
   cliente: one(clientes, { fields: [tarefas.clienteId], references: [clientes.id] }),
   responsavel: one(profiles, { fields: [tarefas.responsavelId], references: [profiles.id] }),
   tarefaMae: one(tarefas, { fields: [tarefas.tarefaMaeId], references: [tarefas.id], relationName: 'ocorrencias' }),
   checklistItems: many(tarefaChecklistItems),
+  comentarios: many(tarefaComentarios),
+  anexos: many(tarefaAnexos),
+  atividades: many(tarefaAtividades),
 }))
 
 export const tarefaChecklistItemsRelations = relations(tarefaChecklistItems, ({ one }) => ({
   tarefa: one(tarefas, { fields: [tarefaChecklistItems.tarefaId], references: [tarefas.id] }),
+}))
+
+export const tarefaComentariosRelations = relations(tarefaComentarios, ({ one }) => ({
+  tarefa: one(tarefas, { fields: [tarefaComentarios.tarefaId], references: [tarefas.id] }),
+  autor: one(profiles, { fields: [tarefaComentarios.autorId], references: [profiles.id] }),
+}))
+
+export const tarefaAnexosRelations = relations(tarefaAnexos, ({ one }) => ({
+  tarefa: one(tarefas, { fields: [tarefaAnexos.tarefaId], references: [tarefas.id] }),
+  uploadPor: one(profiles, { fields: [tarefaAnexos.uploadPorId], references: [profiles.id] }),
+}))
+
+export const tarefaAtividadesRelations = relations(tarefaAtividades, ({ one }) => ({
+  tarefa: one(tarefas, { fields: [tarefaAtividades.tarefaId], references: [tarefas.id] }),
+  autor: one(profiles, { fields: [tarefaAtividades.autorId], references: [profiles.id] }),
 }))
 
 export const acompanhamentos = pgTable('acompanhamentos', {

@@ -69,9 +69,16 @@ export const atualizarTarefaSchema = z.object({
   status: z.enum(STATUS_TAREFA).optional(),
   etiquetas: z.array(z.string().trim().min(1)).max(20).optional(),
   tempoEstimado: z.string().trim().max(20).optional(),
+  // D-08: o pin. Preferência de visualização — set direto, sem log de atividade.
+  fixada: z.boolean().optional(),
 })
 
 export type AtualizarTarefaInput = z.input<typeof atualizarTarefaSchema>
+
+export const comentarioSchema = z.object({
+  texto: z.string().trim().min(1, 'Escreva o comentario').max(5000, 'Comentario muito longo'),
+})
+export type ComentarioInput = z.input<typeof comentarioSchema>
 
 export const recorrenciaSchema = z.object({
   recorrencia: z.enum(RECORRENCIAS),

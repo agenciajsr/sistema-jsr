@@ -10,7 +10,13 @@
 // ⚠️ Datas SEMPRE como string 'YYYY-MM-DD'. Nada de `new Date()` para formatar:
 // o fuso da máquina do usuário empurraria a data para o dia vizinho.
 
-import { somaDias, type TarefaStatus, type TarefaPrioridade } from './recorrencia'
+import {
+  somaDias,
+  STATUS_LABEL,
+  PRIORIDADE_LABEL,
+  type TarefaStatus,
+  type TarefaPrioridade,
+} from './recorrencia'
 
 // --- As 4 colunas (D-02) ---
 
@@ -246,4 +252,244 @@ function paraBR(data: string): string {
 /** '14/07/2026 - 20/07/2026' — o rótulo do intervalo na toolbar. */
 export function formatarIntervalo(inicio: string, fim: string): string {
   return `${paraBR(inicio)} - ${paraBR(fim)}`
+}
+
+// --- Derivados de comentário / anexo / atividade / notas (so8) ---
+// Tudo PURO e determinístico: recebe o "agora" como parâmetro, nunca chama
+// Date.now(). Os componentes não calculam nada — só exibem o que sai daqui.
+
+/**
+ * "há X horas" do mockup. Determinístico: `agoraIso` é sempre passado.
+ * < 1 min → "agora há pouco"; < 1 h → minutos; < 1 dia → horas; < 30 dias → dias;
+ * ≥ 30 dias → data 'dd/MM/yyyy'. Entrada inválida/vazia → "" (nunca lança).
+ */
+export function tempoRelativo(iso: string | null | undefined, agoraIso: string): string {
+  if (!iso) return ''
+  const t = new Date(iso).getTime()
+  const agora = new Date(agoraIso).getTime()
+  if (!Number.isFinite(t) || !Number.isFinite(agora)) return ''
+
+  const seg = Math.floor((agora - t) / 1000)
+  if (seg < 60) return 'agora há pouco'
+
+  const min = Math.floor(seg / 60)
+  if (min < 60) return `há ${min} ${min === 1 ? 'minuto' : 'minutos'}`
+
+  const hrs = Math.floor(min / 60)
+  if (hrs < 24) return `há ${hrs} ${hrs === 1 ? 'hora' : 'horas'}`
+
+  const dias = Math.floor(hrs / 24)
+  if (dias < 30) return `há ${dias} ${dias === 1 ? 'dia' : 'dias'}`
+
+  // ≥ 30 dias: data absoluta, formatada em UTC a partir do ISO (determinístico).
+  const [ano, mes, dia] = new Date(iso).toISOString().slice(0, 10).split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
+/**
+ * "Tipo • Tamanho" do card de anexos. Vírgula decimal (pt-BR), 1 casa, sem casa
+ * quando inteiro. 0 → "0 KB" (caso do mockup). negativo/NaN/null → "—".
+ */
+export function formatarTamanho(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return '—'
+  if (bytes === 0) return '0 KB'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+
+  const KB = 1024
+  const MB = KB * 1024
+  const GB = MB * 1024
+  const num = (n: number) => {
+    const r = Math.round(n * 10) / 10
+    return Number.isInteger(r) ? String(r) : String(r).replace('.', ',')
+  }
+  if (bytes < MB) return `${num(bytes / KB)} KB`
+  if (bytes < GB) return `${num(bytes / MB)} MB`
+  return `${num(bytes / GB)} GB`
+}
+
+/** Ícone colorido por tipo de arquivo. A `classe` só usa tokens existentes. */
+export type ArquivoInfo = { rotulo: string; classe: string }
+
+const ARQUIVO_POR_TIPO: Record<string, ArquivoInfo> = {
+  planilha: { rotulo: 'Planilha', classe: 'text-chart-success bg-chart-success/10' },
+  pdf: { rotulo: 'PDF', classe: 'text-destructive bg-destructive/10' },
+  apresentacao: { rotulo: 'Apresentação', classe: 'text-chart-warning bg-chart-warning/10' },
+  imagem: { rotulo: 'Imagem', classe: 'text-primary bg-primary/10' },
+  documento: { rotulo: 'Documento', classe: 'text-primary bg-primary/10' },
+  arquivo: { rotulo: 'Arquivo', classe: 'text-muted-foreground bg-muted' },
+}
+
+const EXTENSAO_TIPO: Record<string, keyof typeof ARQUIVO_POR_TIPO> = {
+  xlsx: 'planilha', xls: 'planilha', csv: 'planilha',
+  pdf: 'pdf',
+  pptx: 'apresentacao', ppt: 'apresentacao',
+  png: 'imagem', jpg: 'imagem', jpeg: 'imagem', gif: 'imagem', webp: 'imagem', svg: 'imagem',
+  docx: 'documento', doc: 'documento', txt: 'documento',
+}
+
+function tipoPorMime(mime: string): keyof typeof ARQUIVO_POR_TIPO | null {
+  const m = mime.toLowerCase()
+  if (m.includes('spreadsheet') || m.includes('excel') || m.includes('csv')) return 'planilha'
+  if (m.includes('pdf')) return 'pdf'
+  if (m.includes('presentation') || m.includes('powerpoint')) return 'apresentacao'
+  if (m.startsWith('image/') || m.includes('image')) return 'imagem'
+  if (m.includes('word') || m.includes('document') || m.startsWith('text/')) return 'documento'
+  return null
+}
+
+/**
+ * `{ rotulo, classe }` para o ícone do anexo. A extensão ganha do mime quando
+ * ambos existem; case-insensitive. Desconhecido → "Arquivo" (muted).
+ */
+export function tipoDeArquivo(nome: string | null | undefined, mime?: string | null): ArquivoInfo {
+  const n = (nome ?? '').toLowerCase()
+  const ponto = n.lastIndexOf('.')
+  const ext = ponto >= 0 ? n.slice(ponto + 1) : ''
+
+  const porExt = ext ? EXTENSAO_TIPO[ext] : undefined
+  const chave = porExt ?? (mime ? tipoPorMime(mime) : null) ?? 'arquivo'
+  return ARQUIVO_POR_TIPO[chave]
+}
+
+/** Tipos de atividade conhecidos. `tipo` é text livre no banco (D-03). */
+export type TipoAtividade =
+  | 'criou'
+  | 'campo_alterado'
+  | 'comentou'
+  | 'anexou'
+  | 'removeu_anexo'
+  | 'checklist_concluido'
+  | 'checklist_reaberto'
+
+export type AtividadeEntrada = {
+  tipo: string
+  campo?: string | null
+  de?: string | null
+  para?: string | null
+  detalhe?: string | null
+}
+
+// Campos que ganham frase própria fora de status/prioridade/titulo.
+const CAMPO_GENERICO_LABEL: Record<string, string> = {
+  data: 'o prazo',
+  dataInicio: 'a data de início',
+  tempoEstimado: 'o tempo estimado',
+  responsavelId: 'o responsável',
+  clienteId: 'o cliente',
+  descricao: 'a descrição',
+  notas: 'as notas',
+  etiquetas: 'as etiquetas',
+}
+
+function rotuloDoValor(campo: string, valor?: string | null): string | null {
+  if (!valor) return null
+  if (campo === 'status') return STATUS_LABEL[valor as TarefaStatus] ?? valor
+  if (campo === 'prioridade') return PRIORIDADE_LABEL[valor as TarefaPrioridade] ?? valor
+  return valor
+}
+
+/**
+ * A linha do card "Atividade Recente": `{ frase, valor }`. Nunca lança —
+ * um `tipo` novo (versão futura) cai no genérico "atualizou a tarefa".
+ */
+export function textoAtividade(atv: AtividadeEntrada): { frase: string; valor: string | null } {
+  switch (atv.tipo) {
+    case 'criou':
+      return { frase: 'criou a tarefa', valor: null }
+    case 'comentou':
+      return { frase: 'comentou', valor: atv.detalhe ?? null }
+    case 'anexou':
+      return { frase: 'anexou um arquivo', valor: atv.detalhe ?? null }
+    case 'removeu_anexo':
+      return { frase: 'removeu um arquivo', valor: atv.detalhe ?? null }
+    case 'checklist_concluido':
+      return { frase: 'concluiu o item', valor: atv.detalhe ?? null }
+    case 'checklist_reaberto':
+      return { frase: 'reabriu o item', valor: atv.detalhe ?? null }
+    case 'campo_alterado': {
+      const campo = atv.campo ?? ''
+      if (campo === 'titulo') return { frase: 'renomeou a tarefa', valor: null }
+      if (campo === 'status') return { frase: 'alterou o status para', valor: rotuloDoValor('status', atv.para) }
+      if (campo === 'prioridade') return { frase: 'alterou a prioridade para', valor: rotuloDoValor('prioridade', atv.para) }
+      const label = CAMPO_GENERICO_LABEL[campo]
+      if (label) return { frase: `atualizou ${label}`, valor: null }
+      return { frase: 'atualizou a tarefa', valor: null }
+    }
+    default:
+      return { frase: 'atualizou a tarefa', valor: null }
+  }
+}
+
+/** Marcações da toolbar de Notas (D-06): atalhos de digitação, não WYSIWYG. */
+export type TipoMarcacao =
+  | 'negrito'
+  | 'italico'
+  | 'sublinhado'
+  | 'link'
+  | 'lista'
+  | 'lista_numerada'
+  | 'checkbox'
+
+// Marcadores que ENVOLVEM a seleção.
+const ENVOLVE: Partial<Record<TipoMarcacao, [string, string]>> = {
+  negrito: ['**', '**'],
+  italico: ['*', '*'],
+  sublinhado: ['_', '_'],
+  link: ['[', '](url)'],
+}
+
+// Marcadores que PREFIXAM cada linha.
+const PREFIXA: Partial<
+  Record<TipoMarcacao, { jaTem: (l: string) => boolean; aplicar: (l: string, i: number) => string }>
+> = {
+  lista: { jaTem: (l) => /^-\s/.test(l), aplicar: (l) => `- ${l}` },
+  lista_numerada: { jaTem: (l) => /^\d+\.\s/.test(l), aplicar: (l, i) => `${i + 1}. ${l}` },
+  checkbox: { jaTem: (l) => /^-\s\[[ xX]\]\s/.test(l), aplicar: (l) => `- [ ] ${l}` },
+}
+
+/**
+ * Aplica a marcação sobre `texto[inicio..fim]` e devolve `{ texto, cursor }`.
+ * Índices são grampeados em [0, len] — fora do intervalo nunca lança.
+ */
+export function aplicarMarcacao(
+  texto: string,
+  inicio: number,
+  fim: number,
+  tipo: TipoMarcacao
+): { texto: string; cursor: number } {
+  const len = texto.length
+  let i = Math.max(0, Math.min(Number.isFinite(inicio) ? inicio : 0, len))
+  let f = Math.max(0, Math.min(Number.isFinite(fim) ? fim : 0, len))
+  if (f < i) [i, f] = [f, i]
+
+  const envolve = ENVOLVE[tipo]
+  if (envolve) {
+    const [pre, pos] = envolve
+    const sel = texto.slice(i, f)
+    const novo = texto.slice(0, i) + pre + sel + pos + texto.slice(f)
+    // Seleção vazia: cursor no meio do marcador. Com seleção: depois do fecho.
+    const cursor = sel.length === 0 ? i + pre.length : f + pre.length + pos.length
+    return { texto: novo, cursor }
+  }
+
+  const prefixa = PREFIXA[tipo]
+  if (prefixa) {
+    // Expande para linhas INTEIRAS (mesmo com seleção vazia no meio da linha).
+    const inicioLinha = texto.lastIndexOf('\n', i - 1) + 1
+    const posFinal = f > i ? f - 1 : i
+    const quebra = texto.indexOf('\n', posFinal)
+    const fimLinha = quebra === -1 ? len : quebra
+
+    const bloco = texto.slice(inicioLinha, fimLinha)
+    const novoBloco = bloco
+      .split('\n')
+      .map((l, idx) => (prefixa.jaTem(l) ? l : prefixa.aplicar(l, idx)))
+      .join('\n')
+
+    const novo = texto.slice(0, inicioLinha) + novoBloco + texto.slice(fimLinha)
+    return { texto: novo, cursor: inicioLinha + novoBloco.length }
+  }
+
+  // Tipo desconhecido: não mexe.
+  return { texto, cursor: f }
 }

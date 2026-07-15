@@ -4,16 +4,25 @@ import { and, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { tarefas, tarefaChecklistItems } from '@/lib/db/schema'
+import {
+  tarefas,
+  tarefaChecklistItems,
+  tarefaComentarios,
+  tarefaAnexos,
+  tarefaAtividades,
+} from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
+import { uploadFile, getSignedUrl, deleteFile } from '@/lib/storage/client'
 import { hojeBrasilia } from '@/lib/date-br'
 import {
   tarefaSchema,
   atualizarTarefaSchema,
   recorrenciaSchema,
+  comentarioSchema,
   type TarefaInput,
   type AtualizarTarefaInput,
   type RecorrenciaInput,
+  type ComentarioInput,
 } from '@/lib/validations/tarefa'
 
 // Padrão do repo: toda action devolve { data } | { error } e começa pelo
@@ -25,6 +34,40 @@ import {
 /** Traduz o erro do Zod na primeira mensagem legível. */
 function primeiroErro(e: { issues: { message: string }[] }): string {
   return e.issues[0]?.message ?? 'Dados invalidos.'
+}
+
+type EntradaAtividade = {
+  tipo: string
+  campo?: string
+  de?: string | null
+  para?: string | null
+  detalhe?: string | null
+}
+
+/**
+ * Grava uma linha no histórico da tarefa. NÃO é action (helper interno).
+ * ⚠️ O log de atividade NUNCA pode derrubar a mutação que ele registra — nem
+ * quando a 0017 ainda não foi aplicada. Por isso o try/catch só loga.
+ */
+async function registrarAtividade(
+  tarefaId: string,
+  autor: { id: string; nome: string },
+  entrada: EntradaAtividade
+) {
+  try {
+    await db.insert(tarefaAtividades).values({
+      tarefaId,
+      autorId: autor.id,
+      autorNome: autor.nome,
+      tipo: entrada.tipo,
+      campo: entrada.campo ?? null,
+      de: entrada.de ?? null,
+      para: entrada.para ?? null,
+      detalhe: entrada.detalhe ?? null,
+    })
+  } catch (e) {
+    console.error('[registrarAtividade]', e)
+  }
 }
 
 export async function criarTarefa(input: TarefaInput) {
@@ -67,6 +110,8 @@ export async function criarTarefa(input: TarefaInput) {
         // ⚠️ `codigo`/`codigoNum` NÃO entram aqui: são gerados pelo banco (D-04).
       })
       .returning({ id: tarefas.id })
+
+    await registrarAtividade(criada.id, currentUser, { tipo: 'criou' })
 
     const itens = (v.checklist ?? []).filter((i) => i.texto.trim().length > 0)
     if (itens.length > 0) {
@@ -121,7 +166,50 @@ export async function atualizarTarefa(id: string, campos: AtualizarTarefaInput) 
       set.concluidaEm = v.status === 'concluida' ? new Date() : null
     }
 
+    // D-08: pin é preferência de visualização — set direto, sem log.
+    if (v.fixada !== undefined) set.fixada = v.fixada
+
+    // D-09: lê a linha ATUAL antes do update, para registrar de/para por campo.
+    // 1 query sequencial a mais (nada de paralelizar com Promise).
+    const [atual] = await db
+      .select({
+        titulo: tarefas.titulo,
+        status: tarefas.status,
+        prioridade: tarefas.prioridade,
+        responsavelId: tarefas.responsavelId,
+        clienteId: tarefas.clienteId,
+        data: tarefas.data,
+        dataInicio: tarefas.dataInicio,
+        tempoEstimado: tarefas.tempoEstimado,
+      })
+      .from(tarefas)
+      .where(eq(tarefas.id, id))
+
     await db.update(tarefas).set(set).where(eq(tarefas.id, id))
+
+    // Uma linha de atividade por campo que REALMENTE mudou. Campo inalterado
+    // não vira linha. `fixada` não entra aqui de propósito.
+    if (atual) {
+      const rastreados = [
+        'titulo',
+        'status',
+        'prioridade',
+        'responsavelId',
+        'clienteId',
+        'data',
+        'dataInicio',
+        'tempoEstimado',
+      ] as const
+      for (const campo of rastreados) {
+        if (!(campo in set)) continue
+        const antigo = (atual as Record<string, unknown>)[campo]
+        const de = antigo == null ? null : String(antigo)
+        const para = set[campo] == null ? null : String(set[campo])
+        if (de !== para) {
+          await registrarAtividade(id, currentUser, { tipo: 'campo_alterado', campo, de, para })
+        }
+      }
+    }
 
     revalidatePath('/tarefas')
     // Sem isto a página de detalhe serve dado velho depois de salvar.
@@ -225,10 +313,16 @@ export async function toggleChecklistItemTarefa(id: string, concluido: boolean) 
       .update(tarefaChecklistItems)
       .set({ concluido })
       .where(eq(tarefaChecklistItems.id, id))
-      .returning({ tarefaId: tarefaChecklistItems.tarefaId })
+      .returning({ tarefaId: tarefaChecklistItems.tarefaId, texto: tarefaChecklistItems.texto })
 
+    if (item) {
+      await registrarAtividade(item.tarefaId, currentUser, {
+        tipo: concluido ? 'checklist_concluido' : 'checklist_reaberto',
+        detalhe: item.texto,
+      })
+      revalidatePath(`/tarefas/${item.tarefaId}`)
+    }
     revalidatePath('/tarefas')
-    if (item) revalidatePath(`/tarefas/${item.tarefaId}`)
     return { data: { ok: true } }
   } catch (e) {
     console.error('[toggleChecklistItemTarefa]', e)
@@ -294,5 +388,167 @@ export async function getChecklistDaTarefa(tarefaId: string) {
   } catch (e) {
     console.error('[getChecklistDaTarefa]', e)
     return { error: 'Nao foi possivel carregar o checklist.' }
+  }
+}
+
+// --- Comentários, anexos, atividade (so8) ---
+
+export async function criarComentario(tarefaId: string, input: ComentarioInput) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const parsed = comentarioSchema.safeParse(input)
+  if (!parsed.success) return { error: primeiroErro(parsed.error) }
+
+  try {
+    const [comentario] = await db
+      .insert(tarefaComentarios)
+      .values({
+        tarefaId,
+        autorId: currentUser.id,
+        autorNome: currentUser.nome,
+        texto: parsed.data.texto,
+      })
+      .returning({ id: tarefaComentarios.id })
+
+    await registrarAtividade(tarefaId, currentUser, {
+      tipo: 'comentou',
+      detalhe: parsed.data.texto.slice(0, 120),
+    })
+
+    revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${tarefaId}`)
+    return { data: { id: comentario.id } }
+  } catch (e) {
+    console.error('[criarComentario]', e)
+    return { error: 'Nao foi possivel salvar o comentario.' }
+  }
+}
+
+export async function deletarComentario(id: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  try {
+    const [comentario] = await db
+      .select({ tarefaId: tarefaComentarios.tarefaId, autorId: tarefaComentarios.autorId })
+      .from(tarefaComentarios)
+      .where(eq(tarefaComentarios.id, id))
+
+    if (!comentario) return { error: 'Comentario nao encontrado.' }
+
+    // Só o autor OU um admin exclui — senão a action recusa (o botão de excluir
+    // só é renderizado para o autor, mas a regra vive aqui, no servidor).
+    if (comentario.autorId !== currentUser.id && currentUser.role !== 'admin') {
+      return { error: 'Voce so pode excluir os seus proprios comentarios.' }
+    }
+
+    await db.delete(tarefaComentarios).where(eq(tarefaComentarios.id, id))
+
+    revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${comentario.tarefaId}`)
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[deletarComentario]', e)
+    return { error: 'Nao foi possivel excluir o comentario.' }
+  }
+}
+
+const MAX_ANEXO_BYTES = 50 * 1024 * 1024 // 50 MB — mesmo teto dos documentos.
+
+export async function uploadAnexoTarefa(formData: FormData) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const file = formData.get('file') as File | null
+  const tarefaId = formData.get('tarefaId') as string | null
+
+  if (!file || file.size === 0) return { error: 'Nenhum arquivo selecionado.' }
+  if (file.size > MAX_ANEXO_BYTES) return { error: 'Arquivo muito grande. Maximo permitido: 50 MB.' }
+  if (!tarefaId) return { error: 'Tarefa nao informada.' }
+
+  try {
+    // D-04: bucket `documentos`, prefixo `tarefas/{id}/`. Zero setup novo.
+    const up = await uploadFile(file, `tarefas/${tarefaId}`)
+    if ('error' in up) return { error: up.error }
+
+    const [anexo] = await db
+      .insert(tarefaAnexos)
+      .values({
+        tarefaId,
+        nome: file.name,
+        tamanhoBytes: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        storagePath: up.path,
+        uploadPorId: currentUser.id,
+        uploadPorNome: currentUser.nome,
+      })
+      .returning({ id: tarefaAnexos.id })
+
+    await registrarAtividade(tarefaId, currentUser, { tipo: 'anexou', detalhe: file.name })
+
+    revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${tarefaId}`)
+    return { data: { id: anexo.id } }
+  } catch (e) {
+    console.error('[uploadAnexoTarefa]', e)
+    return { error: 'Nao foi possivel enviar o arquivo.' }
+  }
+}
+
+export async function deletarAnexoTarefa(id: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  try {
+    const [anexo] = await db
+      .select({
+        tarefaId: tarefaAnexos.tarefaId,
+        storagePath: tarefaAnexos.storagePath,
+        nome: tarefaAnexos.nome,
+      })
+      .from(tarefaAnexos)
+      .where(eq(tarefaAnexos.id, id))
+
+    if (!anexo) return { error: 'Anexo nao encontrado.' }
+
+    // Falha do storage só loga e não bloqueia (mesmo precedente de deletarDocumento).
+    const del = await deleteFile(anexo.storagePath)
+    if ('error' in del) console.error('[deletarAnexoTarefa] storage:', del.error)
+
+    await db.delete(tarefaAnexos).where(eq(tarefaAnexos.id, id))
+
+    await registrarAtividade(anexo.tarefaId, currentUser, {
+      tipo: 'removeu_anexo',
+      detalhe: anexo.nome,
+    })
+
+    revalidatePath('/tarefas')
+    revalidatePath(`/tarefas/${anexo.tarefaId}`)
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[deletarAnexoTarefa]', e)
+    return { error: 'Nao foi possivel remover o anexo.' }
+  }
+}
+
+export async function getUrlAnexoTarefa(id: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  try {
+    const [anexo] = await db
+      .select({ storagePath: tarefaAnexos.storagePath })
+      .from(tarefaAnexos)
+      .where(eq(tarefaAnexos.id, id))
+
+    if (!anexo) return { error: 'Anexo nao encontrado.' }
+
+    const r = await getSignedUrl(anexo.storagePath)
+    if ('error' in r) return { error: r.error }
+    return { data: { url: r.url } }
+  } catch (e) {
+    console.error('[getUrlAnexoTarefa]', e)
+    return { error: 'Nao foi possivel gerar o link de download.' }
   }
 }
