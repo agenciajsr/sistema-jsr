@@ -12,6 +12,9 @@ import {
   filtrarTarefas,
   intervaloPadrao,
   formatarIntervalo,
+  tarefasDaVisaoDiaria,
+  rotuloDoDia,
+  dataBrasiliaDeIso,
   tempoRelativo,
   formatarTamanho,
   tipoDeArquivo,
@@ -258,6 +261,95 @@ describe('intervaloPadrao', () => {
 describe('formatarIntervalo', () => {
   it("formata a partir da STRING, sem new Date() — '14/07/2026 - 20/07/2026'", () => {
     expect(formatarIntervalo('2026-07-14', '2026-07-20')).toBe('14/07/2026 - 20/07/2026')
+  })
+})
+
+// --- Visão diária (quick 260715-ibf) ---
+
+describe('tarefasDaVisaoDiaria', () => {
+  const DIA = '2026-07-15'
+
+  function tarefa(over: {
+    status: TarefaStatus
+    data: string
+    concluidaEm?: string | null
+    id?: string
+  }) {
+    return { id: over.id ?? 'x', concluidaEm: null, ...over }
+  }
+
+  it('a_fazer/em_andamento com data <= dia aparecem (atrasadas continuam visiveis)', () => {
+    const lista = [
+      tarefa({ id: 'atrasada', status: 'a_fazer', data: '2026-07-10' }),
+      tarefa({ id: 'do-dia', status: 'em_andamento', data: DIA }),
+    ]
+    expect(tarefasDaVisaoDiaria(lista, DIA).map((t) => t.id)).toEqual(['atrasada', 'do-dia'])
+  })
+
+  it('a_fazer/em_andamento com data > dia NAO aparecem', () => {
+    const lista = [
+      tarefa({ id: 'futura-1', status: 'a_fazer', data: '2026-07-16' }),
+      tarefa({ id: 'futura-2', status: 'em_andamento', data: '2026-08-01' }),
+    ]
+    expect(tarefasDaVisaoDiaria(lista, DIA)).toEqual([])
+  })
+
+  it('concluida aparece SO quando concluidaEm cai no dia visualizado (fuso BR)', () => {
+    const lista = [
+      // 15/07 15:00 UTC = 12:00 em BR → dia 15 → aparece.
+      tarefa({ id: 'hoje', status: 'concluida', data: DIA, concluidaEm: '2026-07-15T15:00:00.000Z' }),
+      // concluída ONTEM (o caso do bug): some da visão de hoje.
+      tarefa({
+        id: 'ontem',
+        status: 'concluida',
+        data: '2026-07-14',
+        concluidaEm: '2026-07-14T18:00:00.000Z',
+      }),
+    ]
+    expect(tarefasDaVisaoDiaria(lista, DIA).map((t) => t.id)).toEqual(['hoje'])
+  })
+
+  it('concluida sem concluidaEm (legado) usa fallback data === dia', () => {
+    const lista = [
+      tarefa({ id: 'legado-do-dia', status: 'concluida', data: DIA, concluidaEm: null }),
+      tarefa({ id: 'legado-antiga', status: 'concluida', data: '2026-07-10', concluidaEm: null }),
+    ]
+    expect(tarefasDaVisaoDiaria(lista, DIA).map((t) => t.id)).toEqual(['legado-do-dia'])
+  })
+
+  it('nao_realizada aparece somente com data === dia (nao acumula lixo de dias anteriores)', () => {
+    const lista = [
+      tarefa({ id: 'do-dia', status: 'nao_realizada', data: DIA }),
+      tarefa({ id: 'antiga', status: 'nao_realizada', data: '2026-07-12' }),
+    ]
+    expect(tarefasDaVisaoDiaria(lista, DIA).map((t) => t.id)).toEqual(['do-dia'])
+  })
+})
+
+describe('rotuloDoDia', () => {
+  it("dia === hoje -> 'Hoje'", () => {
+    expect(rotuloDoDia('2026-07-15', '2026-07-15')).toBe('Hoje')
+  })
+
+  it("dia diferente -> 'dd/MM/yyyy' direto da string", () => {
+    expect(rotuloDoDia('2026-07-12', '2026-07-15')).toBe('12/07/2026')
+  })
+})
+
+describe('dataBrasiliaDeIso', () => {
+  it('converte timestamp ISO para YYYY-MM-DD no fuso de Brasilia', () => {
+    expect(dataBrasiliaDeIso('2026-07-15T15:00:00.000Z')).toBe('2026-07-15')
+  })
+
+  it('ISO 23h UTC vira o dia ANTERIOR em BR (UTC-3)', () => {
+    // 15/07 01:00 UTC = 14/07 22:00 em Brasília.
+    expect(dataBrasiliaDeIso('2026-07-15T01:00:00.000Z')).toBe('2026-07-14')
+  })
+
+  it('null/invalido devolve null, nunca lanca', () => {
+    expect(dataBrasiliaDeIso(null)).toBeNull()
+    expect(dataBrasiliaDeIso('')).toBeNull()
+    expect(dataBrasiliaDeIso('nao-e-data')).toBeNull()
   })
 })
 
