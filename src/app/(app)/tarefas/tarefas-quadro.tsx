@@ -36,7 +36,6 @@ import {
   PRIORIDADE_LABEL,
   PRIORIDADE_ORDEM,
   type TarefaPrioridade,
-  type TarefaStatus,
 } from '@/lib/tarefas/recorrencia'
 import {
   COLUNAS_ORDEM,
@@ -50,7 +49,6 @@ import {
   formatarIntervalo,
 } from '@/lib/tarefas/quadro'
 import { TarefaCard } from './tarefa-card'
-import { NovaTarefaSheet } from './nova-tarefa-sheet'
 
 /** Sentinela: o Radix não aceita SelectItem/valor "". */
 const TODOS = 'todos'
@@ -107,9 +105,6 @@ export function TarefasQuadro({
   const [clienteId, setClienteId] = useState<string>(TODOS)
   const [responsavelId, setResponsavelId] = useState<string>(TODOS)
 
-  const [novaAberta, setNovaAberta] = useState(false)
-  const [statusNova, setStatusNova] = useState<TarefaStatus>('a_fazer')
-
   // Toda a derivação vem do módulo PURO — zero lógica solta aqui (D-05).
   const visiveis = useMemo(
     () => filtrarTarefas(dados.tarefas, { busca, prioridade, clienteId, responsavelId }),
@@ -119,11 +114,6 @@ export function TarefasQuadro({
   const stats = useMemo(() => estatisticasDoQuadro(visiveis), [visiveis])
 
   const filtrosAtivos = (clienteId !== TODOS ? 1 : 0) + (responsavelId !== TODOS ? 1 : 0)
-
-  function abrirNova(status: TarefaStatus) {
-    setStatusNova(status)
-    setNovaAberta(true)
-  }
 
   function trocarIntervalo(inicio: string, fim: string) {
     router.push(`/tarefas?de=${inicio}&ate=${fim}`)
@@ -153,9 +143,11 @@ export function TarefasQuadro({
           </div>
         </div>
 
-        <Button onClick={() => abrirNova('a_fazer')}>
-          <Plus className="size-4" />
-          Nova Tarefa
+        <Button asChild>
+          <Link href={`/tarefas/nova?data=${dados.inicio}`}>
+            <Plus className="size-4" />
+            Nova Tarefa
+          </Link>
         </Button>
       </div>
 
@@ -273,9 +265,11 @@ export function TarefasQuadro({
           <p className="max-w-md text-sm text-muted-foreground">
             Ajuste o intervalo de datas acima ou crie a primeira tarefa deste período.
           </p>
-          <Button onClick={() => abrirNova('a_fazer')}>
-            <Plus className="size-4" />
-            Nova Tarefa
+          <Button asChild>
+            <Link href={`/tarefas/nova?data=${dados.inicio}`}>
+              <Plus className="size-4" />
+              Nova Tarefa
+            </Link>
           </Button>
         </div>
       ) : (
@@ -301,13 +295,15 @@ export function TarefasQuadro({
                 </div>
 
                 <Button
+                  asChild
                   variant="ghost"
                   size="sm"
                   className="mt-2 w-full justify-start text-muted-foreground"
-                  onClick={() => abrirNova(s)}
                 >
-                  <Plus className="size-4" />
-                  Adicionar tarefa
+                  <Link href={`/tarefas/nova?status=${s}&data=${dados.inicio}`}>
+                    <Plus className="size-4" />
+                    Adicionar tarefa
+                  </Link>
                 </Button>
               </div>
             ))}
@@ -349,15 +345,6 @@ export function TarefasQuadro({
               </div>
             </div>
       </Card>
-
-      <NovaTarefaSheet
-        aberto={novaAberta}
-        onOpenChange={setNovaAberta}
-        clientes={clientes}
-        responsaveis={responsaveis}
-        dataPadrao={dados.inicio}
-        statusPadrao={statusNova}
-      />
     </div>
   )
 }
