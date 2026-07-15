@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-11 - Completed quick task 260711-q7a: Integracao Meta Ads
+Last activity: 2026-07-15 - Completed quick task 260715-ibf: Tarefas visão diária (botão Hoje + calendário popover, Concluídas só do dia)
 
 Progress: [████████░░] 83%
 
