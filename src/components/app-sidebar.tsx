@@ -15,6 +15,7 @@ import {
   ListChecks,
   Megaphone,
   Plug,
+  Target,
   Users,
   Users2,
   Wallet,
@@ -49,6 +50,7 @@ type NavItem = {
 const nav: NavItem[] = [
   { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
   { title: 'Clientes', url: '/clientes', icon: Users },
+  { title: 'CRM', url: '/crm', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
   { title: 'Verbas', url: '/verbas', icon: Banknote },
   { title: 'Relatórios', url: '/relatorios', icon: FileText },

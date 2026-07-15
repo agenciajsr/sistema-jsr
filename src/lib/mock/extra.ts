@@ -63,14 +63,3 @@ export const verbasAdsMock: VerbaAdsMock[] = [
   { cliente: 'Método Cresce+', plataforma: 'Meta Ads', verbaMensal: 2500, gastoAtual: 1580, ajusteSugerido: 'reduzir' },
 ]
 
-export type FunilEtapaMock = {
-  etapa: string
-  quantidade: number
-}
-
-export const funilMock: FunilEtapaMock[] = [
-  { etapa: 'Contato Inicial', quantidade: 8 },
-  { etapa: 'Reunião Agendada', quantidade: 5 },
-  { etapa: 'Proposta Enviada', quantidade: 3 },
-  { etapa: 'Fechado', quantidade: 1 },
-]
