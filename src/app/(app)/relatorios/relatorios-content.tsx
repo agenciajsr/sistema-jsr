@@ -1,7 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { FileText, Copy, CheckCircle2, Loader2, RefreshCw, ChevronDown, ChevronUp, RotateCcw, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  Zap,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -17,33 +31,15 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  gerarRelatorio,
-  gerarRelatoriosEmLote,
-  listarClientesRelatorio,
-  listarHistoricoRelatorios,
-  type ClienteParaRelatorio,
-  type RelatorioHistorico,
-} from '@/actions/relatorios'
+import { listarClientesRelatorio, listarHistoricoRelatorios, type RelatorioHistorico } from '@/actions/relatorios'
 import {
   alternarAtivoRelatorioConfig,
   excluirRelatorioConfig,
+  gerarRelatorioAgoraDaConfig,
   listarRelatorioConfigs,
   type RelatorioConfigResumo,
 } from '@/actions/relatorio-configs'
-import type { RelatorioGerado } from '@/lib/relatorios/gerar-relatorio'
 import { NovoRelatorioDialog } from './novo-relatorio-dialog'
 
 const LABEL_DIA_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
@@ -61,42 +57,21 @@ function labelTipoHistorico(tipo: string): string {
   return 'Manual'
 }
 
-type RelatorioState = {
-  clienteId: string
-  status: 'pendente' | 'gerando' | 'gerado' | 'erro'
-  relatorio?: RelatorioGerado
-  erro?: string
-}
-
-/** Retorna a última segunda-feira e o último domingo (semana anterior). */
-function getDefaultPeriod(): { inicio: string; fim: string } {
-  const hoje = new Date()
-  const diaSemana = hoje.getDay() // 0=dom, 1=seg, ...
-  // Último domingo
-  const ultimoDomingo = new Date(hoje)
-  ultimoDomingo.setDate(hoje.getDate() - (diaSemana === 0 ? 7 : diaSemana))
-  // Última segunda
-  const ultimaSegunda = new Date(ultimoDomingo)
-  ultimaSegunda.setDate(ultimoDomingo.getDate() - 6)
-
-  return {
-    inicio: ultimaSegunda.toISOString().slice(0, 10),
-    fim: ultimoDomingo.toISOString().slice(0, 10),
-  }
-}
-
-/** Formata 'YYYY-MM-DD' como 'dd/mm'. */
 function formatarDiaMes(data: string): string {
   const [, mes, dia] = data.split('-')
   return `${dia}/${mes}`
 }
 
-/** Formata um timestamp ISO como data/hora pt-BR (fuso de Brasília). */
+function formatarDataBR(data: string | null): string {
+  if (!data) return '—'
+  const [ano, mes, dia] = data.split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
 function formatarDataHoraBr(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'America/Sao_Paulo',
@@ -104,56 +79,54 @@ function formatarDataHoraBr(iso: string): string {
 }
 
 export function RelatoriosContent() {
-  const [clientes, setClientes] = useState<ClienteParaRelatorio[]>([])
-  const [relatorios, setRelatorios] = useState<Map<string, RelatorioState>>(new Map())
-  const [expandido, setExpandido] = useState<string | null>(null)
-  const [copiado, setCopiado] = useState<string | null>(null)
-  const [gerandoTodos, setGerandoTodos] = useState(false)
+  const [clientes, setClientes] = useState<{ id: string; nome: string }[]>([])
+  const [configs, setConfigs] = useState<RelatorioConfigResumo[]>([])
+  const [historico, setHistorico] = useState<RelatorioHistorico[]>([])
   const [loaded, setLoaded] = useState(false)
 
-  // Relatórios configurados (configs recorrentes)
-  const [configs, setConfigs] = useState<RelatorioConfigResumo[]>([])
   const [dialogAberto, setDialogAberto] = useState(false)
   const [configEmEdicao, setConfigEmEdicao] = useState<RelatorioConfigResumo | null>(null)
   const [configParaExcluir, setConfigParaExcluir] = useState<RelatorioConfigResumo | null>(null)
 
-  // Período de datas
-  const defaultPeriod = getDefaultPeriod()
-  const [dataInicio, setDataInicio] = useState(defaultPeriod.inicio)
-  const [dataFim, setDataFim] = useState(defaultPeriod.fim)
-
-  // Textos editáveis por cliente (para edição antes de copiar)
-  const [textosEditados, setTextosEditados] = useState<Map<string, string>>(new Map())
-
-  // Histórico de relatórios salvos (cron semanal + gerações manuais)
-  const [historico, setHistorico] = useState<RelatorioHistorico[]>([])
+  const [copiado, setCopiado] = useState<string | null>(null)
+  const [gerando, setGerando] = useState<string | null>(null)
+  const [relatorioAberto, setRelatorioAberto] = useState<string | null>(null)
   const [historicoExpandido, setHistoricoExpandido] = useState<string | null>(null)
 
   useEffect(() => {
-    listarClientesRelatorio().then((data) => {
-      setClientes(data)
-      const map = new Map<string, RelatorioState>()
-      for (const c of data) {
-        map.set(c.id, { clienteId: c.id, status: 'pendente' })
-      }
-      setRelatorios(map)
+    Promise.all([
+      listarClientesRelatorio().catch(() => []),
+      listarRelatorioConfigs().catch(() => []),
+      listarHistoricoRelatorios().catch(() => []),
+    ]).then(([cli, cfg, hist]) => {
+      setClientes(cli.map((c) => ({ id: c.id, nome: c.nome })))
+      setConfigs(cfg)
+      setHistorico(hist)
       setLoaded(true)
     })
-    // Carregar o histórico e as configs em paralelo (falha não bloqueia o fluxo manual)
-    listarHistoricoRelatorios().then(setHistorico).catch(() => setHistorico([]))
-    listarRelatorioConfigs().then(setConfigs).catch(() => setConfigs([]))
   }, [])
 
-  function recarregarHistorico() {
+  function recarregar() {
+    listarRelatorioConfigs().then(setConfigs).catch(() => {})
     listarHistoricoRelatorios().then(setHistorico).catch(() => {})
   }
 
-  function recarregarConfigs() {
-    listarRelatorioConfigs().then(setConfigs).catch(() => {})
-  }
+  // Agrupar configs por cliente (um card por cliente)
+  const porCliente = useMemo(() => {
+    const grupos = new Map<string, { clienteNome: string; configs: RelatorioConfigResumo[] }>()
+    for (const config of configs) {
+      const grupo = grupos.get(config.clienteId) ?? { clienteNome: config.clienteNome, configs: [] }
+      grupo.configs.push(config)
+      grupos.set(config.clienteId, grupo)
+    }
+    return Array.from(grupos.entries())
+      .map(([clienteId, g]) => ({ clienteId, ...g }))
+      .sort((a, b) => a.clienteNome.localeCompare(b.clienteNome, 'pt-BR'))
+  }, [configs])
+
+  const totalAtivos = configs.filter((c) => c.ativo).length
 
   async function handleAlternarAtivo(config: RelatorioConfigResumo, ativo: boolean) {
-    // Otimista: pausar/ativar NÃO perde a configuração
     setConfigs((prev) => prev.map((c) => (c.id === config.id ? { ...c, ativo } : c)))
     const result = await alternarAtivoRelatorioConfig(config.id, ativo)
     if (!result.success) {
@@ -161,7 +134,7 @@ export function RelatoriosContent() {
       setConfigs((prev) => prev.map((c) => (c.id === config.id ? { ...c, ativo: !ativo } : c)))
       return
     }
-    recarregarConfigs()
+    recarregar()
   }
 
   async function handleExcluirConfig() {
@@ -176,407 +149,219 @@ export function RelatoriosContent() {
     setConfigParaExcluir(null)
   }
 
-  function formatarProximoEnvio(data: string | null): string {
-    if (!data) return '—'
-    const [ano, mes, dia] = data.split('-')
-    return `${dia}/${mes}/${ano}`
-  }
-
-  async function handleGerar(clienteId: string) {
-    setRelatorios((prev) => {
-      const next = new Map(prev)
-      next.set(clienteId, { clienteId, status: 'gerando' })
-      return next
-    })
-
-    const result = await gerarRelatorio(clienteId, dataInicio, dataFim)
-
-    setRelatorios((prev) => {
-      const next = new Map(prev)
+  async function handleGerarAgora(config: RelatorioConfigResumo) {
+    setGerando(config.id)
+    try {
+      const result = await gerarRelatorioAgoraDaConfig(config.id)
       if (result.success) {
-        next.set(clienteId, { clienteId, status: 'gerado', relatorio: result.relatorio })
-        // Inicializar texto editável com o texto gerado
-        setTextosEditados((prev) => {
-          const next = new Map(prev)
-          next.set(clienteId, result.relatorio.textoWhatsapp)
-          return next
-        })
+        toast.success('Relatório gerado no formato configurado.')
+        setRelatorioAberto(config.id)
+        recarregar()
       } else {
-        next.set(clienteId, { clienteId, status: 'erro', erro: result.error })
+        toast.error(result.error)
       }
-      return next
-    })
-
-    // Geração manual também alimenta o histórico
-    if (result.success) recarregarHistorico()
+    } finally {
+      setGerando(null)
+    }
   }
 
-  async function handleGerarTodos() {
-    setGerandoTodos(true)
-
-    // Marcar todos como gerando
-    setRelatorios((prev) => {
-      const next = new Map(prev)
-      for (const c of clientes) {
-        next.set(c.id, { clienteId: c.id, status: 'gerando' })
-      }
-      return next
-    })
-
-    const result = await gerarRelatoriosEmLote(dataInicio, dataFim)
-
-    setRelatorios((prev) => {
-      const next = new Map(prev)
-      for (const r of result.gerados) {
-        next.set(r.clienteId, { clienteId: r.clienteId, status: 'gerado', relatorio: r })
-      }
-      for (const e of result.erros) {
-        next.set(e.clienteId, { clienteId: e.clienteId, status: 'erro', erro: e.error })
-      }
-      return next
-    })
-
-    // Inicializar textos editáveis para todos os gerados
-    setTextosEditados((prev) => {
-      const next = new Map(prev)
-      for (const r of result.gerados) {
-        next.set(r.clienteId, r.textoWhatsapp)
-      }
-      return next
-    })
-
-    setGerandoTodos(false)
-
-    // Geração em lote também alimenta o histórico
-    if (result.gerados.length > 0) recarregarHistorico()
-  }
-
-  async function handleCopiar(clienteId: string) {
-    const texto = textosEditados.get(clienteId)
-    if (!texto) return
-
+  async function copiarTexto(id: string, texto: string) {
     await navigator.clipboard.writeText(texto)
-    setCopiado(clienteId)
+    setCopiado(id)
     setTimeout(() => setCopiado(null), 2000)
-  }
-
-  async function handleCopiarHistorico(item: RelatorioHistorico) {
-    await navigator.clipboard.writeText(item.conteudo)
-    setCopiado(item.id)
-    setTimeout(() => setCopiado(null), 2000)
-  }
-
-  function handleRestaurarOriginal(clienteId: string) {
-    const state = relatorios.get(clienteId)
-    if (!state?.relatorio) return
-    setTextosEditados((prev) => {
-      const next = new Map(prev)
-      next.set(clienteId, state.relatorio!.textoWhatsapp)
-      return next
-    })
-  }
-
-  function handleTextoChange(clienteId: string, valor: string) {
-    setTextosEditados((prev) => {
-      const next = new Map(prev)
-      next.set(clienteId, valor)
-      return next
-    })
-  }
-
-  function toggleExpandir(clienteId: string) {
-    setExpandido((prev) => (prev === clienteId ? null : clienteId))
   }
 
   if (!loaded) {
-    return <div className="text-sm text-muted-foreground">Carregando clientes...</div>
+    return <div className="text-sm text-muted-foreground">Carregando relatórios...</div>
   }
-
-  if (clientes.length === 0) {
-    return (
-      <Card className="border-none shadow-sm">
-        <CardContent className="py-8 text-center text-muted-foreground">
-          Nenhum cliente com conta Meta ativa encontrado.
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const totalGerados = Array.from(relatorios.values()).filter((r) => r.status === 'gerado').length
 
   return (
     <div className="space-y-6">
-      {/* Relatórios configurados (recorrentes) */}
-      <Card className="border-none shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="text-base">Relatórios configurados</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Gerados automaticamente na data configurada, prontos para copiar no WhatsApp.
-            </p>
-          </div>
-          <Button size="sm" onClick={() => { setConfigEmEdicao(null); setDialogAberto(true) }}>
-            <Plus className="size-4" />
-            Novo Relatório
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {configs.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Nenhum relatório configurado ainda — clique em “Novo Relatório” para criar o primeiro.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {configs.map((config) => (
-                <div
-                  key={config.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{config.nome}</span>
-                      <Badge variant={config.ativo ? 'secondary' : 'outline'} className={config.ativo ? 'bg-green-100 text-green-800' : ''}>
-                        {config.ativo ? 'Ativo' : 'Pausado'}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>{config.clienteNome}</span>
-                      <span>{labelFrequencia(config)}</span>
-                      <span className="flex items-center gap-1">
-                        <CalendarClock className="size-3.5" />
-                        Próximo: {formatarProximoEnvio(config.proximoEnvio)}
-                      </span>
-                      <span>{config.blocos.length} bloco{config.blocos.length > 1 ? 's' : ''}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={config.ativo}
-                      onCheckedChange={(v) => handleAlternarAtivo(config, v)}
-                      aria-label={config.ativo ? 'Pausar relatório' : 'Ativar relatório'}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => { setConfigEmEdicao(config); setDialogAberto(true) }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => setConfigParaExcluir(config)}>
-                      <Trash2 className="size-4 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+      {/* Banner de status */}
+      <Card className="border-none bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-sm">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/15">
+              <Sparkles className="size-5 text-primary" />
             </div>
-          )}
+            <div>
+              <p className="font-semibold">Relatórios Automatizados</p>
+              <p className="text-sm text-muted-foreground">
+                Gerados automaticamente na data configurada — prontos para copiar e enviar no WhatsApp.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <p className="text-2xl font-semibold">{configs.length}</p>
+              <p className="text-xs text-muted-foreground">configurados</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-semibold text-green-600">{totalAtivos}</p>
+              <p className="text-xs text-muted-foreground">ativos</p>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
+              <Zap className="size-4 text-amber-500" />
+              <div>
+                <p className="text-xs font-medium">Envio automático</p>
+                <p className="text-[11px] text-muted-foreground">WhatsApp em breve</p>
+              </div>
+            </div>
+            <Button onClick={() => { setConfigEmEdicao(null); setDialogAberto(true) }}>
+              <Plus className="size-4" />
+              Novo Relatório
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Geração manual (fluxo legado) */}
-      <div>
-        <h2 className="mb-1 text-base font-semibold">Geração manual</h2>
-        <p className="text-sm text-muted-foreground">
-          Gere um relatório pontual por cliente para qualquer período.
-        </p>
-      </div>
+      {/* Cards por cliente */}
+      {porCliente.length === 0 ? (
+        <Card className="border-dashed shadow-none">
+          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+              <FileText className="size-6 text-primary" />
+            </div>
+            <div>
+              <p className="font-medium">Nenhum relatório configurado</p>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                Crie o primeiro relatório de um cliente: escolha as contas, as métricas e o formato da mensagem.
+                Ele será gerado automaticamente toda semana (ou mês) e ficará pronto aqui para copiar.
+              </p>
+            </div>
+            <Button className="mt-2" onClick={() => { setConfigEmEdicao(null); setDialogAberto(true) }}>
+              <Plus className="size-4" />
+              Criar primeiro relatório
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {porCliente.map((grupo) => (
+            <Card key={grupo.clienteId} className="border-none shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">{grupo.clienteNome}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {grupo.configs.map((config) => {
+                  const aberto = relatorioAberto === config.id
+                  return (
+                    <div key={config.id} className="rounded-lg border">
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium">{config.nome}</span>
+                            <Badge
+                              variant={config.ativo ? 'secondary' : 'outline'}
+                              className={config.ativo ? 'bg-green-100 text-green-800' : ''}
+                            >
+                              {config.ativo ? 'Ativo' : 'Pausado'}
+                            </Badge>
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                            <span>{labelFrequencia(config)}</span>
+                            <span className="flex items-center gap-1">
+                              <CalendarClock className="size-3" />
+                              Próximo: {formatarDataBR(config.proximoEnvio)}
+                            </span>
+                            <span>{config.blocos.length} bloco{config.blocos.length > 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Switch
+                            checked={config.ativo}
+                            onCheckedChange={(v) => handleAlternarAtivo(config, v)}
+                            aria-label={config.ativo ? 'Pausar relatório' : 'Ativar relatório'}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => { setConfigEmEdicao(config); setDialogAberto(true) }}
+                            title="Editar"
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setConfigParaExcluir(config)}
+                            title="Excluir"
+                          >
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
 
-      {/* Período + ação em lote */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-end gap-3">
-          <div className="space-y-1">
-            <Label htmlFor="data-inicio" className="text-xs text-muted-foreground">De</Label>
-            <Input
-              id="data-inicio"
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="w-[150px] h-9"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="data-fim" className="text-xs text-muted-foreground">Até</Label>
-            <Input
-              id="data-fim"
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="w-[150px] h-9"
-            />
-          </div>
-          <div className="text-sm text-muted-foreground pb-1">
-            {totalGerados > 0
-              ? `${totalGerados} de ${clientes.length} gerados`
-              : `${clientes.length} clientes`}
-          </div>
-        </div>
-        <Button
-          onClick={handleGerarTodos}
-          disabled={gerandoTodos}
-          size="sm"
-        >
-          {gerandoTodos ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-          {gerandoTodos ? 'Gerando...' : 'Gerar Todos'}
-        </Button>
-      </div>
-
-      {/* Tabela de clientes */}
-      <Card className="border-none shadow-sm">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Objetivo</TableHead>
-                <TableHead>Contas</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clientes.map((cliente) => {
-                const state = relatorios.get(cliente.id)
-                const isExpanded = expandido === cliente.id
-
-                return (
-                  <>
-                    <TableRow key={cliente.id}>
-                      <TableCell className="font-medium">{cliente.nome}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {cliente.objetivoPrincipal ?? cliente.nicho}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{cliente.totalContas}</TableCell>
-                      <TableCell>
-                        {state?.status === 'gerado' && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
-                            Gerado
-                          </Badge>
-                        )}
-                        {state?.status === 'gerando' && (
-                          <Badge variant="outline">
-                            <Loader2 className="size-3 animate-spin mr-1" />
-                            Gerando...
-                          </Badge>
-                        )}
-                        {state?.status === 'erro' && (
-                          <Badge variant="destructive">{state.erro}</Badge>
-                        )}
-                        {state?.status === 'pendente' && (
-                          <Badge variant="outline">Pendente</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        {state?.status !== 'gerado' && (
+                      {/* Último relatório gerado + ações */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">
+                          {config.ultimoGerado
+                            ? `Último gerado: ${formatarDataHoraBr(config.ultimoGerado.geradoEm)} · ${formatarDiaMes(config.ultimoGerado.periodoInicio)} a ${formatarDiaMes(config.ultimoGerado.periodoFim)}`
+                            : 'Nenhum relatório gerado ainda'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleGerar(cliente.id)}
-                            disabled={state?.status === 'gerando'}
+                            onClick={() => handleGerarAgora(config)}
+                            disabled={gerando === config.id}
                           >
-                            {state?.status === 'gerando' ? (
+                            {gerando === config.id ? (
                               <Loader2 className="size-4 animate-spin" />
                             ) : (
-                              <FileText className="size-4" />
+                              <RefreshCw className="size-4" />
                             )}
-                            Gerar
+                            Gerar agora
                           </Button>
-                        )}
-                        {state?.status === 'gerado' && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCopiar(cliente.id)}
-                            >
-                              {copiado === cliente.id ? (
-                                <CheckCircle2 className="size-4 text-green-600" />
-                              ) : (
-                                <Copy className="size-4" />
-                              )}
-                              {copiado === cliente.id ? 'Copiado!' : 'Copiar'}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleExpandir(cliente.id)}
-                            >
-                              {isExpanded ? (
-                                <ChevronUp className="size-4" />
-                              ) : (
-                                <ChevronDown className="size-4" />
-                              )}
-                              Ver
-                            </Button>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    {/* Preview expandido */}
-                    {isExpanded && state?.relatorio && (
-                      <TableRow key={`${cliente.id}-preview`}>
-                        <TableCell colSpan={5} className="bg-muted/50 p-4">
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-muted-foreground">
-                                Período: {state.relatorio.periodoInicio} a {state.relatorio.periodoFim} |{' '}
-                                {state.relatorio.totalContas} conta(s) | {state.relatorio.totalCampanhas} campanhas
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRestaurarOriginal(cliente.id)}
-                                  disabled={textosEditados.get(cliente.id) === state.relatorio.textoWhatsapp}
-                                >
-                                  <RotateCcw className="size-4" />
-                                  Restaurar original
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleCopiar(cliente.id)}
-                                >
-                                  {copiado === cliente.id ? (
-                                    <CheckCircle2 className="size-4 text-green-600" />
-                                  ) : (
-                                    <Copy className="size-4" />
-                                  )}
-                                  {copiado === cliente.id ? 'Copiado!' : 'Copiar para WhatsApp'}
-                                </Button>
-                              </div>
-                            </div>
-                            <Textarea
-                              value={textosEditados.get(cliente.id) ?? state.relatorio.textoWhatsapp}
-                              onChange={(e) => handleTextoChange(cliente.id, e.target.value)}
-                              className="min-h-[300px] max-h-[500px] font-mono text-sm resize-y bg-background"
-                            />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                          {config.ultimoGerado && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => copiarTexto(config.id, config.ultimoGerado!.conteudo)}
+                              >
+                                {copiado === config.id ? (
+                                  <CheckCircle2 className="size-4 text-green-600" />
+                                ) : (
+                                  <Copy className="size-4" />
+                                )}
+                                {copiado === config.id ? 'Copiado!' : 'Copiar'}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => setRelatorioAberto(aberto ? null : config.id)}
+                                title="Ver relatório"
+                              >
+                                {aberto ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {aberto && config.ultimoGerado && (
+                        <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap border-t bg-background px-3 py-3 font-mono text-xs text-muted-foreground">
+                          {config.ultimoGerado.conteudo}
+                        </pre>
+                      )}
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {/* Histórico de relatórios salvos (cron semanal + gerações manuais) */}
+      {/* Histórico de relatórios gerados */}
       <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Relatórios gerados</CardTitle>
+          <CardTitle className="text-base">Histórico de relatórios</CardTitle>
         </CardHeader>
         <CardContent>
           {historico.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              Nenhum relatório salvo ainda — os relatórios configurados aparecem aqui automaticamente na data de envio.
+              Nenhum relatório gerado ainda — os relatórios configurados aparecem aqui automaticamente na data de envio.
             </p>
           ) : (
             <div className="space-y-2">
@@ -598,11 +383,7 @@ export function RelatoriosContent() {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCopiarHistorico(item)}
-                        >
+                        <Button variant="outline" size="sm" onClick={() => copiarTexto(item.id, item.conteudo)}>
                           {copiado === item.id ? (
                             <CheckCircle2 className="size-4 text-green-600" />
                           ) : (
@@ -613,15 +394,9 @@ export function RelatoriosContent() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            setHistoricoExpandido((prev) => (prev === item.id ? null : item.id))
-                          }
+                          onClick={() => setHistoricoExpandido((prev) => (prev === item.id ? null : item.id))}
                         >
-                          {isExpanded ? (
-                            <ChevronUp className="size-4" />
-                          ) : (
-                            <ChevronDown className="size-4" />
-                          )}
+                          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                           Ver
                         </Button>
                       </div>
@@ -645,9 +420,9 @@ export function RelatoriosContent() {
       <NovoRelatorioDialog
         open={dialogAberto}
         onOpenChange={setDialogAberto}
-        clientes={clientes.map((c) => ({ id: c.id, nome: c.nome }))}
+        clientes={clientes}
         configParaEditar={configEmEdicao}
-        onSaved={recarregarConfigs}
+        onSaved={recarregar}
       />
 
       {/* Confirmação de exclusão */}
@@ -657,7 +432,7 @@ export function RelatoriosContent() {
             <AlertDialogTitle>Excluir relatório configurado?</AlertDialogTitle>
             <AlertDialogDescription>
               A configuração “{configParaExcluir?.nome}” será excluída. Os relatórios já gerados permanecem no histórico.
-              Se quiser apenas interromper o envio, use o botão de pausar — a configuração não é perdida.
+              Se quiser apenas interromper a geração, use o botão de pausar — a configuração não é perdida.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

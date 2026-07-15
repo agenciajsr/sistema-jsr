@@ -66,6 +66,43 @@ export const LABELS_CATEGORIA: Record<CategoriaVariavel, string> = {
   pagina: 'Página',
 }
 
+// Linha pronta de mensagem para cada métrica (usada para compor a mensagem do
+// bloco automaticamente a partir das métricas marcadas na UI).
+export const LINHAS_METRICAS: Record<string, string> = {
+  investimento: '💸 *Investimento:* {{investimento}}',
+  cpm: '📊 *CPM:* {{cpm}}',
+  cliques: '🖱 *Cliques:* {{cliques}}',
+  ctr: '🎯 *CTR:* {{ctr}}',
+  cpc: '💰 *CPC:* {{cpc}}',
+  impressoes: '👁 *Impressões:* {{impressoes}}',
+  alcance: '👥 *Alcance:* {{alcance}}',
+  leads: '📋 *Leads:* {{leads}}',
+  cpl: '💰 *Custo por lead:* {{cpl}}',
+  conversas: '💬 *Conversas iniciadas:* {{conversas}}',
+  custo_por_conversa: '💰 *Custo por conversa:* {{custo_por_conversa}}',
+  compras: '🛍 *Compras:* {{compras}}',
+  receita: '💵 *Receita:* {{receita}}',
+  roas: '📈 *ROAS:* {{roas}}',
+  cpv: '💵 *Custo por venda:* {{cpv}}',
+  ticket_medio: '🎫 *Ticket médio:* {{ticket_medio}}',
+  add_to_cart: '🛒 *Adições ao carrinho:* {{add_to_cart}}',
+  checkout: '💳 *Checkouts iniciados:* {{checkout}}',
+  visitas_pagina: '📄 *Visitas à página:* {{visitas_pagina}}',
+  custo_por_visita: '💰 *Custo por visita:* {{custo_por_visita}}',
+}
+
+/**
+ * Monta a mensagem de um bloco a partir das métricas marcadas, na ordem do
+ * catálogo, com o nome da conta no topo.
+ */
+export function montarMensagemDeMetricas(chaves: string[]): string {
+  const selecionadas = new Set(chaves)
+  const linhas = CATALOGO_VARIAVEIS
+    .filter((v) => selecionadas.has(v.chave) && LINHAS_METRICAS[v.chave])
+    .map((v) => LINHAS_METRICAS[v.chave])
+  return ['🏦 *{{conta}}*', ...linhas].join('\n')
+}
+
 // Sinônimos em <MAIÚSCULA> aceitos além de {{chave}} (compatível com refs visuais).
 const ALIAS_MAIUSCULA: Record<string, string> = {
   DATA: 'date_range',

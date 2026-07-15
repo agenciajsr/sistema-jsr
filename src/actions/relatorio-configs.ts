@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { db } from '@/lib/db'
-import { relatorioConfigs, relatorioBlocos, adAccounts, campaignInsights, clientes } from '@/lib/db/schema'
+import { relatorioConfigs, relatorioBlocos, adAccounts, campaignInsights, clientes, relatorios } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 import {
@@ -15,6 +15,7 @@ import {
   type BlocoComMetricas,
 } from '@/lib/relatorios/engine'
 import { agregarContaPeriodo } from '@/lib/relatorios/gerar-relatorio'
+import { gerarRelatorioDeConfig } from '@/lib/relatorios/gerar-relatorio-config'
 
 // --- Validação ---
 
@@ -218,6 +219,7 @@ export type RelatorioConfigResumo = {
   mensagemCompilado: string | null
   ativo: boolean
   proximoEnvio: string | null // YYYY-MM-DD
+  ultimoGerado: { conteudo: string; geradoEm: string; periodoInicio: string; periodoFim: string } | null
   blocos: {
     adAccountId: string
     nivel: 'conta' | 'campanhas'
@@ -250,6 +252,18 @@ export async function listarRelatorioConfigs(): Promise<RelatorioConfigResumo[]>
       .where(eq(relatorioBlocos.configId, config.id))
       .orderBy(asc(relatorioBlocos.ordem))
 
+    const [ultimo] = await db
+      .select({
+        conteudo: relatorios.conteudo,
+        geradoEm: relatorios.geradoEm,
+        periodoInicio: relatorios.periodoInicio,
+        periodoFim: relatorios.periodoFim,
+      })
+      .from(relatorios)
+      .where(eq(relatorios.configId, config.id))
+      .orderBy(desc(relatorios.geradoEm))
+      .limit(1)
+
     resultado.push({
       id: config.id,
       nome: config.nome,
@@ -266,6 +280,14 @@ export async function listarRelatorioConfigs(): Promise<RelatorioConfigResumo[]>
       incluirCompilado: config.incluirCompilado,
       mensagemCompilado: config.mensagemCompilado,
       ativo: config.ativo,
+      ultimoGerado: ultimo
+        ? {
+            conteudo: ultimo.conteudo,
+            geradoEm: ultimo.geradoEm.toISOString(),
+            periodoInicio: ultimo.periodoInicio,
+            periodoFim: ultimo.periodoFim,
+          }
+        : null,
       proximoEnvio: proximoEnvio(
         {
           frequencia: config.frequencia as 'semanal' | 'mensal',
@@ -338,6 +360,44 @@ export async function listarContasComCampanhas(clienteId: string): Promise<Conta
   }
 
   return resultado
+}
+
+// --- Gerar agora (sob demanda, no formato da config) ---
+
+export type GerarAgoraResultado =
+  | { success: true; texto: string; periodo: { inicio: string; fim: string } }
+  | { success: false; error: string }
+
+/**
+ * Gera o relatório de uma config AGORA (mesmo formato do cron) e salva no
+ * histórico como tipo 'manual'. Usado no botão "Gerar agora" do card.
+ */
+export async function gerarRelatorioAgoraDaConfig(configId: string): Promise<GerarAgoraResultado> {
+  const user = await getCurrentUser()
+  if (!user) return { success: false, error: 'Não autenticado' }
+
+  try {
+    const relatorio = await gerarRelatorioDeConfig(configId)
+    if (!relatorio) {
+      return { success: false, error: 'Sem dados no período para as contas configuradas.' }
+    }
+
+    await db.insert(relatorios).values({
+      clienteId: relatorio.clienteId,
+      clienteNome: relatorio.clienteNome,
+      tipo: 'manual',
+      periodoInicio: relatorio.periodo.inicio,
+      periodoFim: relatorio.periodo.fim,
+      conteudo: relatorio.texto,
+      configId,
+    })
+
+    revalidatePath('/relatorios')
+    return { success: true, texto: relatorio.texto, periodo: relatorio.periodo }
+  } catch (err) {
+    console.error('[Relatórios] erro ao gerar agora:', err)
+    return { success: false, error: 'Erro ao gerar o relatório.' }
+  }
 }
 
 // --- Preview (sem persistir) ---
