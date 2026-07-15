@@ -560,6 +560,11 @@ export const crmContatos = pgTable('crm_contatos', {
   cidade: text('cidade'),
   estado: text('estado'),
   notas: text('notas'),
+  // Endereço completo (modal "Criar novo Lead", imagens 07-11). Todos nullable.
+  pais: text('pais'),
+  numero: text('numero'),
+  complemento: text('complemento'),
+  bairro: text('bairro'),
   // 'manual' | 'landing_page' | 'meta_lead_ad' | 'whatsapp' | 'indicacao' | 'outro'
   origem: text('origem').notNull().default('manual'),
   origemDetalhe: jsonb('origem_detalhe'),
@@ -569,6 +574,31 @@ export const crmContatos = pgTable('crm_contatos', {
 }, (table) => ({
   workspaceEmailIdx: index('crm_contatos_workspace_email_idx').on(table.workspaceId, table.email),
   workspaceTelefoneIdx: index('crm_contatos_workspace_telefone_idx').on(table.workspaceId, table.telefoneNormalizado),
+}))
+
+// Tags do CRM (badges coloridas do modal "Criar novo Lead"). `cor` armazena a
+// CHAVE da paleta CORES_TAG (src/lib/crm/tags.ts), nunca classe/hex cru — a UI
+// resolve a chave em classes Tailwind. Unicidade por (workspace, nome) com o
+// nome normalizado por trim na action (criarTag recusa duplicada
+// case-insensitive antes do insert).
+export const crmTags = pgTable('crm_tags', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  cor: text('cor').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  workspaceNomeIdx: uniqueIndex('crm_tags_workspace_nome_idx').on(table.workspaceId, table.nome),
+}))
+
+// Junção lead ↔ tag (N:N). Índice único impede vincular a mesma tag 2x.
+export const crmContatoTags = pgTable('crm_contato_tags', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  contatoId: uuid('contato_id').notNull().references(() => crmContatos.id, { onDelete: 'cascade' }),
+  tagId: uuid('tag_id').notNull().references(() => crmTags.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  contatoTagIdx: uniqueIndex('crm_contato_tags_contato_tag_idx').on(table.contatoId, table.tagId),
 }))
 
 export const crmPipelines = pgTable('crm_pipelines', {
