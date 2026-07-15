@@ -1,32 +1,24 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowUp,
-  Bold,
   Building2,
   CalendarDays,
-  CheckSquare,
   ChevronRight,
   Clock,
   FileText,
   History,
-  Italic,
-  Link as LinkIcon,
-  List,
   ListChecks,
-  ListOrdered,
   MessageSquare,
   Paperclip,
   Play,
   Plus,
   StickyNote,
   Trash2,
-  Underline,
-  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -38,6 +30,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { EditorNotas } from '@/components/tarefas/editor-notas'
 import {
   Select,
   SelectContent,
@@ -61,10 +54,8 @@ import {
   COLUNAS_ORDEM,
   PRIORIDADE_CLASSE,
   STATUS_CLASSE,
-  aplicarMarcacao,
   corDoAvatar,
   iniciais,
-  type TipoMarcacao,
 } from '@/lib/tarefas/quadro'
 import { criarTarefa } from '@/actions/tarefas'
 
@@ -90,16 +81,6 @@ const SELECT_CELULA = 'h-auto w-full border-0 bg-transparent px-0 py-0 shadow-no
 const DATA_CELULA = 'h-auto border-0 bg-transparent px-0 shadow-none focus-visible:ring-0'
 const ABA_CELULA =
   'gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:opacity-50 disabled:cursor-not-allowed'
-
-const FERRAMENTAS: { tipo: TipoMarcacao; Icone: LucideIcon; rotulo: string }[] = [
-  { tipo: 'negrito', Icone: Bold, rotulo: 'Negrito' },
-  { tipo: 'italico', Icone: Italic, rotulo: 'Itálico' },
-  { tipo: 'sublinhado', Icone: Underline, rotulo: 'Sublinhado' },
-  { tipo: 'lista', Icone: List, rotulo: 'Lista' },
-  { tipo: 'lista_numerada', Icone: ListOrdered, rotulo: 'Lista numerada' },
-  { tipo: 'checkbox', Icone: CheckSquare, rotulo: 'Caixa de seleção' },
-  { tipo: 'link', Icone: LinkIcon, rotulo: 'Link' },
-]
 
 type ItemNovo = { id: string; texto: string }
 
@@ -130,24 +111,12 @@ export function NovaTarefaForm({
   const [recorrencia, setRecorrencia] = useState<TarefaRecorrencia>('nenhuma')
   const [dias, setDias] = useState<number[]>([])
   const [notas, setNotas] = useState('')
-  const notasRef = useRef<HTMLTextAreaElement>(null)
 
   const [itens, setItens] = useState<ItemNovo[]>([])
   const [novoItem, setNovoItem] = useState('')
 
   function toggleDia(d: number) {
     setDias((atual) => (atual.includes(d) ? atual.filter((x) => x !== d) : [...atual, d].sort()))
-  }
-
-  function marcar(tipo: TipoMarcacao) {
-    const el = notasRef.current
-    if (!el) return
-    const r = aplicarMarcacao(notas, el.selectionStart, el.selectionEnd, tipo)
-    setNotas(r.texto)
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(r.cursor, r.cursor)
-    })
   }
 
   function adicionarItem() {
@@ -545,28 +514,9 @@ export function NovaTarefaForm({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="flex flex-wrap items-center gap-0.5 rounded-md border p-1">
-                {FERRAMENTAS.map(({ tipo, Icone, rotulo }) => (
-                  <Button
-                    key={tipo}
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => marcar(tipo)}
-                    aria-label={rotulo}
-                    title={rotulo}
-                  >
-                    <Icone className="size-3.5" />
-                  </Button>
-                ))}
-              </div>
-              <Textarea
-                ref={notasRef}
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                rows={8}
+              <EditorNotas
+                valorInicial=""
+                onChange={setNotas}
                 placeholder="Anotações rápidas..."
                 aria-label="Notas da tarefa"
               />

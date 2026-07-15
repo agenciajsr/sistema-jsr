@@ -16,7 +16,6 @@ import {
   formatarTamanho,
   tipoDeArquivo,
   textoAtividade,
-  aplicarMarcacao,
   corDaEtiqueta,
   COLUNAS_ORDEM,
 } from './quadro'
@@ -432,35 +431,5 @@ describe('corDaEtiqueta', () => {
     expect(corDaEtiqueta('Performance')).not.toMatch(/#|rgb/)
     expect(typeof corDaEtiqueta(null)).toBe('string')
     expect(corDaEtiqueta(null).length).toBeGreaterThan(0)
-  })
-})
-
-describe('aplicarMarcacao', () => {
-  it('envolve a seleção com o marcador', () => {
-    expect(aplicarMarcacao('abc', 0, 3, 'negrito').texto).toBe('**abc**')
-    expect(aplicarMarcacao('abc', 0, 3, 'italico').texto).toBe('*abc*')
-    expect(aplicarMarcacao('abc', 0, 3, 'sublinhado').texto).toBe('_abc_')
-    expect(aplicarMarcacao('JSR', 0, 3, 'link').texto).toBe('[JSR](url)')
-  })
-
-  it('seleção vazia em negrito -> "****" com cursor no meio', () => {
-    const r = aplicarMarcacao('', 0, 0, 'negrito')
-    expect(r.texto).toBe('****')
-    expect(r.cursor).toBe(2)
-  })
-
-  it('prefixa cada linha da seleção', () => {
-    expect(aplicarMarcacao('a\nb', 0, 3, 'lista').texto).toBe('- a\n- b')
-    expect(aplicarMarcacao('a\nb', 0, 3, 'lista_numerada').texto).toBe('1. a\n2. b')
-    expect(aplicarMarcacao('a', 0, 1, 'checkbox').texto).toBe('- [ ] a')
-  })
-
-  it('seleção vazia no meio de uma linha já marcada não duplica o marcador', () => {
-    expect(aplicarMarcacao('- item', 3, 3, 'lista').texto).toBe('- item')
-  })
-
-  it('índices fora do intervalo não lançam nem corrompem o texto', () => {
-    expect(() => aplicarMarcacao('abc', -5, 99, 'negrito')).not.toThrow()
-    expect(aplicarMarcacao('abc', 10, 20, 'negrito').texto).toContain('abc')
   })
 })

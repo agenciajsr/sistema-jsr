@@ -3,18 +3,12 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Bold,
-  CheckSquare,
   Download,
   File,
   FileSpreadsheet,
   FileText,
   History,
   Image as ImageIcon,
-  Italic,
-  Link as LinkIcon,
-  List,
-  ListOrdered,
   Maximize2,
   MoreHorizontal,
   Paperclip,
@@ -22,7 +16,6 @@ import {
   Plus,
   Presentation,
   StickyNote,
-  Underline,
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,7 +24,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
+import { EditorNotas } from '@/components/tarefas/editor-notas'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,14 +34,12 @@ import {
 import type { TarefaDetalhe as TarefaDetalheTipo, AnexoTarefa, AtividadeTarefa } from '@/lib/tarefas/dados'
 import {
   STATUS_CLASSE,
-  aplicarMarcacao,
   corDoAvatar,
   formatarTamanho,
   iniciais,
   tempoRelativo,
   textoAtividade,
   tipoDeArquivo,
-  type TipoMarcacao,
 } from '@/lib/tarefas/quadro'
 import type { TarefaStatus } from '@/lib/tarefas/recorrencia'
 import { atualizarTarefa } from '@/actions/tarefas'
@@ -163,16 +154,6 @@ export function AtividadeLinha({ atv, agora }: { atv: AtividadeTarefa; agora: st
   )
 }
 
-const FERRAMENTAS: { tipo: TipoMarcacao; Icone: LucideIcon; rotulo: string }[] = [
-  { tipo: 'negrito', Icone: Bold, rotulo: 'Negrito' },
-  { tipo: 'italico', Icone: Italic, rotulo: 'Itálico' },
-  { tipo: 'sublinhado', Icone: Underline, rotulo: 'Sublinhado' },
-  { tipo: 'lista', Icone: List, rotulo: 'Lista' },
-  { tipo: 'lista_numerada', Icone: ListOrdered, rotulo: 'Lista numerada' },
-  { tipo: 'checkbox', Icone: CheckSquare, rotulo: 'Caixa de seleção' },
-  { tipo: 'link', Icone: LinkIcon, rotulo: 'Link' },
-]
-
 export function TarefaLateral({
   tarefa,
   agora,
@@ -192,24 +173,15 @@ export function TarefaLateral({
 }) {
   const router = useRouter()
   const [salvando, startSalvar] = useTransition()
+  // `notas` guarda o HTML atual do editor (atualizado no onChange). O editor é
+  // NÃO-controlado, então este estado só alimenta o guard de igualdade e o salvar.
   const [notas, setNotas] = useState(tarefa.notas ?? '')
   const [ultimoSave, setUltimoSave] = useState<string | null>(null)
   const [expandido, setExpandido] = useState(false)
-  const notasRef = useRef<HTMLTextAreaElement>(null)
+  // Editor não-controlado: para "Limpar notas" refletir na tela, forçamos o
+  // remount trocando a key.
+  const [resetKey, setResetKey] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  // D-06: a toolbar insere marcadores markdown na posição do cursor. A lógica é
-  // aplicarMarcacao (pura); aqui só reposicionamos o cursor depois do setState.
-  function marcar(tipo: TipoMarcacao) {
-    const el = notasRef.current
-    if (!el) return
-    const r = aplicarMarcacao(notas, el.selectionStart, el.selectionEnd, tipo)
-    setNotas(r.texto)
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(r.cursor, r.cursor)
-    })
-  }
 
   function salvarNotas(valor: string) {
     if (valor === (tarefa.notas ?? '')) return
@@ -254,9 +226,11 @@ export function TarefaLateral({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
+                  disabled={notas.trim().length === 0}
                   onClick={() => {
                     setNotas('')
                     salvarNotas('')
+                    setResetKey((k) => k + 1)
                   }}
                 >
                   Limpar notas
@@ -267,35 +241,15 @@ export function TarefaLateral({
         </CardHeader>
         <CardContent className="space-y-2">
           {/* Mockup: toolbar e texto DENTRO da mesma caixa com borda. */}
-          <div className="overflow-hidden rounded-md border">
-            <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 p-1">
-              {FERRAMENTAS.map(({ tipo, Icone, rotulo }) => (
-                <Button
-                  key={tipo}
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => marcar(tipo)}
-                  aria-label={rotulo}
-                  title={rotulo}
-                >
-                  <Icone className="size-3.5" />
-                </Button>
-              ))}
-            </div>
-            <Textarea
-              ref={notasRef}
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              onBlur={() => salvarNotas(notas)}
-              rows={expandido ? 20 : 8}
-              placeholder="Anotações rápidas..."
-              className="rounded-none border-0 shadow-none focus-visible:ring-0"
-              aria-label="Notas da tarefa"
-            />
-          </div>
+          <EditorNotas
+            key={resetKey}
+            valorInicial={tarefa.notas ?? ''}
+            expandido={expandido}
+            onChange={setNotas}
+            onBlur={(html) => salvarNotas(html)}
+            placeholder="Anotações rápidas..."
+            aria-label="Notas da tarefa"
+          />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {salvando
