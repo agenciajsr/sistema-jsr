@@ -60,6 +60,30 @@ export const COLUNA_BARRA: Record<TarefaStatus, string> = {
   nao_realizada: 'bg-muted-foreground',
 }
 
+/** O status como chip do mockup ("▶ Em Andamento" azul). Só tokens existentes. */
+export const STATUS_CLASSE: Record<TarefaStatus, string> = {
+  a_fazer: 'bg-muted text-foreground border-transparent',
+  em_andamento: 'bg-primary/10 text-primary border-primary/20',
+  concluida: 'bg-chart-success/10 text-chart-success border-chart-success/20',
+  nao_realizada: 'bg-muted text-muted-foreground border-transparent',
+}
+
+// Chips coloridos de etiqueta (mockup: "Google Ads" azul, "Performance" verde).
+const PALETA_ETIQUETA = [
+  'bg-primary/10 text-primary border-primary/20',
+  'bg-chart-success/10 text-chart-success border-chart-success/20',
+  'bg-chart-warning/10 text-chart-warning border-chart-warning/20',
+  'bg-destructive/10 text-destructive border-destructive/20',
+]
+
+/** Cor ESTÁVEL por nome de etiqueta — mesmo hash determinístico de corDoAvatar. */
+export function corDaEtiqueta(nome: string | null | undefined): string {
+  const chave = nome ?? ''
+  let soma = 0
+  for (let i = 0; i < chave.length; i++) soma += chave.charCodeAt(i)
+  return PALETA_ETIQUETA[soma % PALETA_ETIQUETA.length]
+}
+
 /** D-03: chip suave; `urgente` é o ÚNICO sólido. */
 export const PRIORIDADE_CLASSE: Record<TarefaPrioridade, string> = {
   urgente: 'bg-destructive text-white border-transparent',
@@ -310,13 +334,15 @@ export function formatarTamanho(bytes: number | null | undefined): string {
 /** Ícone colorido por tipo de arquivo. A `classe` só usa tokens existentes. */
 export type ArquivoInfo = { rotulo: string; classe: string }
 
+// Ícones SÓLIDOS coloridos com glifo branco — exatamente como no mockup
+// (quadradinho verde/vermelho/laranja), não tintados.
 const ARQUIVO_POR_TIPO: Record<string, ArquivoInfo> = {
-  planilha: { rotulo: 'Planilha', classe: 'text-chart-success bg-chart-success/10' },
-  pdf: { rotulo: 'PDF', classe: 'text-destructive bg-destructive/10' },
-  apresentacao: { rotulo: 'Apresentação', classe: 'text-chart-warning bg-chart-warning/10' },
-  imagem: { rotulo: 'Imagem', classe: 'text-primary bg-primary/10' },
-  documento: { rotulo: 'Documento', classe: 'text-primary bg-primary/10' },
-  arquivo: { rotulo: 'Arquivo', classe: 'text-muted-foreground bg-muted' },
+  planilha: { rotulo: 'Planilha', classe: 'bg-chart-success text-white' },
+  pdf: { rotulo: 'PDF', classe: 'bg-destructive text-white' },
+  apresentacao: { rotulo: 'Apresentação', classe: 'bg-chart-warning text-white' },
+  imagem: { rotulo: 'Imagem', classe: 'bg-primary text-white' },
+  documento: { rotulo: 'Documento', classe: 'bg-primary text-white' },
+  arquivo: { rotulo: 'Arquivo', classe: 'bg-muted text-muted-foreground' },
 }
 
 const EXTENSAO_TIPO: Record<string, keyof typeof ARQUIVO_POR_TIPO> = {

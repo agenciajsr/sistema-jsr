@@ -17,6 +17,7 @@ import {
   tipoDeArquivo,
   textoAtividade,
   aplicarMarcacao,
+  corDaEtiqueta,
   COLUNAS_ORDEM,
 } from './quadro'
 import type { TarefaStatus, TarefaPrioridade } from './recorrencia'
@@ -419,6 +420,18 @@ describe('textoAtividade', () => {
       valor: null,
     })
     expect(() => textoAtividade({ tipo: 'qualquer' })).not.toThrow()
+  })
+})
+
+describe('corDaEtiqueta', () => {
+  it('é determinístico: a mesma etiqueta tem sempre a mesma cor', () => {
+    expect(corDaEtiqueta('Google Ads')).toBe(corDaEtiqueta('Google Ads'))
+  })
+
+  it('nunca devolve cor hardcoded e não quebra com null', () => {
+    expect(corDaEtiqueta('Performance')).not.toMatch(/#|rgb/)
+    expect(typeof corDaEtiqueta(null)).toBe('string')
+    expect(corDaEtiqueta(null).length).toBeGreaterThan(0)
   })
 })
 

@@ -24,6 +24,7 @@ import {
   Plus,
   Share2,
   Trash2,
+  Users,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -84,8 +85,10 @@ import {
 import {
   COLUNAS_ORDEM,
   PRIORIDADE_CLASSE,
+  STATUS_CLASSE,
   agruparChecklist,
   codigoTarefa,
+  corDaEtiqueta,
   corDoAvatar,
   iniciais,
   progressoChecklist,
@@ -146,10 +149,13 @@ export function TarefaDetalhe({
 
   const [titulo, setTitulo] = useState(tarefa.titulo)
   const [descricao, setDescricao] = useState(tarefa.descricao ?? '')
+  const [editandoDescricao, setEditandoDescricao] = useState(false)
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
 
   const [itens, setItens] = useState<ItemChecklist[]>(tarefa.checklist)
   const [novoItem, setNovoItem] = useState<Record<string, string>>({})
+  // Qual grupo está com o campo "Adicionar item" aberto (mockup mostra só o link).
+  const [itemAberto, setItemAberto] = useState<string | null>(null)
   const [gruposNovos, setGruposNovos] = useState<string[]>([])
   const [nomeGrupoNovo, setNomeGrupoNovo] = useState('')
   const [criandoGrupo, setCriandoGrupo] = useState(false)
@@ -291,6 +297,25 @@ export function TarefaDetalhe({
     setGruposNovos((g) => (g.includes(nome) ? g : [...g, nome]))
     setNomeGrupoNovo('')
     setCriandoGrupo(false)
+    // Grupo novo já abre pronto para receber o primeiro item.
+    setItemAberto(nome)
+  }
+
+  /** Apaga todos os itens do grupo — o "..." do card de checklist do mockup.
+   *  Sequencial de propósito (nada de paralelizar com Promise). */
+  function excluirGrupo(grupo: { nome: string; itens: ItemChecklist[] }) {
+    startSalvar(async () => {
+      for (const item of grupo.itens) {
+        const r = await deleteChecklistItemTarefa(item.id)
+        if ('error' in r) {
+          toast.error(r.error)
+          return
+        }
+      }
+      setItens((a) => a.filter((i) => (i.grupo || 'Checklist') !== grupo.nome))
+      setGruposNovos((g) => g.filter((x) => x !== grupo.nome))
+      router.refresh()
+    })
   }
 
   function removerEtiqueta(etiqueta: string) {
@@ -380,10 +405,133 @@ export function TarefaDetalhe({
 
   const responsavelDaTarefa = responsaveis.find((r) => r.id === tarefa.responsavelId)
 
+  /** Card de grupo de checklist FIEL ao mockup: nome + "2 / 6" + barra na mesma
+   *  linha, ícones de responsável/data à direita, "..." com ação real; item com
+   *  checkbox verde, avatar e "--"; rodapé "+ Adicionar item". */
+  function renderGrupo(grupo: { nome: string; itens: ItemChecklist[]; total: number; feitos: number }) {
+    return (
+      <Card key={grupo.nome} className="gap-3 py-4">
+        <CardHeader className="flex items-center gap-3 space-y-0">
+          <CardTitle className="text-sm">{grupo.nome}</CardTitle>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {grupo.feitos} / {grupo.total}
+          </span>
+          <Progress value={progressoChecklist(grupo.feitos, grupo.total)} className="h-1.5 w-28" />
+          <span className="ml-auto flex items-center gap-3 text-muted-foreground">
+            <Users className="size-4" />
+            <CalendarDays className="size-4" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  aria-label={`Ações do checklist ${grupo.nome}`}
+                >
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => excluirGrupo(grupo)}
+                >
+                  Excluir checklist
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-0.5">
+          {grupo.itens.map((item) => (
+            <div key={item.id} className="group flex items-center gap-2 py-1.5">
+              <Checkbox
+                checked={item.concluido}
+                onCheckedChange={() => alternarItem(item)}
+                aria-label={item.texto}
+                className="data-[state=checked]:border-chart-success data-[state=checked]:bg-chart-success"
+              />
+              <span
+                className={
+                  item.concluido
+                    ? 'flex-1 text-sm text-muted-foreground line-through'
+                    : 'flex-1 text-sm'
+                }
+              >
+                {item.texto}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 opacity-0 group-hover:opacity-100"
+                onClick={() => removerItem(item)}
+                aria-label={`Remover ${item.texto}`}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+              {responsavelDaTarefa ? (
+                <Avatar size="sm">
+                  <AvatarFallback
+                    className={`text-[10px] font-semibold ${corDoAvatar(tarefa.responsavelId)}`}
+                  >
+                    {iniciais(responsavelDaTarefa.nome)}
+                  </AvatarFallback>
+                </Avatar>
+              ) : (
+                <span className="flex size-6 items-center justify-center rounded-full bg-muted">
+                  <Users className="size-3 text-muted-foreground" />
+                </span>
+              )}
+              <span className="w-6 text-right text-xs text-muted-foreground">--</span>
+            </div>
+          ))}
+
+          {itemAberto === grupo.nome ? (
+            <div className="flex gap-2 pt-2">
+              <Input
+                value={novoItem[grupo.nome] ?? ''}
+                onChange={(e) => setNovoItem((n) => ({ ...n, [grupo.nome]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    adicionarItem(grupo.nome)
+                  }
+                  if (e.key === 'Escape') setItemAberto(null)
+                }}
+                placeholder="Escreva o item e pressione Enter..."
+                autoFocus
+                aria-label={`Novo item em ${grupo.nome}`}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => adicionarItem(grupo.nome)}
+                disabled={salvando}
+              >
+                Adicionar
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 mt-1 text-muted-foreground"
+              onClick={() => setItemAberto(grupo.nome)}
+            >
+              <Plus className="size-4" />
+              Adicionar item
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Barra superior */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Barra superior — faixa branca de ponta a ponta com borda, como no mockup */}
+      <div className="-mx-6 -mt-6 flex flex-wrap items-center justify-between gap-3 border-b bg-card px-6 py-3 lg:-mx-8 lg:-mt-8 lg:px-8">
         <div>
           <Button variant="ghost" size="sm" asChild className="-ml-2">
             <Link href="/tarefas">
@@ -405,13 +553,13 @@ export function TarefaDetalhe({
             <Share2 className="size-4" />
             Compartilhar
           </Button>
-          <Button variant="ghost" size="icon" onClick={copiarLink} aria-label="Copiar link da tarefa">
+          <Button variant="outline" size="icon" onClick={copiarLink} aria-label="Copiar link da tarefa">
             <Link2 className="size-4" />
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Mais ações">
+              <Button variant="outline" size="icon" aria-label="Mais ações">
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -519,10 +667,10 @@ export function TarefaDetalhe({
                     onValueChange={(v) => salvarCampo({ status: v as TarefaStatus })}
                   >
                     <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5">
-                        {tarefa.status === 'em_andamento' && <Play className="size-3.5 text-primary" />}
-                        <SelectValue />
-                      </span>
+                      <Badge variant="outline" className={STATUS_CLASSE[tarefa.status]}>
+                        {tarefa.status === 'em_andamento' && <Play className="size-3 fill-current" />}
+                        {STATUS_LABEL[tarefa.status]}
+                      </Badge>
                     </SelectTrigger>
                     <SelectContent>
                       {COLUNAS_ORDEM.map((s) => (
@@ -570,13 +718,11 @@ export function TarefaDetalhe({
                     onValueChange={(v) => salvarCampo({ prioridade: v as TarefaPrioridade })}
                   >
                     <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
                         {(tarefa.prioridade === 'alta' || tarefa.prioridade === 'urgente') && (
                           <ArrowUp className="size-3.5 text-destructive" />
                         )}
-                        <Badge variant="outline" className={PRIORIDADE_CLASSE[tarefa.prioridade]}>
-                          {PRIORIDADE_LABEL[tarefa.prioridade]}
-                        </Badge>
+                        {PRIORIDADE_LABEL[tarefa.prioridade]}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
@@ -598,7 +744,7 @@ export function TarefaDetalhe({
                   <Label className="text-xs text-muted-foreground">Etiquetas</Label>
                   <div className="flex flex-wrap items-center gap-1">
                     {tarefa.etiquetas.map((e) => (
-                      <Badge key={e} variant="secondary" className="gap-1">
+                      <Badge key={e} variant="outline" className={`gap-1 ${corDaEtiqueta(e)}`}>
                         {e}
                         <button
                           type="button"
@@ -701,31 +847,31 @@ export function TarefaDetalhe({
           <Tabs value={aba} onValueChange={setAba}>
             <TabsList className="h-auto w-full justify-start gap-4 rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="detalhes"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 <FileText className="size-4" />
                 Detalhes
               </TabsTrigger>
               <TabsTrigger value="checklists"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 <ListChecks className="size-4" />
                 Checklists{itens.length > 0 && ` ${itens.length}`}
               </TabsTrigger>
               <TabsTrigger value="anexos"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 <Paperclip className="size-4" />
                 Anexos{tarefa.anexos.length > 0 && ` ${tarefa.anexos.length}`}
               </TabsTrigger>
               <TabsTrigger value="comentarios"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 <MessageSquare className="size-4" />
                 Comentários{tarefa.comentarios.length > 0 && ` ${tarefa.comentarios.length}`}
               </TabsTrigger>
               <TabsTrigger value="atividade"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 <History className="size-4" />
                 Atividade
@@ -736,17 +882,32 @@ export function TarefaDetalhe({
             <TabsContent value="detalhes" className="mt-4 space-y-6">
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Descrição</h3>
-                <Textarea
-                  value={descricao}
-                  onChange={(e) => setDescricao(e.target.value)}
-                  onBlur={() => {
-                    if (descricao !== (tarefa.descricao ?? '')) salvarCampo({ descricao })
-                  }}
-                  rows={6}
-                  placeholder="Detalhes, contexto, links..."
-                  className="whitespace-pre-wrap"
-                  aria-label="Descrição da tarefa"
-                />
+                {/* Mockup: texto limpo, sem caixa. Clica para editar; blur salva. */}
+                {editandoDescricao ? (
+                  <Textarea
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    onBlur={() => {
+                      setEditandoDescricao(false)
+                      if (descricao !== (tarefa.descricao ?? '')) salvarCampo({ descricao })
+                    }}
+                    rows={8}
+                    autoFocus
+                    placeholder="Detalhes, contexto, links..."
+                    aria-label="Descrição da tarefa"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="w-full whitespace-pre-wrap rounded-md text-left text-sm leading-relaxed hover:bg-muted/50"
+                    onClick={() => setEditandoDescricao(true)}
+                    aria-label="Editar descrição"
+                  >
+                    {descricao || (
+                      <span className="text-muted-foreground">Adicionar descrição...</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="space-y-4">
@@ -756,7 +917,7 @@ export function TarefaDetalhe({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-muted-foreground"
+                      className="text-primary hover:text-primary"
                       onClick={() => setCriandoGrupo(true)}
                     >
                       <Plus className="size-4" />
@@ -769,90 +930,7 @@ export function TarefaDetalhe({
                   <p className="text-sm text-muted-foreground">Nenhum checklist ainda.</p>
                 )}
 
-                {gruposVisiveis.map((grupo) => (
-                  <Card key={grupo.nome}>
-                    <CardHeader className="flex items-center justify-between space-y-0">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-sm">{grupo.nome}</CardTitle>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {grupo.feitos} / {grupo.total}
-                        </span>
-                      </div>
-                      <Progress
-                        value={progressoChecklist(grupo.feitos, grupo.total)}
-                        className="h-1.5 w-32"
-                      />
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {grupo.itens.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={item.concluido}
-                            onCheckedChange={() => alternarItem(item)}
-                            aria-label={item.texto}
-                            className="data-[state=checked]:border-chart-success data-[state=checked]:bg-chart-success"
-                          />
-                          <span
-                            className={
-                              item.concluido
-                                ? 'flex-1 text-sm text-muted-foreground line-through'
-                                : 'flex-1 text-sm'
-                            }
-                          >
-                            {item.texto}
-                          </span>
-                          {responsavelDaTarefa ? (
-                            <Avatar size="sm">
-                              <AvatarFallback
-                                className={`text-[10px] font-semibold ${corDoAvatar(tarefa.responsavelId)}`}
-                              >
-                                {iniciais(responsavelDaTarefa.nome)}
-                              </AvatarFallback>
-                            </Avatar>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">--</span>
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            onClick={() => removerItem(item)}
-                            aria-label={`Remover ${item.texto}`}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex gap-2 pt-1">
-                        <Input
-                          value={novoItem[grupo.nome] ?? ''}
-                          onChange={(e) =>
-                            setNovoItem((n) => ({ ...n, [grupo.nome]: e.target.value }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              adicionarItem(grupo.nome)
-                            }
-                          }}
-                          placeholder="Adicionar item..."
-                          aria-label={`Novo item em ${grupo.nome}`}
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => adicionarItem(grupo.nome)}
-                          disabled={salvando}
-                        >
-                          <Plus className="size-4" />
-                          Adicionar item
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {gruposVisiveis.map(renderGrupo)}
 
                 {criandoGrupo && (
                   <div className="flex gap-2">
@@ -885,53 +963,7 @@ export function TarefaDetalhe({
               {gruposVisiveis.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum checklist ainda.</p>
               ) : (
-                gruposVisiveis.map((grupo) => (
-                  <Card key={grupo.nome}>
-                    <CardHeader className="flex items-center justify-between space-y-0">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-sm">{grupo.nome}</CardTitle>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {grupo.feitos} / {grupo.total}
-                        </span>
-                      </div>
-                      <Progress
-                        value={progressoChecklist(grupo.feitos, grupo.total)}
-                        className="h-1.5 w-32"
-                      />
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {grupo.itens.map((item) => (
-                        <div key={item.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={item.concluido}
-                            onCheckedChange={() => alternarItem(item)}
-                            aria-label={item.texto}
-                            className="data-[state=checked]:border-chart-success data-[state=checked]:bg-chart-success"
-                          />
-                          <span
-                            className={
-                              item.concluido
-                                ? 'flex-1 text-sm text-muted-foreground line-through'
-                                : 'flex-1 text-sm'
-                            }
-                          >
-                            {item.texto}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            onClick={() => removerItem(item)}
-                            aria-label={`Remover ${item.texto}`}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ))
+                gruposVisiveis.map(renderGrupo)
               )}
             </TabsContent>
 

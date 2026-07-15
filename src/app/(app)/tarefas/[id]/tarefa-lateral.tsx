@@ -18,6 +18,7 @@ import {
   Maximize2,
   MoreHorizontal,
   Paperclip,
+  Play,
   Plus,
   Presentation,
   StickyNote,
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { TarefaDetalhe as TarefaDetalheTipo, AnexoTarefa, AtividadeTarefa } from '@/lib/tarefas/dados'
 import {
+  STATUS_CLASSE,
   aplicarMarcacao,
   corDoAvatar,
   formatarTamanho,
@@ -48,6 +50,7 @@ import {
   tipoDeArquivo,
   type TipoMarcacao,
 } from '@/lib/tarefas/quadro'
+import type { TarefaStatus } from '@/lib/tarefas/recorrencia'
 import { atualizarTarefa } from '@/actions/tarefas'
 
 // Zero cálculo solto aqui: rótulo, classe, tamanho e "há X" vêm todos de
@@ -120,6 +123,11 @@ export function AtividadeLinha({ atv, agora }: { atv: AtividadeTarefa; agora: st
   const { frase, valor } = textoAtividade(atv)
   const ehBadge =
     atv.tipo === 'campo_alterado' && (atv.campo === 'status' || atv.campo === 'prioridade')
+  // O badge de status na atividade usa a mesma cor do chip da grade (mockup).
+  const badgeClasse =
+    atv.campo === 'status' && atv.para
+      ? (STATUS_CLASSE[atv.para as TarefaStatus] ?? '')
+      : ''
 
   return (
     <div className="flex gap-2">
@@ -133,12 +141,22 @@ export function AtividadeLinha({ atv, agora }: { atv: AtividadeTarefa; agora: st
           <b>{atv.autorNome}</b>
           <span className="text-muted-foreground">{frase}</span>
           {valor &&
+            atv.tipo !== 'comentou' &&
             (ehBadge ? (
-              <Badge variant="secondary">{valor}</Badge>
+              <Badge variant="outline" className={badgeClasse}>
+                {atv.campo === 'status' && atv.para === 'em_andamento' && (
+                  <Play className="size-3 fill-current" />
+                )}
+                {valor}
+              </Badge>
             ) : (
               <span className="font-medium">{valor}</span>
             ))}
         </span>
+        {/* Mockup: o trecho do comentário vai na linha de baixo, como citação. */}
+        {atv.tipo === 'comentou' && valor && (
+          <p className="truncate text-sm">&ldquo;{valor}&rdquo;</p>
+        )}
         <p className="text-xs text-muted-foreground">{tempoRelativo(atv.createdAt, agora)}</p>
       </div>
     </div>
@@ -248,32 +266,36 @@ export function TarefaLateral({
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="flex flex-wrap items-center gap-0.5 rounded-md border p-1">
-            {FERRAMENTAS.map(({ tipo, Icone, rotulo }) => (
-              <Button
-                key={tipo}
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => marcar(tipo)}
-                aria-label={rotulo}
-                title={rotulo}
-              >
-                <Icone className="size-3.5" />
-              </Button>
-            ))}
+          {/* Mockup: toolbar e texto DENTRO da mesma caixa com borda. */}
+          <div className="overflow-hidden rounded-md border">
+            <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 p-1">
+              {FERRAMENTAS.map(({ tipo, Icone, rotulo }) => (
+                <Button
+                  key={tipo}
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => marcar(tipo)}
+                  aria-label={rotulo}
+                  title={rotulo}
+                >
+                  <Icone className="size-3.5" />
+                </Button>
+              ))}
+            </div>
+            <Textarea
+              ref={notasRef}
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              onBlur={() => salvarNotas(notas)}
+              rows={expandido ? 20 : 8}
+              placeholder="Anotações rápidas..."
+              className="rounded-none border-0 shadow-none focus-visible:ring-0"
+              aria-label="Notas da tarefa"
+            />
           </div>
-          <Textarea
-            ref={notasRef}
-            value={notas}
-            onChange={(e) => setNotas(e.target.value)}
-            onBlur={() => salvarNotas(notas)}
-            rows={expandido ? 20 : 8}
-            placeholder="Anotações rápidas..."
-            aria-label="Notas da tarefa"
-          />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {salvando
@@ -329,10 +351,10 @@ export function TarefaLateral({
               <AnexoLinha key={a.id} anexo={a} onBaixar={onBaixarAnexo} onRemover={onRemoverAnexo} />
             ))
           )}
-          {tarefa.anexos.length > anexosCard.length && (
+          {tarefa.anexos.length > 0 && (
             <button
               type="button"
-              className="text-xs text-primary hover:underline"
+              className="w-full pt-1 text-center text-xs text-primary hover:underline"
               onClick={() => onIrParaAba('anexos')}
             >
               Ver todos anexos

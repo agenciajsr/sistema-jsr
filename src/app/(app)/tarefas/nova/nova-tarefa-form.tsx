@@ -60,6 +60,7 @@ import {
 import {
   COLUNAS_ORDEM,
   PRIORIDADE_CLASSE,
+  STATUS_CLASSE,
   aplicarMarcacao,
   corDoAvatar,
   iniciais,
@@ -88,7 +89,7 @@ const RECORRENCIAS: TarefaRecorrencia[] = [
 const SELECT_CELULA = 'h-auto w-full border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0'
 const DATA_CELULA = 'h-auto border-0 bg-transparent px-0 shadow-none focus-visible:ring-0'
 const ABA_CELULA =
-  'gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:opacity-50 disabled:cursor-not-allowed'
+  'gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:opacity-50 disabled:cursor-not-allowed'
 
 const FERRAMENTAS: { tipo: TipoMarcacao; Icone: LucideIcon; rotulo: string }[] = [
   { tipo: 'negrito', Icone: Bold, rotulo: 'Negrito' },
@@ -200,8 +201,8 @@ export function NovaTarefaForm({
 
   return (
     <div className="space-y-6">
-      {/* Barra superior */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Barra superior — mesma faixa branca de ponta a ponta do detalhe */}
+      <div className="-mx-6 -mt-6 flex flex-wrap items-center justify-between gap-3 border-b bg-card px-6 py-3 lg:-mx-8 lg:-mt-8 lg:px-8">
         <div>
           <Button variant="ghost" size="sm" asChild className="-ml-2">
             <Link href="/tarefas">
@@ -257,10 +258,10 @@ export function NovaTarefaForm({
                   <Label className="text-xs text-muted-foreground">Status</Label>
                   <Select value={status} onValueChange={(v) => setStatus(v as TarefaStatus)}>
                     <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5">
-                        {status === 'em_andamento' && <Play className="size-3.5 text-primary" />}
-                        <SelectValue />
-                      </span>
+                      <Badge variant="outline" className={STATUS_CLASSE[status]}>
+                        {status === 'em_andamento' && <Play className="size-3 fill-current" />}
+                        {STATUS_LABEL[status]}
+                      </Badge>
                     </SelectTrigger>
                     <SelectContent>
                       {COLUNAS_ORDEM.map((s) => (
@@ -305,13 +306,11 @@ export function NovaTarefaForm({
                     onValueChange={(v) => setPrioridade(v as TarefaPrioridade)}
                   >
                     <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
                         {(prioridade === 'alta' || prioridade === 'urgente') && (
                           <ArrowUp className="size-3.5 text-destructive" />
                         )}
-                        <Badge variant="outline" className={PRIORIDADE_CLASSE[prioridade]}>
-                          {PRIORIDADE_LABEL[prioridade]}
-                        </Badge>
+                        {PRIORIDADE_LABEL[prioridade]}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
