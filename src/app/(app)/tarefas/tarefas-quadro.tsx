@@ -4,13 +4,14 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   ChevronRight,
   ListChecks,
   Plus,
   Search,
   SlidersHorizontal,
 } from 'lucide-react'
+import { ptBR } from 'date-fns/locale'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -46,7 +49,8 @@ import {
   agruparPorStatus,
   estatisticasDoQuadro,
   filtrarTarefas,
-  formatarIntervalo,
+  rotuloDoDia,
+  tarefasDaVisaoDiaria,
 } from '@/lib/tarefas/quadro'
 import { TarefaCard } from './tarefa-card'
 
@@ -104,22 +108,42 @@ export function TarefasQuadro({
   const [prioridade, setPrioridade] = useState<TarefaPrioridade | 'todas'>('todas')
   const [clienteId, setClienteId] = useState<string>(TODOS)
   const [responsavelId, setResponsavelId] = useState<string>(TODOS)
+  const [calendarioAberto, setCalendarioAberto] = useState(false)
 
   // Toda a derivação vem do módulo PURO — zero lógica solta aqui (D-05).
+  // Visão DIÁRIA primeiro (ibf): só o que pertence ao dia visualizado entra.
+  const doDia = useMemo(
+    () => tarefasDaVisaoDiaria(dados.tarefas, dados.dia),
+    [dados.tarefas, dados.dia]
+  )
   const visiveis = useMemo(
-    () => filtrarTarefas(dados.tarefas, { busca, prioridade, clienteId, responsavelId }),
-    [dados.tarefas, busca, prioridade, clienteId, responsavelId]
+    () => filtrarTarefas(doDia, { busca, prioridade, clienteId, responsavelId }),
+    [doDia, busca, prioridade, clienteId, responsavelId]
   )
   const colunas = useMemo(() => agruparPorStatus(visiveis), [visiveis])
   const stats = useMemo(() => estatisticasDoQuadro(visiveis), [visiveis])
 
   const filtrosAtivos = (clienteId !== TODOS ? 1 : 0) + (responsavelId !== TODOS ? 1 : 0)
+  const ehHoje = dados.dia === dados.hoje
 
-  function trocarIntervalo(inicio: string, fim: string) {
-    router.push(`/tarefas?de=${inicio}&ate=${fim}`)
+  // Date LOCAL a partir de 'YYYY-MM-DD' — nunca new Date(string), que
+  // interpretaria como UTC e cairia no dia vizinho (regra de fuso do projeto).
+  const diaSelecionado = useMemo(() => {
+    const [ano, mes, diaNum] = dados.dia.split('-').map(Number)
+    return new Date(ano, mes - 1, diaNum)
+  }, [dados.dia])
+
+  function escolherDia(data: Date | undefined) {
+    if (!data) return
+    // Ano/mês/dia LOCAIS do objeto — nunca toISOString (fuso do projeto).
+    const iso = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(
+      data.getDate()
+    ).padStart(2, '0')}`
+    setCalendarioAberto(false)
+    router.push(iso === dados.hoje ? '/tarefas' : `/tarefas?dia=${iso}`)
   }
 
-  const vazio = dados.tarefas.length === 0
+  const vazio = doDia.length === 0
 
   return (
     // D-01: container flex com min-h da viewport (header h-16 + p-6/8 do <main>).
@@ -144,7 +168,7 @@ export function TarefasQuadro({
         </div>
 
         <Button asChild>
-          <Link href={`/tarefas/nova?data=${dados.hoje}`}>
+          <Link href={`/tarefas/nova?data=${dados.dia}`}>
             <Plus className="size-4" />
             Nova Tarefa
           </Link>
@@ -164,33 +188,39 @@ export function TarefasQuadro({
           />
         </div>
 
-        {/* "Hoje" volta ao intervalo padrão (D-01) limpando a URL. */}
-        <Button variant="outline" onClick={() => router.push('/tarefas')}>
-          <Calendar className="size-4" />
-          Hoje
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={dados.inicio}
-            onChange={(e) => e.target.value && trocarIntervalo(e.target.value, dados.fim)}
-            className="w-auto"
-            aria-label="Inicio do intervalo"
-          />
-          <span className="text-muted-foreground">–</span>
-          <Input
-            type="date"
-            value={dados.fim}
-            onChange={(e) => e.target.value && trocarIntervalo(dados.inicio, e.target.value)}
-            className="w-auto"
-            aria-label="Fim do intervalo"
-          />
-        </div>
-
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {formatarIntervalo(dados.inicio, dados.fim)}
-        </span>
+        {/* UM botão de dia (ibf): rótulo 'Hoje' ou a data; calendário popover. */}
+        <Popover open={calendarioAberto} onOpenChange={setCalendarioAberto}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" aria-label="Escolher dia do quadro">
+              <CalendarIcon className="size-4" />
+              {rotuloDoDia(dados.dia, dados.hoje)}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              locale={ptBR}
+              selected={diaSelecionado}
+              defaultMonth={diaSelecionado}
+              onSelect={escolherDia}
+            />
+            {!ehHoje && (
+              <div className="border-t p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setCalendarioAberto(false)
+                    router.push('/tarefas')
+                  }}
+                >
+                  Voltar para hoje
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
 
         <Select
           value={prioridade}
@@ -266,7 +296,7 @@ export function TarefasQuadro({
             Ajuste o intervalo de datas acima ou crie a primeira tarefa deste período.
           </p>
           <Button asChild>
-            <Link href={`/tarefas/nova?data=${dados.hoje}`}>
+            <Link href={`/tarefas/nova?data=${dados.dia}`}>
               <Plus className="size-4" />
               Nova Tarefa
             </Link>
@@ -300,7 +330,7 @@ export function TarefasQuadro({
                   size="sm"
                   className="mt-2 w-full justify-start text-muted-foreground"
                 >
-                  <Link href={`/tarefas/nova?status=${s}&data=${dados.hoje}`}>
+                  <Link href={`/tarefas/nova?status=${s}&data=${dados.dia}`}>
                     <Plus className="size-4" />
                     Adicionar tarefa
                   </Link>
