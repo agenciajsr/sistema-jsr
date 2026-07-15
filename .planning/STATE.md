@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Concluido quick 260715-1rq (/crm reformulada no visual do mockup) + migration 0019 APLICADA no Supabase (CRM ativo: workspace JSR, pipeline Vendas, 6 etapas, 2 membros) + PUBLICADO na Vercel (push cfe29c2). NENHUMA migration pendente. Falta so a env CRM_LEADS_TOKEN (necessaria apenas para a API de captacao de leads)
-last_updated: "2026-07-15T04:05:00.000Z"
-last_activity: "2026-07-15 - Completed quick task 260715-1rq: /crm reformulada no visual do mockup definitivo — getCrmVisaoGeral (kanban + 6 KPIs + origens por GROUP BY/count, queries sequenciais) substitui getKanban; colunas c/ VALOR PARADO + probabilidade; cards c/ badge de origem, tempo relativo (helper testado) e aviso 'Nao contatado'; barra 'Origem dos leads' c/ % real; CrmView c/ header, seletor de pipeline, abas e busca client-side; Lista/Calendario/filtros = placeholders honestos; 206 testes. Anterior (260715-0zf): CRM comercial completo — 10 tabelas (workspaces single-tenant + crm_*), migration 0019 GERADA c/ seed idempotente (workspace JSR, pipeline Vendas, 6 etapas) e NAO aplicada; actions padrao Pipedrive (mover/ganhar c/ conversao em cliente/perder c/ motivo/reabrir, tudo em crm_atividades); POST /api/crm/leads protegido por x-crm-token (sem modo desprotegido) com dedup idempotente por dia; /crm kanban real, /funil vira redirect, item CRM na sidebar; 199 testes"
+stopped_at: "Concluido quick 260715-ibf (visao diaria de /tarefas: botao Hoje + calendario popover, Concluidas so do dia); sem migration"
+last_updated: "2026-07-15T17:48:02.361Z"
+last_activity: "2026-07-11 - Completed quick task 260711-q7a: Integracao Meta Ads"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 9
+  completed_plans: 8
   percent: 83
 ---
 
@@ -151,9 +151,10 @@ None yet.
 | 260715-gmf | Modal "Criar novo Lead" reformulado como Dialog central (imagens 07-11) — sistema de tags completo (crm_tags/crm_contato_tags, migration 0021 APLICADA, paleta CORES_TAG, criacao inline), 4 abas Contato/Dados Pessoais/Endereco/Anotacoes com forceMount (RHF preservado), leadSchema+criarLead persistindo perfil completo, dedup/aviso intactos; dialog.tsx entra no registry (substitui Card inline) | 2026-07-15 | c5b82f1 | [260715-gmf-reformular-modal-novo-lead-do-crm-dialog](./quick/260715-gmf-reformular-modal-novo-lead-do-crm-dialog/) |
 | 260715-h9z | Card do Kanban fiel a imagem03 (avatar, linha azul servico/origem, #N, tags, WhatsApp sem brigar com o drag) + ficha do lead em DOIS paineis (foto c/ upload real no bucket publico crm-fotos, nome inline, tags, atendente, metricas/notas recolhiveis, Historico/Atividades/Informacoes do Negocio c/ Pipeline Completa) + atividades agendaveis em crm_tarefas (modal Criar atividade) — migration 0022 APLICADA (foto_url, data_inicio/fim, prioridade, bucket+policies) | 2026-07-15 | 14d77c4 | [260715-h9z-card-do-lead-estilo-imagem03-com-botao-w](./quick/260715-h9z-card-do-lead-estilo-imagem03-com-botao-w/) |
 | 260715-1rq | /crm reformulada no visual do mockup definitivo (design-referencia-crm-kanban) — getCrmVisaoGeral SUBSTITUI getKanban como fonte unica (kanban + 6 KPIs + origens, tudo por GROUP BY/count no banco, queries sequenciais); colunas mostram VALOR PARADO na etapa + probabilidade; cards ganham badge de origem (VIA MANUAL/WHATSAPP/LANDING/META/INDICACAO), tempo relativo curto (helper testado, 7 casos) e aviso "Nao contatado"; barra "Origem dos leads" no rodape com % real por canal; CrmView com header, seletor de pipeline (badge Padrao), abas Kanban/Lista/Calendario e busca client-side; Lista/Calendario/periodo/filtro/config = placeholders honestos (sem dado falso); heuristica sem-contato (+7d sem tarefa concluida) usa so colunas existentes, sem migration nova; 206 testes | 2026-07-15 | 6897210 | [260715-1rq-reformular-pagina-crm-no-visual-do-mocku](./quick/260715-1rq-reformular-pagina-crm-no-visual-do-mocku/) |
+| 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:10:00.000Z
-Stopped at: Concluido quick 260715-h9z (card imagem03 c/ WhatsApp e tags + ficha do lead em dois paineis c/ foto, atividades agendaveis e Pipeline Completa) + migration 0022 APLICADA (foto_url, data_inicio/fim/prioridade, bucket crm-fotos + policies OK). NENHUMA migration pendente. Falta so a env CRM_LEADS_TOKEN (so p/ a API de leads)
+Last session: 2026-07-15T17:48:02.355Z
+Stopped at: Concluido quick 260715-ibf (visao diaria de /tarefas: botao Hoje + calendario popover, Concluidas so do dia); sem migration
 Resume file: None
