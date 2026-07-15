@@ -13,14 +13,15 @@ export const maxDuration = 60
 export default async function TarefasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ de?: string; ate?: string }>
+  searchParams: Promise<{ dia?: string }>
 }) {
-  // Next 16: searchParams é uma Promise.
-  const { de, ate } = await searchParams
+  // Next 16: searchParams é uma Promise. Visão DIÁRIA (ibf): só ?dia= importa —
+  // params antigos de/ate são ignorados em favor do dia (validado em dados.ts).
+  const { dia } = await searchParams
 
   // ⚠️ SEQUENCIAL — nada de paralelizar com Promise: pool max=3 com
   // max_pipeline=0 (ver src/lib/db/index.ts).
-  const dados = await getTarefasDoPeriodo(de, ate)
+  const dados = await getTarefasDoPeriodo(dia)
   const clientesLista = await db
     .select({ id: clientes.id, nome: clientes.nome })
     .from(clientes)

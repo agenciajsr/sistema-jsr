@@ -281,6 +281,51 @@ export function formatarIntervalo(inicio: string, fim: string): string {
   return `${paraBR(inicio)} - ${paraBR(fim)}`
 }
 
+// --- Visão diária (quick 260715-ibf) ---
+
+/** Rótulo do botão de data: 'Hoje' quando dia === hoje, senão 'dd/MM/yyyy'. */
+export function rotuloDoDia(dia: string, hoje: string): string {
+  return dia === hoje ? 'Hoje' : paraBR(dia)
+}
+
+/**
+ * Timestamp ISO → 'YYYY-MM-DD' no fuso America/Sao_Paulo (en-CA = ISO).
+ * null/inválido → null, NUNCA lança — concluidaEm pode vir nula (legado).
+ */
+export function dataBrasiliaDeIso(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+}
+
+type TarefaVisaoDiaria = {
+  status: TarefaStatus
+  data: string
+  concluidaEm?: string | null
+}
+
+/**
+ * O que aparece na visão de UM dia (o quadro é diário desde o quick ibf):
+ * - a_fazer/em_andamento: data <= dia (atrasadas continuam visíveis)
+ * - concluida: concluída NO dia visualizado (concluidaEm em fuso BR);
+ *   sem concluidaEm (legado), fallback data === dia
+ * - nao_realizada: só do próprio dia — não acumula lixo de dias anteriores
+ */
+export function tarefasDaVisaoDiaria<T extends TarefaVisaoDiaria>(tarefas: T[], dia: string): T[] {
+  return tarefas.filter((tarefa) => {
+    if (tarefa.status === 'a_fazer' || tarefa.status === 'em_andamento') {
+      return tarefa.data <= dia
+    }
+    if (tarefa.status === 'concluida') {
+      const concluidaEmDia = dataBrasiliaDeIso(tarefa.concluidaEm ?? null)
+      return concluidaEmDia ? concluidaEmDia === dia : tarefa.data === dia
+    }
+    // nao_realizada (e qualquer status futuro desconhecido): só o próprio dia.
+    return tarefa.data === dia
+  })
+}
+
 // --- Derivados de comentário / anexo / atividade / notas (so8) ---
 // Tudo PURO e determinístico: recebe o "agora" como parâmetro, nunca chama
 // Date.now(). Os componentes não calculam nada — só exibem o que sai daqui.

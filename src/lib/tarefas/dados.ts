@@ -14,11 +14,12 @@ import { hojeBrasilia } from '@/lib/date-br'
 import {
   janelaMaterializacao,
   ocorrenciasFaltantes,
+  somaDias,
+  JANELA_PASSADO_DIAS,
   type TarefaStatus,
   type TarefaPrioridade,
   type TarefaRecorrencia,
 } from '@/lib/tarefas/recorrencia'
-import { intervaloPadrao } from '@/lib/tarefas/quadro'
 
 // Módulo server comum — SEM 'use server': é chamado direto pelo Server Component
 // da página, não pelo client. Evita expor um endpoint desnecessário.
@@ -62,6 +63,8 @@ export type TarefaCard = {
   recorrenciaDias: number[] | null
   tarefaMaeId: string | null
   fixada: boolean
+  /** Timestamp ISO de conclusão (fuso UTC) — serializado na fronteira server→client. */
+  concluidaEm: string | null
   checklistTotal: number
   checklistConcluidos: number
 }
@@ -69,6 +72,8 @@ export type TarefaCard = {
 export type TarefasDoPeriodo = {
   inicio: string
   fim: string
+  /** O DIA visualizado no quadro (= fim do intervalo). Visão diária (ibf). */
+  dia: string
   hoje: string
   tarefas: TarefaCard[]
 }
@@ -119,8 +124,12 @@ export type TarefaDetalhe = TarefaCard & {
 }
 
 /** Linha crua vinda das SELECTs de tarefa (antes do merge do checklist). */
-type TarefaRow = Omit<TarefaCard, 'checklistTotal' | 'checklistConcluidos' | 'etiquetas'> & {
+type TarefaRow = Omit<
+  TarefaCard,
+  'checklistTotal' | 'checklistConcluidos' | 'etiquetas' | 'concluidaEm'
+> & {
   etiquetas: unknown
+  concluidaEm: Date | null
 }
 
 /** ORDER BY prioridade: urgente primeiro. Enum do PG ordena pela ordem de
@@ -149,22 +158,10 @@ const camposCard = {
   recorrenciaDias: tarefas.recorrenciaDias,
   tarefaMaeId: tarefas.tarefaMaeId,
   fixada: tarefas.fixada,
+  concluidaEm: tarefas.concluidaEm,
 }
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
-
-/** Normaliza os params da URL para um intervalo sempre válido (D-01). */
-function resolverIntervalo(
-  hoje: string,
-  inicioParam?: string,
-  fimParam?: string
-): { inicio: string; fim: string } {
-  const padrao = intervaloPadrao(hoje)
-  const inicio = DATA_ISO.test(inicioParam ?? '') ? inicioParam! : padrao.inicio
-  const fimBruto = DATA_ISO.test(fimParam ?? '') ? fimParam! : padrao.fim
-  // Intervalo invertido na URL não devolve lista vazia sem explicação.
-  return { inicio, fim: fimBruto < inicio ? inicio : fimBruto }
-}
 
 /** Converte a linha crua no card, aplicando o progresso agregado. */
 function paraCard(row: TarefaRow, progresso: Map<string, { total: number; feitos: number }>) {
@@ -174,19 +171,26 @@ function paraCard(row: TarefaRow, progresso: Map<string, { total: number; feitos
     // jsonb volta como unknown: normalizamos para array sempre.
     etiquetas: (row.etiquetas as string[] | null) ?? [],
     recorrenciaDias: (row.recorrenciaDias as number[] | null) ?? null,
+    // Timestamp atravessa a fronteira server→client: serializa para ISO string.
+    concluidaEm: row.concluidaEm?.toISOString() ?? null,
     checklistTotal: p?.total ?? 0,
     checklistConcluidos: p?.feitos ?? 0,
   }
 }
 
-export async function getTarefasDoPeriodo(
-  inicioParam?: string,
-  fimParam?: string
-): Promise<TarefasDoPeriodo> {
+/**
+ * Visão DIÁRIA (ibf): o param é o DIA visualizado (?dia= na URL; inválido/
+ * ausente → hoje). A busca continua cobrindo o INTERVALO [dia-30, dia] — é o
+ * que alimenta as atrasadas em Pendentes/Em Andamento — mas o recorte do
+ * quadro (tarefasDaVisaoDiaria, no client) é comandado pelo `dia` retornado.
+ */
+export async function getTarefasDoPeriodo(diaParam?: string): Promise<TarefasDoPeriodo> {
   // "Hoje" SEMPRE via hojeBrasilia(): o relógio cru do server roda em UTC na
   // Vercel e viraria o dia a partir das 21h BR. Datas comparadas como string ISO.
   const hoje = hojeBrasilia()
-  const { inicio, fim } = resolverIntervalo(hoje, inicioParam, fimParam)
+  const dia = DATA_ISO.test(diaParam ?? '') ? diaParam! : hoje
+  const inicio = somaDias(dia, -JANELA_PASSADO_DIAS)
+  const fim = dia
 
   try {
     // 1. Janela da materialização — puro, sem query. O FIM do intervalo visível
@@ -363,11 +367,11 @@ export async function getTarefasDoPeriodo(
     }
 
     // Lista CRUA (D-05): o client agrupa/filtra com o módulo puro ./quadro.
-    return { inicio, fim, hoje, tarefas: linhas.map((l) => paraCard(l, progresso)) }
+    return { inicio, fim, dia, hoje, tarefas: linhas.map((l) => paraCard(l, progresso)) }
   } catch (e) {
     // Nunca lança: a página degrada para o estado vazio em vez de quebrar.
     console.error('[getTarefasDoPeriodo]', e)
-    return { inicio, fim, hoje, tarefas: [] }
+    return { inicio, fim, dia, hoje, tarefas: [] }
   }
 }
 
