@@ -1,16 +1,28 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowUp,
+  Building2,
+  CalendarDays,
   Check,
   ChevronRight,
+  Clock,
   Copy,
+  FileText,
+  History,
+  Link2,
+  ListChecks,
+  MessageSquare,
   MoreHorizontal,
+  Paperclip,
+  Pin,
+  Play,
   Plus,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react'
@@ -77,6 +89,7 @@ import {
   corDoAvatar,
   iniciais,
   progressoChecklist,
+  tempoRelativo,
 } from '@/lib/tarefas/quadro'
 import {
   atualizarTarefa,
@@ -85,12 +98,14 @@ import {
   addChecklistItemTarefa,
   toggleChecklistItemTarefa,
   deleteChecklistItemTarefa,
+  criarComentario,
+  deletarComentario,
+  uploadAnexoTarefa,
+  deletarAnexoTarefa,
+  getUrlAnexoTarefa,
 } from '@/actions/tarefas'
 import type { AtualizarTarefaInput } from '@/lib/validations/tarefa'
-
-// D-12: o que ficou fora do escopo (arquivos, discussões, histórico, o botão
-// de compartilhar do mockup) NÃO é renderizado aqui — nada de aba vazia nem
-// de botão morto. Só as 2 abas reais: Detalhes e Checklists.
+import { TarefaLateral, AnexoLinha, AtividadeLinha } from './tarefa-lateral'
 
 const NENHUM = '__nenhum__'
 
@@ -105,35 +120,48 @@ const RECORRENCIAS: TarefaRecorrencia[] = [
   'personalizada',
 ]
 
+// Controles da grade parecem VALOR + chevron, não caixinha de formulário.
+const SELECT_CELULA = 'h-auto w-full border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0'
+const DATA_CELULA = 'h-auto border-0 bg-transparent px-0 shadow-none focus-visible:ring-0'
+
 export function TarefaDetalhe({
   tarefa,
   clientes,
   responsaveis,
+  usuarioId,
 }: {
   tarefa: TarefaDetalheTipo
   clientes: { id: string; nome: string }[]
   responsaveis: { id: string; nome: string }[]
+  usuarioId: string
 }) {
   const router = useRouter()
   const [salvando, startSalvar] = useTransition()
+  const [enviandoAnexo, startAnexo] = useTransition()
+
+  // "Agora" calculado UMA vez no client (tempoRelativo é puro e recebe o agora).
+  const [agora] = useState(() => new Date().toISOString())
+  // D-12: abas controladas — os links "Ver tudo" dos cards laterais trocam de aba.
+  const [aba, setAba] = useState('detalhes')
 
   const [titulo, setTitulo] = useState(tarefa.titulo)
   const [descricao, setDescricao] = useState(tarefa.descricao ?? '')
-  const [notas, setNotas] = useState(tarefa.notas ?? '')
-  const [notasSalvas, setNotasSalvas] = useState(false)
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
 
   const [itens, setItens] = useState<ItemChecklist[]>(tarefa.checklist)
   const [novoItem, setNovoItem] = useState<Record<string, string>>({})
-  // Grupo recém-criado vive só no client até o primeiro item ser salvo (D-08).
   const [gruposNovos, setGruposNovos] = useState<string[]>([])
   const [nomeGrupoNovo, setNomeGrupoNovo] = useState('')
   const [criandoGrupo, setCriandoGrupo] = useState(false)
+
+  const [novoComentario, setNovoComentario] = useState('')
 
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false)
   const [recorrencia, setRecorrencia] = useState<TarefaRecorrencia>(tarefa.recorrencia)
   const [dias, setDias] = useState<number[]>(tarefa.recorrenciaDias ?? [])
   const [excluirAberto, setExcluirAberto] = useState(false)
+
+  const anexoTabRef = useRef<HTMLInputElement>(null)
 
   const codigo = tarefa.codigo ?? codigoTarefa(tarefa.codigoNum)
   const concluida = tarefa.status === 'concluida'
@@ -157,6 +185,14 @@ export function TarefaDetalhe({
       .writeText(codigo)
       .then(() => toast.success('Codigo copiado.'))
       .catch(() => toast.error('Nao foi possivel copiar o codigo.'))
+  }
+
+  // D-07: Compartilhar e o ícone de link são a MESMA ação — copiam a URL da tarefa.
+  function copiarLink() {
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => toast.success('Link copiado.'))
+      .catch(() => toast.error('Nao foi possivel copiar o link.'))
   }
 
   function toggleDia(d: number) {
@@ -218,12 +254,8 @@ export function TarefaDetalhe({
         toast.error(r.error)
         return
       }
-      setItens((a) => [
-        ...a,
-        { id: r.data.id, texto, concluido: false, ordem: a.length, grupo },
-      ])
+      setItens((a) => [...a, { id: r.data.id, texto, concluido: false, ordem: a.length, grupo }])
       setNovoItem((n) => ({ ...n, [grupo]: '' }))
-      // O grupo agora existe no banco — sai da lista local.
       setGruposNovos((g) => g.filter((x) => x !== grupo))
       router.refresh()
     })
@@ -231,7 +263,6 @@ export function TarefaDetalhe({
 
   function alternarItem(item: ItemChecklist) {
     const novo = !item.concluido
-    // Otimista: marca já e desfaz se a action falhar.
     setItens((a) => a.map((i) => (i.id === item.id ? { ...i, concluido: novo } : i)))
 
     startSalvar(async () => {
@@ -275,7 +306,70 @@ export function TarefaDetalhe({
     salvarCampo({ etiquetas: [...tarefa.etiquetas, nova] }, () => setNovaEtiqueta(''))
   }
 
-  // Grupos do banco + os criados agora (ainda sem item).
+  function enviarComentario() {
+    const texto = novoComentario.trim()
+    if (!texto) return
+    startSalvar(async () => {
+      const r = await criarComentario(tarefa.id, { texto })
+      if ('error' in r) {
+        toast.error(r.error)
+        return
+      }
+      setNovoComentario('')
+      router.refresh()
+    })
+  }
+
+  function removerComentario(id: string) {
+    startSalvar(async () => {
+      const r = await deletarComentario(id)
+      if ('error' in r) {
+        toast.error(r.error)
+        return
+      }
+      router.refresh()
+    })
+  }
+
+  // --- Anexos: fonte única, usada no card lateral E na aba Anexos ---
+  function enviarAnexo(file: File) {
+    startAnexo(async () => {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('tarefaId', tarefa.id)
+      const r = await uploadAnexoTarefa(fd)
+      if ('error' in r) {
+        toast.error(r.error)
+        return
+      }
+      toast.success('Arquivo anexado.')
+      router.refresh()
+    })
+  }
+
+  function baixarAnexo(id: string) {
+    startAnexo(async () => {
+      const r = await getUrlAnexoTarefa(id)
+      if ('error' in r) {
+        toast.error(r.error)
+        return
+      }
+      window.open(r.data.url, '_blank')
+    })
+  }
+
+  function removerAnexo(id: string) {
+    startAnexo(async () => {
+      const r = await deletarAnexoTarefa(id)
+      if ('error' in r) {
+        toast.error(r.error)
+        return
+      }
+      toast.success('Arquivo removido.')
+      router.refresh()
+    })
+  }
+
   const grupos = agruparChecklist(itens)
   const gruposVisiveis = [
     ...grupos,
@@ -284,9 +378,11 @@ export function TarefaDetalhe({
       .map((nome) => ({ nome, itens: [] as ItemChecklist[], total: 0, feitos: 0 })),
   ]
 
+  const responsavelDaTarefa = responsaveis.find((r) => r.id === tarefa.responsavelId)
+
   return (
     <div className="space-y-6">
-      {/* Topo */}
+      {/* Barra superior */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Button variant="ghost" size="sm" asChild className="-ml-2">
@@ -305,14 +401,12 @@ export function TarefaDetalhe({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant={concluida ? 'outline' : 'default'}
-            className={concluida ? '' : 'bg-chart-success text-white hover:bg-chart-success/90'}
-            disabled={salvando}
-            onClick={() => salvarCampo({ status: concluida ? 'a_fazer' : 'concluida' })}
-          >
-            <Check className="size-4" />
-            {concluida ? 'Reabrir tarefa' : 'Marcar como concluída'}
+          <Button variant="outline" onClick={copiarLink}>
+            <Share2 className="size-4" />
+            Compartilhar
+          </Button>
+          <Button variant="ghost" size="icon" onClick={copiarLink} aria-label="Copiar link da tarefa">
+            <Link2 className="size-4" />
           </Button>
 
           <DropdownMenu>
@@ -336,389 +430,643 @@ export function TarefaDetalhe({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
 
-      {/* Código + título */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-1">
-          <Badge variant="outline" className="tabular-nums">
-            {codigo}
-          </Badge>
           <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={copiarCodigo}
-            aria-label="Copiar codigo da tarefa"
+            variant={concluida ? 'outline' : 'default'}
+            disabled={salvando}
+            onClick={() => salvarCampo({ status: concluida ? 'a_fazer' : 'concluida' })}
           >
-            <Copy className="size-3.5" />
+            <Check className="size-4" />
+            {concluida ? 'Reabrir tarefa' : 'Marcar como concluída'}
           </Button>
-          {tarefa.recorrencia !== 'nenhuma' && (
-            <Badge variant="secondary">{RECORRENCIA_LABEL[tarefa.recorrencia]}</Badge>
-          )}
         </div>
-
-        <Input
-          value={titulo}
-          onChange={(e) => setTitulo(e.target.value)}
-          onBlur={() => {
-            const limpo = titulo.trim()
-            if (!limpo) {
-              toast.error('Informe o titulo da tarefa.')
-              setTitulo(tarefa.titulo)
-              return
-            }
-            // Só salva se realmente mudou.
-            if (limpo !== tarefa.titulo) salvarCampo({ titulo: limpo })
-          }}
-          className="h-auto border-0 px-0 text-[28px] leading-tight font-semibold shadow-none focus-visible:ring-0"
-          aria-label="Título da tarefa"
-        />
-
-        {tarefa.descricao && (
-          <p className="truncate text-sm text-muted-foreground">
-            {tarefa.descricao.split('\n')[0]}
-          </p>
-        )}
       </div>
 
-      {/* Grade de campos */}
-      <Card className="p-4">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <Select
-              value={tarefa.status}
-              onValueChange={(v) => salvarCampo({ status: v as TarefaStatus })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {COLUNAS_ORDEM.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Responsável</Label>
-            <Select
-              value={tarefa.responsavelId ?? NENHUM}
-              onValueChange={(v) => salvarCampo({ responsavelId: v === NENHUM ? '' : v })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Nenhum" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NENHUM}>Nenhum</SelectItem>
-                {responsaveis.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    <span className="flex items-center gap-2">
-                      <Avatar size="sm">
-                        <AvatarFallback className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}>
-                          {iniciais(r.nome)}
-                        </AvatarFallback>
-                      </Avatar>
-                      {r.nome}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Prioridade</Label>
-            <Select
-              value={tarefa.prioridade}
-              onValueChange={(v) => salvarCampo({ prioridade: v as TarefaPrioridade })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRIORIDADE_ORDEM.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className="flex items-center gap-1.5">
-                      {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
-                      <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
-                        {PRIORIDADE_LABEL[p]}
-                      </Badge>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Etiquetas</Label>
-            <div className="flex flex-wrap items-center gap-1">
-              {tarefa.etiquetas.map((e) => (
-                <Badge key={e} variant="secondary" className="gap-1">
-                  {e}
-                  <button
-                    type="button"
-                    onClick={() => removerEtiqueta(e)}
-                    aria-label={`Remover etiqueta ${e}`}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <Input
-              value={novaEtiqueta}
-              onChange={(e) => setNovaEtiqueta(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  adicionarEtiqueta()
-                }
-              }}
-              placeholder="adicionar etiqueta"
-              className="h-8"
-              aria-label="Adicionar etiqueta"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Data de início</Label>
-            <Input
-              type="date"
-              defaultValue={tarefa.dataInicio ?? ''}
-              onChange={(e) => salvarCampo({ dataInicio: e.target.value })}
-              aria-label="Data de inicio"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Prazo</Label>
-            <Input
-              type="date"
-              defaultValue={tarefa.data}
-              onChange={(e) => e.target.value && salvarCampo({ data: e.target.value })}
-              aria-label="Prazo"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Tempo estimado</Label>
-            <Input
-              defaultValue={tarefa.tempoEstimado ?? ''}
-              onBlur={(e) => {
-                if (e.target.value.trim() !== (tarefa.tempoEstimado ?? '')) {
-                  salvarCampo({ tempoEstimado: e.target.value.trim() })
-                }
-              }}
-              placeholder="4h"
-              aria-label="Tempo estimado"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Projeto/Cliente</Label>
-            <Select
-              value={tarefa.clienteId ?? NENHUM}
-              onValueChange={(v) => salvarCampo({ clienteId: v === NENHUM ? '' : v })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Nenhum" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NENHUM}>Nenhum</SelectItem>
-                {clientes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
-      {/* Conteúdo + lateral */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="detalhes">
-            <TabsList>
-              <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
-              <TabsTrigger value="checklists">Checklists ({itens.length})</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="detalhes" className="mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Descrição</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    value={descricao}
-                    onChange={(e) => setDescricao(e.target.value)}
-                    onBlur={() => {
-                      if (descricao !== (tarefa.descricao ?? '')) salvarCampo({ descricao })
-                    }}
-                    rows={8}
-                    placeholder="Detalhes, contexto, links..."
-                    className="whitespace-pre-wrap"
-                    aria-label="Descrição da tarefa"
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="checklists" className="mt-4 space-y-4">
-              {gruposVisiveis.length === 0 && !criandoGrupo && (
-                <p className="text-sm text-muted-foreground">Nenhum checklist ainda.</p>
-              )}
-
-              {gruposVisiveis.map((grupo) => (
-                <Card key={grupo.nome}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-sm">{grupo.nome}</CardTitle>
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {grupo.feitos}/{grupo.total}
-                      </span>
-                    </div>
-                    <Progress
-                      value={progressoChecklist(grupo.feitos, grupo.total)}
-                      className="h-1.5"
-                    />
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {grupo.itens.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={item.concluido}
-                          onCheckedChange={() => alternarItem(item)}
-                          aria-label={item.texto}
-                        />
-                        <span
-                          className={
-                            item.concluido
-                              ? 'flex-1 text-sm text-muted-foreground line-through'
-                              : 'flex-1 text-sm'
-                          }
-                        >
-                          {item.texto}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          onClick={() => removerItem(item)}
-                          aria-label={`Remover ${item.texto}`}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-
-                    <div className="flex gap-2 pt-1">
-                      <Input
-                        value={novoItem[grupo.nome] ?? ''}
-                        onChange={(e) =>
-                          setNovoItem((n) => ({ ...n, [grupo.nome]: e.target.value }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            adicionarItem(grupo.nome)
-                          }
-                        }}
-                        placeholder="Adicionar item..."
-                        aria-label={`Novo item em ${grupo.nome}`}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => adicionarItem(grupo.nome)}
-                        disabled={salvando}
-                      >
-                        <Plus className="size-4" />
-                        Adicionar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {criandoGrupo ? (
-                <div className="flex gap-2">
-                  <Input
-                    value={nomeGrupoNovo}
-                    onChange={(e) => setNomeGrupoNovo(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        criarGrupo()
-                      }
-                    }}
-                    placeholder="Nome do checklist"
-                    autoFocus
-                    aria-label="Nome do novo checklist"
-                  />
-                  <Button variant="secondary" onClick={criarGrupo}>
-                    Criar
-                  </Button>
-                  <Button variant="ghost" onClick={() => setCriandoGrupo(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              ) : (
+        {/* Coluna esquerda */}
+        <div className="space-y-6 lg:col-span-2">
+          <Card className="gap-4 py-5">
+            <CardHeader className="flex items-center justify-between space-y-0">
+              <div className="flex items-center gap-1">
+                <Badge variant="outline" className="tabular-nums">
+                  {codigo}
+                </Badge>
                 <Button
                   variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={copiarCodigo}
+                  aria-label="Copiar codigo da tarefa"
+                >
+                  <Copy className="size-3.5" />
+                </Button>
+                {tarefa.recorrencia !== 'nenhuma' && (
+                  <Badge variant="secondary">{RECORRENCIA_LABEL[tarefa.recorrencia]}</Badge>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={() => salvarCampo({ fixada: !tarefa.fixada })}
+                  aria-label={tarefa.fixada ? 'Desafixar tarefa' : 'Fixar tarefa'}
+                  title={tarefa.fixada ? 'Desafixar' : 'Fixar no topo da coluna'}
+                >
+                  <Pin className={tarefa.fixada ? 'size-4 fill-current text-primary' : 'size-4'} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={copiarLink}
+                  aria-label="Copiar link"
+                >
+                  <Link2 className="size-3.5" />
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="space-y-1">
+                <Input
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  onBlur={() => {
+                    const limpo = titulo.trim()
+                    if (!limpo) {
+                      toast.error('Informe o titulo da tarefa.')
+                      setTitulo(tarefa.titulo)
+                      return
+                    }
+                    if (limpo !== tarefa.titulo) salvarCampo({ titulo: limpo })
+                  }}
+                  className="h-auto border-0 px-0 text-[26px] leading-tight font-semibold shadow-none focus-visible:ring-0"
+                  aria-label="Título da tarefa"
+                />
+                {tarefa.descricao && (
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{tarefa.descricao}</p>
+                )}
+              </div>
+
+              {/* Grade de 8 células COM BORDA e DIVISÓRIAS */}
+              <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card md:grid-cols-4">
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select
+                    value={tarefa.status}
+                    onValueChange={(v) => salvarCampo({ status: v as TarefaStatus })}
+                  >
+                    <SelectTrigger className={SELECT_CELULA}>
+                      <span className="flex items-center gap-1.5">
+                        {tarefa.status === 'em_andamento' && <Play className="size-3.5 text-primary" />}
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COLUNAS_ORDEM.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {STATUS_LABEL[s]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Responsável</Label>
+                  <Select
+                    value={tarefa.responsavelId ?? NENHUM}
+                    onValueChange={(v) => salvarCampo({ responsavelId: v === NENHUM ? '' : v })}
+                  >
+                    <SelectTrigger className={SELECT_CELULA}>
+                      <SelectValue placeholder="Nenhum" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                      {responsaveis.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          <span className="flex items-center gap-2">
+                            <Avatar size="sm">
+                              <AvatarFallback
+                                className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}
+                              >
+                                {iniciais(r.nome)}
+                              </AvatarFallback>
+                            </Avatar>
+                            {r.nome}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Prioridade</Label>
+                  <Select
+                    value={tarefa.prioridade}
+                    onValueChange={(v) => salvarCampo({ prioridade: v as TarefaPrioridade })}
+                  >
+                    <SelectTrigger className={SELECT_CELULA}>
+                      <span className="flex items-center gap-1.5">
+                        {(tarefa.prioridade === 'alta' || tarefa.prioridade === 'urgente') && (
+                          <ArrowUp className="size-3.5 text-destructive" />
+                        )}
+                        <Badge variant="outline" className={PRIORIDADE_CLASSE[tarefa.prioridade]}>
+                          {PRIORIDADE_LABEL[tarefa.prioridade]}
+                        </Badge>
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORIDADE_ORDEM.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          <span className="flex items-center gap-1.5">
+                            {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
+                            <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
+                              {PRIORIDADE_LABEL[p]}
+                            </Badge>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Etiquetas</Label>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {tarefa.etiquetas.map((e) => (
+                      <Badge key={e} variant="secondary" className="gap-1">
+                        {e}
+                        <button
+                          type="button"
+                          onClick={() => removerEtiqueta(e)}
+                          aria-label={`Remover etiqueta ${e}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    <Input
+                      value={novaEtiqueta}
+                      onChange={(e) => setNovaEtiqueta(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          adicionarEtiqueta()
+                        }
+                      }}
+                      placeholder="adicionar"
+                      className="h-6 w-24 border-0 px-0 text-xs shadow-none focus-visible:ring-0"
+                      aria-label="Adicionar etiqueta"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Data de início</Label>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      defaultValue={tarefa.dataInicio ?? ''}
+                      onChange={(e) => salvarCampo({ dataInicio: e.target.value })}
+                      className={DATA_CELULA}
+                      aria-label="Data de inicio"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Prazo</Label>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      defaultValue={tarefa.data}
+                      onChange={(e) => e.target.value && salvarCampo({ data: e.target.value })}
+                      className={DATA_CELULA}
+                      aria-label="Prazo"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Tempo estimado</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="size-4 shrink-0 text-muted-foreground" />
+                    <Input
+                      defaultValue={tarefa.tempoEstimado ?? ''}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() !== (tarefa.tempoEstimado ?? '')) {
+                          salvarCampo({ tempoEstimado: e.target.value.trim() })
+                        }
+                      }}
+                      placeholder="4h"
+                      className={DATA_CELULA}
+                      aria-label="Tempo estimado"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 p-3">
+                  <Label className="text-xs text-muted-foreground">Projeto / Cliente</Label>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="size-4 shrink-0 text-muted-foreground" />
+                    <Select
+                      value={tarefa.clienteId ?? NENHUM}
+                      onValueChange={(v) => salvarCampo({ clienteId: v === NENHUM ? '' : v })}
+                    >
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <SelectValue placeholder="Nenhum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                        {clientes.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Abas underline, 5 delas, com contador real */}
+          <Tabs value={aba} onValueChange={setAba}>
+            <TabsList className="h-auto w-full justify-start gap-4 rounded-none border-b bg-transparent p-0">
+              <TabsTrigger value="detalhes"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <FileText className="size-4" />
+                Detalhes
+              </TabsTrigger>
+              <TabsTrigger value="checklists"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <ListChecks className="size-4" />
+                Checklists{itens.length > 0 && ` ${itens.length}`}
+              </TabsTrigger>
+              <TabsTrigger value="anexos"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <Paperclip className="size-4" />
+                Anexos{tarefa.anexos.length > 0 && ` ${tarefa.anexos.length}`}
+              </TabsTrigger>
+              <TabsTrigger value="comentarios"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <MessageSquare className="size-4" />
+                Comentários{tarefa.comentarios.length > 0 && ` ${tarefa.comentarios.length}`}
+              </TabsTrigger>
+              <TabsTrigger value="atividade"
+                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                <History className="size-4" />
+                Atividade
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Detalhes: Descrição + Checklists */}
+            <TabsContent value="detalhes" className="mt-4 space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Descrição</h3>
+                <Textarea
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  onBlur={() => {
+                    if (descricao !== (tarefa.descricao ?? '')) salvarCampo({ descricao })
+                  }}
+                  rows={6}
+                  placeholder="Detalhes, contexto, links..."
+                  className="whitespace-pre-wrap"
+                  aria-label="Descrição da tarefa"
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Checklists</h3>
+                  {!criandoGrupo && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      onClick={() => setCriandoGrupo(true)}
+                    >
+                      <Plus className="size-4" />
+                      Adicionar checklist
+                    </Button>
+                  )}
+                </div>
+
+                {gruposVisiveis.length === 0 && !criandoGrupo && (
+                  <p className="text-sm text-muted-foreground">Nenhum checklist ainda.</p>
+                )}
+
+                {gruposVisiveis.map((grupo) => (
+                  <Card key={grupo.nome}>
+                    <CardHeader className="flex items-center justify-between space-y-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-sm">{grupo.nome}</CardTitle>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {grupo.feitos} / {grupo.total}
+                        </span>
+                      </div>
+                      <Progress
+                        value={progressoChecklist(grupo.feitos, grupo.total)}
+                        className="h-1.5 w-32"
+                      />
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {grupo.itens.map((item) => (
+                        <div key={item.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={item.concluido}
+                            onCheckedChange={() => alternarItem(item)}
+                            aria-label={item.texto}
+                            className="data-[state=checked]:border-chart-success data-[state=checked]:bg-chart-success"
+                          />
+                          <span
+                            className={
+                              item.concluido
+                                ? 'flex-1 text-sm text-muted-foreground line-through'
+                                : 'flex-1 text-sm'
+                            }
+                          >
+                            {item.texto}
+                          </span>
+                          {responsavelDaTarefa ? (
+                            <Avatar size="sm">
+                              <AvatarFallback
+                                className={`text-[10px] font-semibold ${corDoAvatar(tarefa.responsavelId)}`}
+                              >
+                                {iniciais(responsavelDaTarefa.nome)}
+                              </AvatarFallback>
+                            </Avatar>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">--</span>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => removerItem(item)}
+                            aria-label={`Remover ${item.texto}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="flex gap-2 pt-1">
+                        <Input
+                          value={novoItem[grupo.nome] ?? ''}
+                          onChange={(e) =>
+                            setNovoItem((n) => ({ ...n, [grupo.nome]: e.target.value }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              adicionarItem(grupo.nome)
+                            }
+                          }}
+                          placeholder="Adicionar item..."
+                          aria-label={`Novo item em ${grupo.nome}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => adicionarItem(grupo.nome)}
+                          disabled={salvando}
+                        >
+                          <Plus className="size-4" />
+                          Adicionar item
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {criandoGrupo && (
+                  <div className="flex gap-2">
+                    <Input
+                      value={nomeGrupoNovo}
+                      onChange={(e) => setNomeGrupoNovo(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          criarGrupo()
+                        }
+                      }}
+                      placeholder="Nome do checklist"
+                      autoFocus
+                      aria-label="Nome do novo checklist"
+                    />
+                    <Button variant="secondary" onClick={criarGrupo}>
+                      Criar
+                    </Button>
+                    <Button variant="ghost" onClick={() => setCriandoGrupo(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Checklists (aba dedicada — mesmo conteúdo, atalho direto) */}
+            <TabsContent value="checklists" className="mt-4 space-y-4">
+              {gruposVisiveis.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum checklist ainda.</p>
+              ) : (
+                gruposVisiveis.map((grupo) => (
+                  <Card key={grupo.nome}>
+                    <CardHeader className="flex items-center justify-between space-y-0">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-sm">{grupo.nome}</CardTitle>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {grupo.feitos} / {grupo.total}
+                        </span>
+                      </div>
+                      <Progress
+                        value={progressoChecklist(grupo.feitos, grupo.total)}
+                        className="h-1.5 w-32"
+                      />
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {grupo.itens.map((item) => (
+                        <div key={item.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={item.concluido}
+                            onCheckedChange={() => alternarItem(item)}
+                            aria-label={item.texto}
+                            className="data-[state=checked]:border-chart-success data-[state=checked]:bg-chart-success"
+                          />
+                          <span
+                            className={
+                              item.concluido
+                                ? 'flex-1 text-sm text-muted-foreground line-through'
+                                : 'flex-1 text-sm'
+                            }
+                          >
+                            {item.texto}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => removerItem(item)}
+                            aria-label={`Remover ${item.texto}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </TabsContent>
+
+            {/* Anexos — lista completa + upload */}
+            <TabsContent value="anexos" className="mt-4 space-y-3">
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
                   size="sm"
-                  className="text-muted-foreground"
-                  onClick={() => setCriandoGrupo(true)}
+                  disabled={enviandoAnexo}
+                  onClick={() => anexoTabRef.current?.click()}
                 >
                   <Plus className="size-4" />
-                  Adicionar checklist
+                  {enviandoAnexo ? 'Enviando...' : 'Adicionar arquivo'}
                 </Button>
+                <input
+                  ref={anexoTabRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) enviarAnexo(f)
+                    e.target.value = ''
+                  }}
+                />
+              </div>
+              {tarefa.anexos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum arquivo anexado ainda.</p>
+              ) : (
+                <div className="space-y-3">
+                  {tarefa.anexos.map((a) => (
+                    <AnexoLinha
+                      key={a.id}
+                      anexo={a}
+                      onBaixar={baixarAnexo}
+                      onRemover={removerAnexo}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Comentários */}
+            <TabsContent value="comentarios" className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Textarea
+                  value={novoComentario}
+                  onChange={(e) => setNovoComentario(e.target.value)}
+                  rows={3}
+                  placeholder="Escreva um comentário..."
+                  aria-label="Novo comentário"
+                />
+                <div className="flex justify-end">
+                  <Button onClick={enviarComentario} disabled={salvando || !novoComentario.trim()}>
+                    Comentar
+                  </Button>
+                </div>
+              </div>
+
+              {tarefa.comentarios.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum comentário ainda.</p>
+              ) : (
+                <div className="space-y-4">
+                  {tarefa.comentarios.map((c) => (
+                    <div key={c.id} className="flex gap-2">
+                      <Avatar size="sm">
+                        <AvatarFallback
+                          className={`text-[10px] font-semibold ${corDoAvatar(c.autorId)}`}
+                        >
+                          {iniciais(c.autorNome)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{c.autorNome}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {tempoRelativo(c.createdAt, agora)}
+                          </span>
+                          {c.autorId === usuarioId && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="ml-auto size-7"
+                                  aria-label="Ações do comentário"
+                                >
+                                  <MoreHorizontal className="size-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => removerComentario(c.id)}
+                                >
+                                  Excluir
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm">{c.texto}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Atividade — histórico completo */}
+            <TabsContent value="atividade" className="mt-4 space-y-4">
+              {tarefa.atividades.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma atividade registrada ainda.</p>
+              ) : (
+                tarefa.atividades.map((a) => <AtividadeLinha key={a.id} atv={a} agora={agora} />)
               )}
             </TabsContent>
           </Tabs>
         </div>
 
-        {/* Lateral: SÓ Notas — o resto do mockup ficou fora do escopo (D-12). */}
+        {/* Coluna direita: Notas, Anexos, Atividade Recente */}
         <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Notas</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                value={notas}
-                onChange={(e) => {
-                  setNotas(e.target.value)
-                  setNotasSalvas(false)
-                }}
-                onBlur={() => {
-                  if (notas !== (tarefa.notas ?? '')) {
-                    salvarCampo({ notas }, () => setNotasSalvas(true))
-                  }
-                }}
-                rows={8}
-                placeholder="Anotações rápidas..."
-                aria-label="Notas da tarefa"
-              />
-              {notasSalvas && (
-                <p className="text-xs text-muted-foreground">Salvo agora há pouco</p>
-              )}
-            </CardContent>
-          </Card>
+          <TarefaLateral
+            tarefa={tarefa}
+            agora={agora}
+            onIrParaAba={setAba}
+            onArquivoEscolhido={enviarAnexo}
+            onBaixarAnexo={baixarAnexo}
+            onRemoverAnexo={removerAnexo}
+            enviandoAnexo={enviandoAnexo}
+          />
         </div>
       </div>
 
-      {/* Recorrência (D-09): vive no "..." — a série não pode sumir. */}
+      {/* Recorrência: vive no "..." — a série não pode sumir. */}
       <Sheet open={recorrenciaAberta} onOpenChange={setRecorrenciaAberta}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
           <SheetHeader>
@@ -733,10 +1081,7 @@ export function TarefaDetalhe({
           <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
             <div className="space-y-2">
               <Label>Repetir</Label>
-              <Select
-                value={recorrencia}
-                onValueChange={(v) => setRecorrencia(v as TarefaRecorrencia)}
-              >
+              <Select value={recorrencia} onValueChange={(v) => setRecorrencia(v as TarefaRecorrencia)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

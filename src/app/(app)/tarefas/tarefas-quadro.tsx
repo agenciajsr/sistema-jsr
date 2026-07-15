@@ -132,7 +132,10 @@ export function TarefasQuadro({
   const vazio = dados.tarefas.length === 0
 
   return (
-    <div className="space-y-4">
+    // D-01: container flex com min-h da viewport (header h-16 + p-6/8 do <main>).
+    // A área do meio ganha flex-1 e empurra a barra de stats para o rodapé — sem
+    // isso, com 1 tarefa só, a barra ficaria "lá em cima" (o bug relatado).
+    <div className="flex min-h-[calc(100svh-7rem)] flex-col gap-4 lg:min-h-[calc(100svh-8rem)]">
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -265,7 +268,7 @@ export function TarefasQuadro({
       {/* Estado vazio: cabeçalho e toolbar continuam visíveis — o usuário
           precisa poder trocar o intervalo para achar as tarefas. */}
       {vazio ? (
-        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-12 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-12 text-center">
           <h2 className="text-[20px] leading-tight font-semibold">Nenhuma tarefa neste período</h2>
           <p className="max-w-md text-sm text-muted-foreground">
             Ajuste o intervalo de datas acima ou crie a primeira tarefa deste período.
@@ -276,10 +279,9 @@ export function TarefasQuadro({
           </Button>
         </div>
       ) : (
-        <>
-          {/* O quadro: 4 colunas em xl; rolagem horizontal abaixo disso.
-              O body NUNCA quebra. */}
-          <div className="flex gap-4 overflow-x-auto pb-2">
+        // O quadro: 4 colunas em xl; rolagem horizontal abaixo disso. flex-1
+        // absorve a sobra e empurra a barra de stats para o rodapé (D-01).
+        <div className="flex flex-1 gap-4 overflow-x-auto pb-2">
             {COLUNAS_ORDEM.map((s) => (
               <div key={s} className="w-[300px] shrink-0 xl:w-auto xl:flex-1 xl:shrink">
                 <div className={`h-1 rounded-full ${COLUNA_BARRA[s]}`} />
@@ -310,10 +312,14 @@ export function TarefasQuadro({
               </div>
             ))}
           </div>
+      )}
 
-          {/* Barra de estatísticas (D-06: reflete o que está visível). */}
-          <Card className="p-4">
-            <div className="grid grid-cols-2 items-center gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Barra de estatísticas COLADA no rodapé da viewport (D-01). Sempre
+          renderizada — com 1 tarefa ou 50 fica embaixo e o quadro rola atrás
+          (backdrop-blur, mesmo tratamento do header sticky do layout). Reflete
+          o que está visível pós-filtro (D-06). */}
+      <Card className="sticky bottom-0 z-20 mt-auto -mx-6 -mb-6 rounded-none border-x-0 border-b-0 border-t bg-card/95 px-6 py-3 backdrop-blur-md lg:-mx-8 lg:-mb-8 lg:px-8">
+        <div className="grid grid-cols-2 items-center gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <div>
                 <p className="text-2xl font-semibold tabular-nums">{stats.total}</p>
                 <p className="text-xs text-muted-foreground">Total de Tarefas</p>
@@ -342,9 +348,7 @@ export function TarefasQuadro({
                 </div>
               </div>
             </div>
-          </Card>
-        </>
-      )}
+      </Card>
 
       <NovaTarefaSheet
         aberto={novaAberta}

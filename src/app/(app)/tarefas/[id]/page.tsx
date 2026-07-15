@@ -33,5 +33,12 @@ export default async function TarefaDetalhePage({
     .orderBy(asc(clientes.nome))
   const responsaveis = await getProfiles()
 
-  return <TarefaDetalhe tarefa={tarefa} clientes={clientesLista} responsaveis={responsaveis} />
+  return (
+    <TarefaDetalhe
+      tarefa={tarefa}
+      clientes={clientesLista}
+      responsaveis={responsaveis}
+      usuarioId={currentUser.id}
+    />
+  )
 }
