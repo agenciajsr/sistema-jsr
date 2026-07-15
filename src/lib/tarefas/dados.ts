@@ -43,6 +43,7 @@ import { intervaloPadrao } from '@/lib/tarefas/quadro'
 export type TarefaCard = {
   id: string
   titulo: string
+  subtitulo: string | null
   notas: string | null
   descricao: string | null
   status: TarefaStatus
@@ -129,6 +130,7 @@ const ORDEM_PRIORIDADE = sql`${tarefas.prioridade} DESC`
 const camposCard = {
   id: tarefas.id,
   titulo: tarefas.titulo,
+  subtitulo: tarefas.subtitulo,
   notas: tarefas.notas,
   descricao: tarefas.descricao,
   status: tarefas.status,

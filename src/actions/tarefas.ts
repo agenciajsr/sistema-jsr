@@ -92,6 +92,7 @@ export async function criarTarefa(input: TarefaInput) {
       .insert(tarefas)
       .values({
         titulo: v.titulo,
+        subtitulo: v.subtitulo || null,
         notas: v.notas || null,
         descricao: v.descricao || null,
         data: v.data,
@@ -149,6 +150,7 @@ export async function atualizarTarefa(id: string, campos: AtualizarTarefaInput) 
     const set: Record<string, unknown> = { updatedAt: new Date() }
 
     if (v.titulo !== undefined) set.titulo = v.titulo
+    if (v.subtitulo !== undefined) set.subtitulo = v.subtitulo || null
     if (v.notas !== undefined) set.notas = v.notas || null
     if (v.descricao !== undefined) set.descricao = v.descricao || null
     if (v.data !== undefined) set.data = v.data

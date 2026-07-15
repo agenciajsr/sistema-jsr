@@ -171,6 +171,7 @@ export const tarefaRecorrenciaEnum = pgEnum('tarefa_recorrencia', ['nenhuma', 'd
 export const tarefas = pgTable('tarefas', {
   id: uuid('id').primaryKey().defaultRandom(),
   titulo: text('titulo').notNull(),
+  subtitulo: text('subtitulo'),
   notas: text('notas'),
   status: tarefaStatusEnum('status').notNull().default('a_fazer'),
   prioridade: tarefaPrioridadeEnum('prioridade').notNull().default('media'),

@@ -35,6 +35,7 @@ const opcionalData = z
 export const tarefaSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o titulo da tarefa'),
   notas: z.string().optional(),
+  subtitulo: z.string().optional(),
   descricao: z.string().optional(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data invalida'),
   dataInicio: opcionalData,
@@ -60,6 +61,7 @@ export type TarefaInput = z.input<typeof tarefaSchema>
 export const atualizarTarefaSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o titulo da tarefa').optional(),
   notas: z.string().optional(),
+  subtitulo: z.string().optional(),
   descricao: z.string().optional(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data invalida').optional(),
   dataInicio: opcionalData,
