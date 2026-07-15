@@ -232,6 +232,39 @@ export const crmTarefaSchema = z.object({
 })
 export type CrmTarefaInput = z.input<typeof crmTarefaSchema>
 
+// --- Atividade AGENDADA (modal "Criar atividade" da ficha do lead) ---
+// Persiste em crm_tarefas com data_inicio/data_fim/prioridade; dataVencimento
+// da tarefa é preenchida com dataFim na action (heurística "sem contato +7d").
+export const PRIORIDADES_ATIVIDADE = ['baixa', 'media', 'alta'] as const
+
+/** ISO datetime obrigatório (com hora). */
+const dataHoraObrigatoria = (mensagem: string) =>
+  z
+    .string()
+    .min(1, mensagem)
+    .refine((v) => !Number.isNaN(Date.parse(v)), mensagem)
+
+export const atividadeSchema = z
+  .object({
+    titulo: z.string().trim().min(1, 'Informe um titulo para a atividade'),
+    contatoId: z.string().uuid('Lead invalido'),
+    oportunidadeId: opcionalUuid,
+    donoId: opcionalUuid,
+    dataInicio: dataHoraObrigatoria('Informe a data/hora de inicio'),
+    dataFim: dataHoraObrigatoria('Informe a data/hora de fim'),
+    tipo: z.enum(TIPOS_TAREFA_CRM).default('followup'),
+    prioridade: z
+      .enum(PRIORIDADES_ATIVIDADE)
+      .optional()
+      .or(z.literal(''))
+      .transform((v) => v || undefined),
+    descricao: opcionalTexto,
+  })
+  .refine((v) => Date.parse(v.dataFim) > Date.parse(v.dataInicio), {
+    message: 'O fim da atividade precisa ser depois do inicio.',
+  })
+export type AtividadeInput = z.input<typeof atividadeSchema>
+
 // Payload da API pública POST /api/crm/leads (validado ANTES de tocar o banco).
 export const leadEntradaSchema = z
   .object({

@@ -3,25 +3,29 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const BUCKET = 'documentos'
 
 /**
- * Upload de arquivo para o bucket de documentos no Supabase Storage.
+ * Upload de arquivo para o Supabase Storage.
+ * Padrao: bucket de documentos com path unico `{pasta}/{timestamp}-{nome}`.
+ * `opts` permite outro bucket/path fixo (ex.: foto do lead em crm-fotos com
+ * upsert — a troca de foto SOBRESCREVE o mesmo path de proposito).
  * Retorna o storagePath (caminho dentro do bucket).
  */
 export async function uploadFile(
   file: File,
-  clienteId: string,
+  pasta: string,
+  opts?: { bucket?: string; path?: string; upsert?: boolean },
 ): Promise<{ path: string } | { error: string }> {
   const supabase = createAdminClient()
 
-  // Gera um nome unico para evitar colisoes
+  // Gera um nome unico para evitar colisoes (quando nao ha path fixo)
   const timestamp = Date.now()
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `${clienteId}/${timestamp}-${safeName}`
+  const storagePath = opts?.path ?? `${pasta}/${timestamp}-${safeName}`
 
   const { error } = await supabase.storage
-    .from(BUCKET)
+    .from(opts?.bucket ?? BUCKET)
     .upload(storagePath, file, {
       cacheControl: '3600',
-      upsert: false,
+      upsert: opts?.upsert ?? false,
     })
 
   if (error) {

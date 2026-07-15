@@ -1,6 +1,6 @@
 'use server'
 
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
@@ -11,11 +11,15 @@ import {
   crmEmpresas,
   crmEtapas,
   crmOportunidades,
+  crmTags,
+  crmTarefas,
+  profiles,
 } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { normalizarTelefone } from '@/lib/crm/lead'
+import { uploadFile } from '@/lib/storage/client'
 import { SERVICOS_JSR } from '@/lib/crm/servicos'
 import {
   leadSchema,
@@ -229,11 +233,34 @@ export async function criarLead(input: LeadInput) {
 
     // (4.5) Tags do modal: vínculos lead↔tag numa query só. onConflictDoNothing
     // cobre o lead existente que já tinha alguma das tags (índice único).
+    // O returning devolve SÓ as linhas realmente inseridas — é o que permite
+    // registrar 'tag_adicionada' no histórico sem duplicar evento de tag antiga.
     if (v.tagIds.length > 0) {
-      await db
+      const inseridas = await db
         .insert(crmContatoTags)
         .values(v.tagIds.map((tagId) => ({ contatoId: contatoId as string, tagId })))
         .onConflictDoNothing()
+        .returning({ tagId: crmContatoTags.tagId })
+
+      if (inseridas.length > 0) {
+        const nomes = await db
+          .select({ id: crmTags.id, nome: crmTags.nome })
+          .from(crmTags)
+          .where(
+            inArray(
+              crmTags.id,
+              inseridas.map((i) => i.tagId)
+            )
+          )
+        // Sequencial de propósito (pool max=3) — e o log nunca derruba a mutação.
+        for (const tag of nomes) {
+          await registrarAtividadeCrm(workspace.id, currentUser, {
+            tipo: 'tag_adicionada',
+            contatoId,
+            detalhe: tag.nome,
+          })
+        }
+      }
     }
 
     // (5) O NEGÓCIO nasce SEMPRE — inclusive para lead existente (é o que faz
@@ -323,7 +350,19 @@ export async function verificarLeadExistente(email?: string, telefone?: string) 
   }
 }
 
-/** Ficha do lead: perfil + TODOS os negócios + histórico. 3 queries SEQUENCIAIS. */
+// Métricas do lead (imagem04): TODAS derivadas dos negócios GANHOS, calculadas
+// em TS a partir do que a query de negócios já traz — zeradas sem ganho.
+export type MetricasLead = {
+  ticketMedio: number
+  total: number
+  cicloCompraDias: number
+  ultimaCompraDias: number
+}
+
+const DIA_MS = 24 * 60 * 60 * 1000
+
+/** Ficha do lead: perfil + negócios + histórico + tags + atividades + etapas
+ *  do pipeline + métricas. Queries SEQUENCIAIS (pool max=3). */
 export async function getFichaLead(contatoId: string) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
@@ -332,7 +371,7 @@ export async function getFichaLead(contatoId: string) {
   if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
 
   try {
-    // (1) perfil
+    // (1) perfil (com foto, dono e nome do atendente via leftJoin)
     const [perfil] = await db
       .select({
         id: crmContatos.id,
@@ -353,17 +392,23 @@ export async function getFichaLead(contatoId: string) {
         estado: crmContatos.estado,
         notas: crmContatos.notas,
         origem: crmContatos.origem,
+        fotoUrl: crmContatos.fotoUrl,
+        donoId: crmContatos.donoId,
+        donoNome: profiles.nome,
         empresaId: crmContatos.empresaId,
         empresaNome: crmEmpresas.nome,
         createdAt: crmContatos.createdAt,
       })
       .from(crmContatos)
       .leftJoin(crmEmpresas, eq(crmContatos.empresaId, crmEmpresas.id))
+      .leftJoin(profiles, eq(crmContatos.donoId, profiles.id))
       .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
 
     if (!perfil) return { error: 'Lead nao encontrado.' }
 
-    // (2) TODOS os negócios do lead (D-02) — abertos e fechados.
+    // (2) TODOS os negócios do lead (D-02) — abertos e fechados. `numero` é o
+    // #N global do workspace por ordem de criação (subquery correlacionada:
+    // quantas oportunidades nasceram antes desta — mesmo critério do board).
     const negociosRaw = await db
       .select({
         id: crmOportunidades.id,
@@ -372,10 +417,18 @@ export async function getFichaLead(contatoId: string) {
         valor: crmOportunidades.valor,
         status: crmOportunidades.status,
         motivoPerda: crmOportunidades.motivoPerda,
+        etapaId: crmOportunidades.etapaId,
+        pipelineId: crmOportunidades.pipelineId,
         etapaNome: crmEtapas.nome,
         createdAt: crmOportunidades.createdAt,
         ganhaEm: crmOportunidades.ganhaEm,
         perdidaEm: crmOportunidades.perdidaEm,
+        numero: sql<number>`(
+          select count(*)::int from crm_oportunidades o2
+          where o2.workspace_id = ${crmOportunidades.workspaceId}
+            and (o2.created_at < ${crmOportunidades.createdAt}
+              or (o2.created_at = ${crmOportunidades.createdAt} and o2.id <= ${crmOportunidades.id}))
+        )`,
       })
       .from(crmOportunidades)
       .leftJoin(crmEtapas, eq(crmOportunidades.etapaId, crmEtapas.id))
@@ -387,7 +440,7 @@ export async function getFichaLead(contatoId: string) {
       )
       .orderBy(desc(crmOportunidades.createdAt))
 
-    // O Sheet é client: numeric → Number e Date → ISO aqui.
+    // O painel é client: numeric → Number e Date → ISO aqui.
     const negocios = negociosRaw.map((n) => ({
       ...n,
       valor: n.valor != null ? Number(n.valor) : null,
@@ -396,9 +449,75 @@ export async function getFichaLead(contatoId: string) {
       perdidaEm: n.perdidaEm?.toISOString() ?? null,
     }))
 
-    // (3) histórico: atividades do contato OU de qualquer negócio dele — o `or`
-    // cobre atividades legadas gravadas só com oportunidadeId (sem contatoId).
+    // (3) etapas dos pipelines dos negócios — desenham a "Pipeline Completa".
+    const pipelineIds = [...new Set(negocios.map((n) => n.pipelineId))]
+    const etapasRaw =
+      pipelineIds.length > 0
+        ? await db
+            .select({
+              id: crmEtapas.id,
+              nome: crmEtapas.nome,
+              ordem: crmEtapas.ordem,
+              pipelineId: crmEtapas.pipelineId,
+            })
+            .from(crmEtapas)
+            .where(inArray(crmEtapas.pipelineId, pipelineIds))
+            .orderBy(asc(crmEtapas.ordem))
+        : []
+
+    // (4) tags do lead
+    const tags = await db
+      .select({ id: crmTags.id, nome: crmTags.nome, cor: crmTags.cor })
+      .from(crmContatoTags)
+      .innerJoin(crmTags, eq(crmContatoTags.tagId, crmTags.id))
+      .where(eq(crmContatoTags.contatoId, contatoId))
+      .orderBy(asc(crmTags.nome))
+
+    // (5) atendentes disponíveis (Select da ficha e do modal de atividade)
+    const atendentes = await db
+      .select({ id: profiles.id, nome: profiles.nome })
+      .from(profiles)
+      .orderBy(asc(profiles.nome))
+
+    // (6) atividades agendadas (crm_tarefas) do lead ou de seus negócios.
     const ids = negocios.map((n) => n.id)
+    const atividadesRaw = await db
+      .select({
+        id: crmTarefas.id,
+        titulo: crmTarefas.titulo,
+        tipo: crmTarefas.tipo,
+        notas: crmTarefas.notas,
+        prioridade: crmTarefas.prioridade,
+        dataInicio: crmTarefas.dataInicio,
+        dataFim: crmTarefas.dataFim,
+        dataVencimento: crmTarefas.dataVencimento,
+        concluida: crmTarefas.concluida,
+        oportunidadeId: crmTarefas.oportunidadeId,
+        donoNome: profiles.nome,
+      })
+      .from(crmTarefas)
+      .leftJoin(profiles, eq(crmTarefas.donoId, profiles.id))
+      .where(
+        and(
+          eq(crmTarefas.workspaceId, workspace.id),
+          ids.length > 0
+            ? or(eq(crmTarefas.contatoId, contatoId), inArray(crmTarefas.oportunidadeId, ids))
+            : eq(crmTarefas.contatoId, contatoId)
+        )
+      )
+      // Agenda: as mais próximas do fim da lista pra cima — a UI agrupa por dia.
+      .orderBy(desc(sql`coalesce(${crmTarefas.dataInicio}, ${crmTarefas.dataVencimento})`))
+      .limit(100)
+
+    const atividades = atividadesRaw.map((a) => ({
+      ...a,
+      dataInicio: a.dataInicio?.toISOString() ?? null,
+      dataFim: a.dataFim?.toISOString() ?? null,
+      dataVencimento: a.dataVencimento.toISOString(),
+    }))
+
+    // (7) histórico: atividades do contato OU de qualquer negócio dele — o `or`
+    // cobre atividades legadas gravadas só com oportunidadeId (sem contatoId).
     const historicoRaw = await db
       .select({
         id: crmAtividades.id,
@@ -424,11 +543,35 @@ export async function getFichaLead(contatoId: string) {
 
     const historico = historicoRaw.map((h) => ({ ...h, createdAt: h.createdAt.toISOString() }))
 
+    // Métricas em TS, derivadas dos GANHOS (zeradas quando não há ganho).
+    const ganhos = negocios.filter((n) => n.status === 'ganha' && n.ganhaEm)
+    const totalGanho = ganhos.reduce((soma, n) => soma + (n.valor ?? 0), 0)
+    const ciclos = ganhos.map((n) =>
+      Math.max(0, Math.round((Date.parse(n.ganhaEm as string) - Date.parse(n.createdAt)) / DIA_MS))
+    )
+    const maisRecente = ganhos.reduce(
+      (max, n) => Math.max(max, Date.parse(n.ganhaEm as string)),
+      0
+    )
+    const metricas: MetricasLead = {
+      ticketMedio: ganhos.length > 0 ? totalGanho / ganhos.length : 0,
+      total: totalGanho,
+      cicloCompraDias:
+        ciclos.length > 0 ? Math.round(ciclos.reduce((s, c) => s + c, 0) / ciclos.length) : 0,
+      ultimaCompraDias:
+        maisRecente > 0 ? Math.max(0, Math.round((Date.now() - maisRecente) / DIA_MS)) : 0,
+    }
+
     return {
       data: {
         perfil: { ...perfil, createdAt: perfil.createdAt.toISOString() },
         negocios,
+        etapas: etapasRaw,
+        tags,
+        atendentes,
+        atividades,
         historico,
+        metricas,
       },
     }
   } catch (e) {
@@ -482,5 +625,134 @@ export async function atualizarLead(id: string, input: LeadPerfilInput) {
   } catch (e) {
     console.error('[atualizarLead]', e)
     return { error: 'Nao foi possivel salvar o lead.' }
+  }
+}
+
+// Limite da FOTO do lead (avatar) — bem menor que documentos (50MB).
+const MAX_FOTO_BYTES = 2 * 1024 * 1024 // 2 MB
+
+/**
+ * Envia a foto do lead (lápis sobre o avatar da ficha) para o bucket PÚBLICO
+ * crm-fotos e grava a URL pública em foto_url. O path é fixo por lead
+ * (leads/{id}.{ext}) com upsert: trocar a foto sobrescreve a anterior; o
+ * `?v=timestamp` na URL fura o cache do navegador na troca.
+ */
+export async function atualizarFotoLead(contatoId: string, formData: FormData) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  const file = formData.get('file') as File | null
+  if (!file || file.size === 0) return { error: 'Nenhuma imagem selecionada.' }
+  if (!file.type.startsWith('image/')) return { error: 'Envie uma imagem (JPG, PNG ou WebP).' }
+  if (file.size > MAX_FOTO_BYTES) return { error: 'Imagem muito grande. Maximo: 2 MB.' }
+
+  try {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+    const path = `leads/${contatoId}.${ext}`
+    const upload = await uploadFile(file, contatoId, {
+      bucket: 'crm-fotos',
+      path,
+      upsert: true,
+    })
+    if ('error' in upload) return { error: upload.error }
+
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!base) return { error: 'NEXT_PUBLIC_SUPABASE_URL nao configurada.' }
+    const fotoUrl = `${base}/storage/v1/object/public/crm-fotos/${upload.path}?v=${Date.now()}`
+
+    const [salvo] = await db
+      .update(crmContatos)
+      .set({ fotoUrl, updatedAt: new Date() })
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .returning({ id: crmContatos.id })
+
+    if (!salvo) return { error: 'Lead nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { fotoUrl } }
+  } catch (e) {
+    console.error('[atualizarFotoLead]', e)
+    return { error: 'Nao foi possivel enviar a foto.' }
+  }
+}
+
+/** Renomeia o lead (edição inline do nome na ficha) — update parcial. */
+export async function renomearLead(contatoId: string, nome: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  const limpo = nome.trim()
+  if (!limpo) return { error: 'Informe o nome do lead.' }
+
+  try {
+    const [salvo] = await db
+      .update(crmContatos)
+      .set({ nome: limpo, updatedAt: new Date() })
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .returning({ id: crmContatos.id })
+
+    if (!salvo) return { error: 'Lead nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[renomearLead]', e)
+    return { error: 'Nao foi possivel renomear o lead.' }
+  }
+}
+
+/** Salva as notas do lead (Textarea recolhível da ficha) — update parcial. */
+export async function salvarNotasLead(contatoId: string, notas: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    const [salvo] = await db
+      .update(crmContatos)
+      .set({ notas: notas.trim() || null, updatedAt: new Date() })
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .returning({ id: crmContatos.id })
+
+    if (!salvo) return { error: 'Lead nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[salvarNotasLead]', e)
+    return { error: 'Nao foi possivel salvar as notas.' }
+  }
+}
+
+/** Troca o atendente do lead (Select da ficha). donoId null = sem atendente. */
+export async function atualizarAtendenteLead(contatoId: string, donoId: string | null) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    const [salvo] = await db
+      .update(crmContatos)
+      .set({ donoId, updatedAt: new Date() })
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .returning({ id: crmContatos.id })
+
+    if (!salvo) return { error: 'Lead nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[atualizarAtendenteLead]', e)
+    return { error: 'Nao foi possivel trocar o atendente.' }
   }
 }

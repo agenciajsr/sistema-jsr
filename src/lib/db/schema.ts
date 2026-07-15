@@ -565,6 +565,9 @@ export const crmContatos = pgTable('crm_contatos', {
   numero: text('numero'),
   complemento: text('complemento'),
   bairro: text('bairro'),
+  // URL PÚBLICA da foto do lead (bucket crm-fotos, público de propósito —
+  // avatar não pode depender de signed URL que expira).
+  fotoUrl: text('foto_url'),
   // 'manual' | 'landing_page' | 'meta_lead_ad' | 'whatsapp' | 'indicacao' | 'outro'
   origem: text('origem').notNull().default('manual'),
   origemDetalhe: jsonb('origem_detalhe'),
@@ -671,6 +674,13 @@ export const crmTarefas = pgTable('crm_tarefas', {
   titulo: text('titulo').notNull(),
   notas: text('notas'),
   dataVencimento: timestamp('data_vencimento', { withTimezone: true }).notNull(),
+  // Atividade AGENDADA (modal "Criar atividade"): início/fim com hora.
+  // dataVencimento continua preenchida (= dataFim) para não quebrar a
+  // heurística "sem contato +7d" de getCrmVisaoGeral.
+  dataInicio: timestamp('data_inicio', { withTimezone: true }),
+  dataFim: timestamp('data_fim', { withTimezone: true }),
+  // 'baixa' | 'media' | 'alta' — validado no Zod (atividadeSchema), sem CHECK.
+  prioridade: text('prioridade'),
   concluida: boolean('concluida').notNull().default(false),
   concluidaEm: timestamp('concluida_em', { withTimezone: true }),
   donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),

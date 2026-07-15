@@ -1,13 +1,15 @@
-import { and, asc, desc, eq, lt, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lt, isNotNull, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import {
   crmAtividades,
+  crmContatoTags,
   crmEmpresas,
   crmContatos,
   crmEtapas,
   crmPipelines,
   crmOportunidades,
+  crmTags,
   crmTarefas,
   profiles,
 } from '@/lib/db/schema'
@@ -36,6 +38,14 @@ export type OportunidadeCard = {
   // É o contatoId que abre a ficha do lead no clique do card.
   contatoId: string | null
   contatoNome: string | null
+  // Telefone só-dígitos do CONTATO — alimenta o botão WhatsApp do card
+  // (oculto quando null). Ver normalizarTelefone (src/lib/crm/lead.ts).
+  telefoneNormalizado: string | null
+  // #N estável por ordem de criação no workspace (row_number sobre TODAS as
+  // oportunidades) — o "#1" da imagem03. Sem coluna nova de propósito.
+  numero: number
+  // Tags do CONTATO (badges do rodapé do card). cor = chave de CORES_TAG.
+  tags: { id: string; nome: string; cor: string }[]
   empresaNome: string | null
   // Atendente responsável (a UI mostra 'Sem atendente' quando null).
   donoNome: string | null
@@ -143,6 +153,7 @@ const CAMPOS_CARD = {
   createdAt: crmOportunidades.createdAt,
   contatoId: crmOportunidades.contatoId,
   contatoNome: crmContatos.nome,
+  contatoTelefoneNormalizado: crmContatos.telefoneNormalizado,
   empresaNome: crmEmpresas.nome,
   donoNome: profiles.nome,
 }
@@ -162,18 +173,23 @@ type LinhaCard = {
   createdAt: Date
   contatoId: string | null
   contatoNome: string | null
+  contatoTelefoneNormalizado: string | null
   empresaNome: string | null
   donoNome: string | null
 }
 
+// Insumos agregados do card, agrupados num objeto só para o montarCard não
+// virar uma assinatura de 6 Maps.
+type InsumosCard = {
+  atividadesPorOportunidade: Map<string, number>
+  tarefasAbertasPorOportunidade: Map<string, number>
+  numeroPorOportunidade: Map<string, number>
+  tagsPorContato: Map<string, { id: string; nome: string; cor: string }[]>
+}
+
 // Helper LOCAL (não exportado): a montagem do card mora num lugar só — senão
 // abertas e fechadas divergem silenciosamente.
-function montarCard(
-  o: LinhaCard,
-  semContato: boolean,
-  atividadesPorOportunidade: Map<string, number>,
-  tarefasAbertasPorOportunidade: Map<string, number>
-): OportunidadeCard {
+function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): OportunidadeCard {
   const criada = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)
   return {
     id: o.id,
@@ -188,10 +204,13 @@ function montarCard(
     motivoPerda: o.motivoPerda,
     contatoId: o.contatoId,
     contatoNome: o.contatoNome,
+    telefoneNormalizado: o.contatoTelefoneNormalizado,
+    numero: insumos.numeroPorOportunidade.get(o.id) ?? 0,
+    tags: o.contatoId ? (insumos.tagsPorContato.get(o.contatoId) ?? []) : [],
     empresaNome: o.empresaNome,
     donoNome: o.donoNome,
-    qtdAtividades: atividadesPorOportunidade.get(o.id) ?? 0,
-    qtdTarefasAbertas: tarefasAbertasPorOportunidade.get(o.id) ?? 0,
+    qtdAtividades: insumos.atividadesPorOportunidade.get(o.id) ?? 0,
+    qtdTarefasAbertas: insumos.tarefasAbertasPorOportunidade.get(o.id) ?? 0,
     dataPrevistaFechamento: o.dataPrevistaFechamento,
     createdAt: criada.toISOString(),
     semContato,
@@ -385,6 +404,55 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       if (t.oportunidadeId) tarefasAbertasPorOportunidade.set(t.oportunidadeId, t.total)
     }
 
+    // (13) #N por oportunidade — row_number sobre TODAS as oportunidades do
+    // workspace por ordem de criação (uma query agregada; escala pequena).
+    // Estável: a numeração nunca muda quando negócios são fechados/reabertos.
+    const numeracaoRaw = await db
+      .select({
+        id: crmOportunidades.id,
+        numero: sql<number>`(row_number() over (order by ${crmOportunidades.createdAt}, ${crmOportunidades.id}))::int`,
+      })
+      .from(crmOportunidades)
+      .where(eq(crmOportunidades.workspaceId, workspace.id))
+
+    const numeroPorOportunidade = new Map<string, number>()
+    for (const n of numeracaoRaw) numeroPorOportunidade.set(n.id, n.numero)
+
+    // (14) tags dos CONTATOS presentes no board — UMA query com inArray sobre
+    // os contatoIds coletados (nunca N+1 por card).
+    const contatoIds = new Set<string>()
+    for (const o of abertas) if (o.contatoId) contatoIds.add(o.contatoId)
+    for (const o of ganhasRows) if (o.contatoId) contatoIds.add(o.contatoId)
+    for (const o of perdidasRows) if (o.contatoId) contatoIds.add(o.contatoId)
+
+    const tagsPorContato = new Map<string, { id: string; nome: string; cor: string }[]>()
+    if (contatoIds.size > 0) {
+      const tagsRaw = await db
+        .select({
+          contatoId: crmContatoTags.contatoId,
+          id: crmTags.id,
+          nome: crmTags.nome,
+          cor: crmTags.cor,
+        })
+        .from(crmContatoTags)
+        .innerJoin(crmTags, eq(crmContatoTags.tagId, crmTags.id))
+        .where(inArray(crmContatoTags.contatoId, [...contatoIds]))
+        .orderBy(asc(crmTags.nome))
+      for (const t of tagsRaw) {
+        const lista = tagsPorContato.get(t.contatoId)
+        const tag = { id: t.id, nome: t.nome, cor: t.cor }
+        if (lista) lista.push(tag)
+        else tagsPorContato.set(t.contatoId, [tag])
+      }
+    }
+
+    const insumos: InsumosCard = {
+      atividadesPorOportunidade,
+      tarefasAbertasPorOportunidade,
+      numeroPorOportunidade,
+      tagsPorContato,
+    }
+
     // Merge em memória: monta os cards preenchendo createdAt e semContato.
     // Heurística semContato (DOCUMENTADA): uma oportunidade ABERTA está "sem
     // contato" quando foi criada há mais de 7 dias E não possui NENHUMA tarefa
@@ -396,12 +464,7 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       const criada = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)
       const semContato = agora - criada.getTime() > SETE_DIAS_MS && !contatadas.has(o.id)
       if (semContato) semContatoTotal += 1
-      const card = montarCard(
-        o,
-        semContato,
-        atividadesPorOportunidade,
-        tarefasAbertasPorOportunidade
-      )
+      const card = montarCard(o, semContato, insumos)
       const lista = porEtapa.get(o.etapaId)
       if (lista) lista.push(card)
       else porEtapa.set(o.etapaId, [card])
@@ -419,12 +482,8 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
 
     // semContato entra como false nas fechadas: é heurística de negócio ABERTO
     // ("aguardando contato há +7d") — um negócio já fechado não aguarda nada.
-    const cardsGanhos = ganhasRows.map((o) =>
-      montarCard(o, false, atividadesPorOportunidade, tarefasAbertasPorOportunidade)
-    )
-    const cardsPerdidos = perdidasRows.map((o) =>
-      montarCard(o, false, atividadesPorOportunidade, tarefasAbertasPorOportunidade)
-    )
+    const cardsGanhos = ganhasRows.map((o) => montarCard(o, false, insumos))
+    const cardsPerdidos = perdidasRows.map((o) => montarCard(o, false, insumos))
 
     const colunasFechadas: ColunaFechada[] = [
       {

@@ -4,9 +4,10 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { crmTags } from '@/lib/db/schema'
+import { crmContatos, crmContatoTags, crmTags } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
+import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { CORES_TAG } from '@/lib/crm/tags'
 import { tagSchema, type TagInput } from '@/lib/validations/crm'
 
@@ -83,5 +84,92 @@ export async function criarTag(input: TagInput) {
   } catch (e) {
     console.error('[criarTag]', e)
     return { error: 'Nao foi possivel criar a tag.' }
+  }
+}
+
+/**
+ * Vincula uma tag ao lead (badge "+" da ficha) e registra 'tag_adicionada' no
+ * histórico. Idempotente: o índice único + onConflictDoNothing fazem o vínculo
+ * repetido virar no-op (e sem evento duplicado — returning só traz inseridos).
+ */
+export async function vincularTagLead(contatoId: string, tagId: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    // Guarda de workspace: o contato precisa ser DESTE workspace.
+    const [contato] = await db
+      .select({ id: crmContatos.id })
+      .from(crmContatos)
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .limit(1)
+    if (!contato) return { error: 'Lead nao encontrado.' }
+
+    const [tag] = await db
+      .select({ id: crmTags.id, nome: crmTags.nome, cor: crmTags.cor })
+      .from(crmTags)
+      .where(and(eq(crmTags.id, tagId), eq(crmTags.workspaceId, workspace.id)))
+      .limit(1)
+    if (!tag) return { error: 'Tag nao encontrada.' }
+
+    const inseridas = await db
+      .insert(crmContatoTags)
+      .values({ contatoId, tagId })
+      .onConflictDoNothing()
+      .returning({ id: crmContatoTags.id })
+
+    if (inseridas.length > 0) {
+      await registrarAtividadeCrm(workspace.id, currentUser, {
+        tipo: 'tag_adicionada',
+        contatoId,
+        detalhe: tag.nome,
+      })
+    }
+
+    revalidatePath('/crm')
+    return { data: tag }
+  } catch (e) {
+    console.error('[vincularTagLead]', e)
+    return { error: 'Nao foi possivel adicionar a tag.' }
+  }
+}
+
+/** Desvincula uma tag do lead e registra 'tag_removida' no histórico. */
+export async function desvincularTagLead(contatoId: string, tagId: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    const [tag] = await db
+      .select({ id: crmTags.id, nome: crmTags.nome })
+      .from(crmTags)
+      .where(and(eq(crmTags.id, tagId), eq(crmTags.workspaceId, workspace.id)))
+      .limit(1)
+    if (!tag) return { error: 'Tag nao encontrada.' }
+
+    const removidas = await db
+      .delete(crmContatoTags)
+      .where(and(eq(crmContatoTags.contatoId, contatoId), eq(crmContatoTags.tagId, tagId)))
+      .returning({ id: crmContatoTags.id })
+
+    if (removidas.length > 0) {
+      await registrarAtividadeCrm(workspace.id, currentUser, {
+        tipo: 'tag_removida',
+        contatoId,
+        detalhe: tag.nome,
+      })
+    }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[desvincularTagLead]', e)
+    return { error: 'Nao foi possivel remover a tag.' }
   }
 }
