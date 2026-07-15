@@ -92,6 +92,14 @@
   /* Verde WhatsApp do KPI Conversas (quick-260711-f7m) */
   --chart-whatsapp: #25d366;
 
+  /* Paleta sequencial p/ gráficos multi-série (Performance de /campanhas).
+     Sem estas variáveis as linhas ficam com stroke inválido = invisíveis. */
+  --chart-1: #1e76c4;
+  --chart-2: #16a34a;
+  --chart-3: #7c3aed;
+  --chart-4: #d97706;
+  --chart-5: #0891b2;
+
   /* Fundos suaves por severidade (alertas do Painel) */
   --alert-danger-soft: #fef2f2;
   --alert-warning-soft: #fffbeb;
@@ -137,6 +145,13 @@
   /* Roxo e WhatsApp — variação clara para contraste no fundo escuro (quick-260711-f7m) */
   --chart-purple: #a78bfa;
   --chart-whatsapp: #22c35e;
+
+  /* Paleta de gráficos — variação clara p/ contraste no fundo escuro */
+  --chart-1: #5aa3e0;
+  --chart-2: #4ade80;
+  --chart-3: #a78bfa;
+  --chart-4: #fbbf24;
+  --chart-5: #22d3ee;
 
   /* Gradientes premium — variação escura (ainda sutil) */
   --gradient-brand: linear-gradient(135deg, #2a86d6 0%, #1e76c4 55%, #16588f 100%);

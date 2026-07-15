@@ -198,6 +198,12 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
             </Select>
           )}
         </div>
+        {nivel !== 'campanhas' && (
+          <p className="text-xs text-muted-foreground">
+            Conjuntos e anúncios refletem a janela dos últimos ~30 dias da sincronização com o
+            Meta (o dado não vem diário), independente do período selecionado acima.
+          </p>
+        )}
       </CardHeader>
       <CardContent>
         {filtradas.length === 0 ? (

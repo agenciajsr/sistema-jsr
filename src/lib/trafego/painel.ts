@@ -5,7 +5,7 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { adAccounts, adInsights, adsetInsights, campaignInsights, clientes } from '@/lib/db/schema'
+import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 // parseActionsExtendido/parseActionValues vêm de ./aggregate (fonte única —
@@ -324,63 +324,26 @@ export async function getPainelCampanhas(
   totaisAtual.resultadoHeroi = resultadoDaChave(totaisAtual, heroi.chave)
   totaisAnterior.resultadoHeroi = resultadoDaChave(totaisAnterior, heroi.chave)
 
-  // Query B: adsetInsights do período ATUAL (nível conjuntos).
-  // Degradação graciosa: tabela ausente/erro -> nível vazio, painel segue vivo.
+  // Query B: adInsights — níveis conjuntos + anúncios.
+  //
+  // ⚠️ LIMITAÇÃO DO DADO (descoberta em 15/jul/2026): o sync grava ad_insights
+  // como JANELA AGREGADA de ~30 dias (date_start≈hoje-30 → date_stop≈hoje), uma
+  // janela nova por dia de sync — NÃO é série diária. Filtrar por
+  // date_start dentro do período NUNCA bate (a janela começa antes) e somar
+  // várias janelas conta o mesmo anúncio N vezes. O correto é usar SOMENTE a
+  // janela mais recente de cada anúncio (dedupe por adId ficando com o maior
+  // date_stop). Consequência aceita: estes dois níveis refletem os últimos
+  // ~30 dias do Meta, independente do período selecionado (a UI avisa).
+  // adset_insights está VAZIA desde sempre (sync nunca gravou) — conjuntos são
+  // derivados agrupando os anúncios por adsetId, como o aggregate.ts antigo fazia.
   const porConjunto = new Map<string, LinhaConjunto>()
-  try {
-    const adsetRows = await db
-      .select({
-        adsetId: adsetInsights.adsetId,
-        adsetName: adsetInsights.adsetName,
-        campaignName: adsetInsights.campaignName,
-        spend: adsetInsights.spend,
-        impressions: adsetInsights.impressions,
-        clicks: adsetInsights.clicks,
-        actions: adsetInsights.actions,
-      })
-      .from(adsetInsights)
-      .where(
-        and(
-          inArray(adsetInsights.adAccountId, contaIds),
-          gte(adsetInsights.dateStart, inicioAtual),
-          lte(adsetInsights.dateStart, fimAtual),
-        ),
-      )
-    for (const row of adsetRows) {
-      const spend = Number(row.spend) || 0
-      const r = parseActionsExtendido(row.actions)
-      const resultado = resultadoDaChave(r, heroi.chave)
-      const exist = porConjunto.get(row.adsetId)
-      if (exist) {
-        exist.spend += spend
-        exist.impressions += row.impressions ?? 0
-        exist.clicks += row.clicks ?? 0
-        exist.linkClicks += r.linkClicks
-        exist.resultadoHeroi += resultado
-      } else {
-        porConjunto.set(row.adsetId, {
-          adsetId: row.adsetId,
-          adsetName: row.adsetName,
-          campaignName: row.campaignName,
-          spend,
-          impressions: row.impressions ?? 0,
-          clicks: row.clicks ?? 0,
-          linkClicks: r.linkClicks,
-          resultadoHeroi: resultado,
-        })
-      }
-    }
-  } catch {
-    // adset_insights pode não existir ainda — nível conjuntos fica vazio
-  }
-
-  // Query C: adInsights do período ATUAL (nível anúncios, com thumbnail/status).
   const porAnuncio = new Map<string, LinhaAnuncio>()
   try {
     const adRows = await db
       .select({
         adId: adInsights.adId,
         adName: adInsights.adName,
+        adsetId: adInsights.adsetId,
         adsetName: adInsights.adsetName,
         campaignName: adInsights.campaignName,
         thumbnailUrl: adInsights.thumbnailUrl,
@@ -389,36 +352,58 @@ export async function getPainelCampanhas(
         impressions: adInsights.impressions,
         clicks: adInsights.clicks,
         actions: adInsights.actions,
+        dateStop: adInsights.dateStop,
       })
       .from(adInsights)
       .where(
         and(
           inArray(adInsights.adAccountId, contaIds),
-          gte(adInsights.dateStart, inicioAtual),
-          lte(adInsights.dateStart, fimAtual),
+          // Janela que ainda alcança o período pedido (roda diária, então na
+          // prática pega as janelas dos últimos dias de sync).
+          gte(adInsights.dateStop, inicioAtual),
         ),
       )
+
+    // Dedupe: fica só a janela MAIS RECENTE de cada anúncio.
+    const maisRecente = new Map<string, (typeof adRows)[number]>()
     for (const row of adRows) {
+      const atual = maisRecente.get(row.adId)
+      if (!atual || row.dateStop > atual.dateStop) maisRecente.set(row.adId, row)
+    }
+
+    for (const row of maisRecente.values()) {
       const spend = Number(row.spend) || 0
       const r = parseActionsExtendido(row.actions)
       const resultado = resultadoDaChave(r, heroi.chave)
-      const exist = porAnuncio.get(row.adId)
+
+      porAnuncio.set(row.adId, {
+        adId: row.adId,
+        adName: row.adName,
+        adsetName: row.adsetName,
+        campaignName: row.campaignName,
+        thumbnailUrl: row.thumbnailUrl,
+        effectiveStatus: row.effectiveStatus,
+        spend,
+        impressions: row.impressions ?? 0,
+        clicks: row.clicks ?? 0,
+        linkClicks: r.linkClicks,
+        resultadoHeroi: resultado,
+      })
+
+      // Conjunto = soma dos anúncios do mesmo adset (janela mais recente).
+      const adsetId = row.adsetId ?? 'sem-conjunto'
+      const exist = porConjunto.get(adsetId)
       if (exist) {
         exist.spend += spend
         exist.impressions += row.impressions ?? 0
         exist.clicks += row.clicks ?? 0
         exist.linkClicks += r.linkClicks
         exist.resultadoHeroi += resultado
-        if (!exist.thumbnailUrl && row.thumbnailUrl) exist.thumbnailUrl = row.thumbnailUrl
-        if (!exist.effectiveStatus && row.effectiveStatus) exist.effectiveStatus = row.effectiveStatus
       } else {
-        porAnuncio.set(row.adId, {
-          adId: row.adId,
-          adName: row.adName,
-          adsetName: row.adsetName,
+        porConjunto.set(adsetId, {
+          adsetId,
+          adsetName: row.adsetName ?? 'Sem conjunto',
           campaignName: row.campaignName,
-          thumbnailUrl: row.thumbnailUrl,
-          effectiveStatus: row.effectiveStatus,
           spend,
           impressions: row.impressions ?? 0,
           clicks: row.clicks ?? 0,
@@ -428,7 +413,7 @@ export async function getPainelCampanhas(
       }
     }
   } catch {
-    // ad_insights pode não existir ainda — nível anúncios fica vazio
+    // ad_insights pode não existir ainda — níveis conjuntos/anúncios ficam vazios
   }
 
   const seriePorDia = Array.from(porDiaCampanha.values()).sort(
