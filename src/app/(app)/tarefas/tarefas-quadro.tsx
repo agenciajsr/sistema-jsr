@@ -288,12 +288,12 @@ export function TarefasQuadro({
       </div>
 
       {/* Estado vazio: cabeçalho e toolbar continuam visíveis — o usuário
-          precisa poder trocar o intervalo para achar as tarefas. */}
+          precisa poder trocar o dia para achar as tarefas. */}
       {vazio ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-12 text-center">
-          <h2 className="text-[20px] leading-tight font-semibold">Nenhuma tarefa neste período</h2>
+          <h2 className="text-[20px] leading-tight font-semibold">Nenhuma tarefa neste dia</h2>
           <p className="max-w-md text-sm text-muted-foreground">
-            Ajuste o intervalo de datas acima ou crie a primeira tarefa deste período.
+            Escolha outro dia no calendário acima ou crie a primeira tarefa.
           </p>
           <Button asChild>
             <Link href={`/tarefas/nova?data=${dados.dia}`}>
@@ -349,7 +349,9 @@ export function TarefasQuadro({
               <div>
                 <p className="text-2xl font-semibold tabular-nums">{stats.total}</p>
                 <p className="text-xs text-muted-foreground">Total de Tarefas</p>
-                <p className="text-xs text-muted-foreground">Esta semana</p>
+                <p className="text-xs text-muted-foreground">
+                  {rotuloDoDia(dados.dia, dados.hoje)}
+                </p>
               </div>
 
               {COLUNAS_ORDEM.map((s) => (

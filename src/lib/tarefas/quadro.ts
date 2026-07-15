@@ -41,7 +41,7 @@ export const COLUNA_HELPER: Record<TarefaStatus, string> = {
   a_fazer: 'Para fazer',
   em_andamento: 'Em progresso',
   concluida: 'Finalizadas',
-  nao_realizada: 'Canceladas',
+  nao_realizada: 'Não realizadas',
 }
 
 // D-02: só tokens que JÁ existem em globals.css — zero cor nova inventada.
