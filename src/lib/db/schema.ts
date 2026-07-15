@@ -456,10 +456,11 @@ export const relatorios = pgTable('relatorios', {
   id: uuid('id').primaryKey().defaultRandom(),
   clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
   clienteNome: text('cliente_nome').notNull(), // denormalizado — evita join na leitura
-  tipo: text('tipo').notNull(), // 'semanal' | 'manual'
+  tipo: text('tipo').notNull(), // 'semanal' | 'manual' | 'automatico'
   periodoInicio: date('periodo_inicio').notNull(),
   periodoFim: date('periodo_fim').notNull(),
   conteudo: text('conteudo').notNull(), // texto pronto para WhatsApp
+  configId: uuid('config_id').references(() => relatorioConfigs.id, { onDelete: 'set null' }),
   geradoEm: timestamp('gerado_em', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
@@ -468,6 +469,56 @@ export const relatorios = pgTable('relatorios', {
 
 export const relatoriosRelations = relations(relatorios, ({ one }) => ({
   cliente: one(clientes, { fields: [relatorios.clienteId], references: [clientes.id] }),
+  config: one(relatorioConfigs, { fields: [relatorios.configId], references: [relatorioConfigs.id] }),
+}))
+
+// --- Relatórios configuráveis ---
+// Uma config define UM relatório recorrente (semanal ou mensal) de um cliente,
+// composto por N blocos de métricas (um por conta de anúncio) + compilado opcional.
+// Campos de destino/horário são SALVOS PARA O FUTURO (envio automático de
+// WhatsApp ainda não existe — hoje o fluxo é copiar e colar).
+export const relatorioConfigs = pgTable('relatorio_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  frequencia: text('frequencia').notNull(), // 'semanal' | 'mensal'
+  diaSemana: integer('dia_semana'), // 0-6 (domingo-sábado), quando semanal
+  diaMes: integer('dia_mes'), // 1-31, quando mensal
+  periodoDias: integer('periodo_dias'), // null = padrão da frequência (7 dias / mês anterior)
+  horarioEnvio: text('horario_envio'), // 'HH:MM' — salvo para o futuro, não usado
+  destinoTipo: text('destino_tipo'), // 'privado' | 'grupo' — futuro
+  destinoValor: text('destino_valor'), // número ou nome do grupo — futuro
+  cabecalho: text('cabecalho').notNull(), // template com variáveis ({{cliente}}, {{date_range}}...)
+  incluirCompilado: boolean('incluir_compilado').notNull().default(true),
+  mensagemCompilado: text('mensagem_compilado'),
+  ativo: boolean('ativo').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteIdx: index('relatorio_configs_cliente_idx').on(table.clienteId),
+}))
+
+export const relatorioBlocos = pgTable('relatorio_blocos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  configId: uuid('config_id').notNull().references(() => relatorioConfigs.id, { onDelete: 'cascade' }),
+  ordem: integer('ordem').notNull(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  nivel: text('nivel').notNull(), // 'conta' | 'campanhas'
+  campanhasSelecionadas: jsonb('campanhas_selecionadas'), // string[] de campaignId; null quando nivel='conta'
+  metricas: jsonb('metricas').notNull(), // string[] de chaves do catálogo de variáveis
+  mensagem: text('mensagem').notNull(), // template com variáveis
+}, (table) => ({
+  configIdx: index('relatorio_blocos_config_idx').on(table.configId, table.ordem),
+}))
+
+export const relatorioConfigsRelations = relations(relatorioConfigs, ({ one, many }) => ({
+  cliente: one(clientes, { fields: [relatorioConfigs.clienteId], references: [clientes.id] }),
+  blocos: many(relatorioBlocos),
+}))
+
+export const relatorioBlocosRelations = relations(relatorioBlocos, ({ one }) => ({
+  config: one(relatorioConfigs, { fields: [relatorioBlocos.configId], references: [relatorioConfigs.id] }),
+  adAccount: one(adAccounts, { fields: [relatorioBlocos.adAccountId], references: [adAccounts.id] }),
 }))
 
 // --- Credenciais do Google (integração com o Google Calendar) ---

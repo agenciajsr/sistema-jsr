@@ -148,6 +148,13 @@
       "when": 1784122197103,
       "tag": "0020_blue_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784141112047,
+      "tag": "0023_relatorios_configuraveis",
+      "breakpoints": true
     }
   ]
 }
