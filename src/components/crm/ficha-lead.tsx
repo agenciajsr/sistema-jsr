@@ -12,9 +12,11 @@ import {
   Copy,
   Handshake,
   Inbox,
+  Package,
   Pencil,
   Plus,
   Tag,
+  Trash2,
   Trophy,
   UserPlus,
   XCircle,
@@ -24,13 +26,17 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import {
+  adicionarNegocioLead,
   atualizarAtendenteLead,
   atualizarFotoLead,
   atualizarLead,
+  atualizarValorNegocio,
+  excluirLead,
   getFichaLead,
   renomearLead,
   salvarNotasLead,
 } from '@/actions/crm-lead'
+import { deletarOportunidade } from '@/actions/crm'
 import { desvincularTagLead, vincularTagLead } from '@/actions/crm-tags'
 import { concluirAtividadeCrm } from '@/actions/crm-atividades'
 import { Badge } from '@/components/ui/badge'
@@ -50,9 +56,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { CriarAtividadeDialog } from '@/components/crm/criar-atividade-dialog'
 import { TagsSelect } from '@/components/crm/tags-select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { mascararDocumento, mascararTelefone } from '@/lib/crm/mascaras'
 import { nomeOrigem } from '@/lib/crm/origem'
-import { rotuloServico } from '@/lib/crm/servicos'
+import { rotuloServico, SERVICOS_JSR, type ServicoJsr } from '@/lib/crm/servicos'
 import { classesCorTag } from '@/lib/crm/tags'
 import { tempoRelativoCurto } from '@/lib/crm/tempo'
 import { cn } from '@/lib/utils'
@@ -195,6 +211,16 @@ export function FichaLead({
   // Painel direito.
   const [modalAtividade, setModalAtividade] = useState(false)
   const [negocioSelecionado, setNegocioSelecionado] = useState<string | null>(null)
+
+  // Produtos e Valores (imagem04): adicionar produto + editar valor inline.
+  const [novoProdutoServico, setNovoProdutoServico] = useState<ServicoJsr | ''>('')
+  const [novoProdutoValor, setNovoProdutoValor] = useState('')
+  const [salvandoProduto, setSalvandoProduto] = useState(false)
+  const [valoresRascunho, setValoresRascunho] = useState<Record<string, string>>({})
+
+  // Exclusao do lead (acao destrutiva com confirmacao).
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
 
   const { register, handleSubmit, reset, setValue, watch } = useForm<
     z.input<typeof leadPerfilSchema>,
@@ -398,6 +424,93 @@ export function FichaLead({
   function copiarTelefone() {
     if (!telefone) return
     void navigator.clipboard.writeText(telefone).then(() => toast.success('Telefone copiado.'))
+  }
+
+  // --- Produtos e Valores ---
+
+  async function adicionarProduto() {
+    if (!contatoId || !novoProdutoServico) {
+      toast.error('Escolha o produto/servico.')
+      return
+    }
+    const valorNum = novoProdutoValor.trim() ? Number(novoProdutoValor.replace(',', '.')) : null
+    if (valorNum !== null && (!Number.isFinite(valorNum) || valorNum < 0)) {
+      toast.error('Valor invalido.')
+      return
+    }
+    setSalvandoProduto(true)
+    try {
+      const negocioAtual = ficha?.negocios.find((n) => n.id === negocioSelecionado)
+      const result = await adicionarNegocioLead(
+        contatoId,
+        novoProdutoServico,
+        valorNum,
+        negocioAtual?.pipelineId,
+      )
+      if ('error' in result && result.error) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('Produto adicionado.')
+      setNovoProdutoServico('')
+      setNovoProdutoValor('')
+      await carregar(contatoId, true)
+      router.refresh()
+    } finally {
+      setSalvandoProduto(false)
+    }
+  }
+
+  async function salvarValorProduto(negocioId: string) {
+    if (!contatoId) return
+    const rascunho = valoresRascunho[negocioId]
+    if (rascunho === undefined) return
+    const valorNum = rascunho.trim() ? Number(rascunho.replace(',', '.')) : null
+    if (valorNum !== null && (!Number.isFinite(valorNum) || valorNum < 0)) {
+      toast.error('Valor invalido.')
+      return
+    }
+    const result = await atualizarValorNegocio(negocioId, valorNum)
+    if ('error' in result && result.error) {
+      toast.error(result.error)
+      return
+    }
+    setValoresRascunho((prev) => {
+      const { [negocioId]: _descartado, ...resto } = prev
+      return resto
+    })
+    await carregar(contatoId, true)
+    router.refresh()
+  }
+
+  async function excluirProduto(negocioId: string) {
+    if (!contatoId) return
+    const result = await deletarOportunidade(negocioId)
+    if ('error' in result && result.error) {
+      toast.error(result.error)
+      return
+    }
+    toast.success('Produto removido.')
+    await carregar(contatoId, true)
+    router.refresh()
+  }
+
+  async function confirmarExcluirLead() {
+    if (!contatoId) return
+    setExcluindo(true)
+    try {
+      const result = await excluirLead(contatoId)
+      if ('error' in result && result.error) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('Lead excluido.')
+      setConfirmarExclusao(false)
+      onOpenChange(false)
+      router.refresh()
+    } finally {
+      setExcluindo(false)
+    }
   }
 
   const negocio = ficha?.negocios.find((n) => n.id === negocioSelecionado) ?? null
@@ -737,15 +850,30 @@ export function FichaLead({
                   </Button>
                 </form>
               </div>
+              {/* Acao destrutiva no rodape do painel esquerdo. */}
+              <div className="border-t p-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setConfirmarExclusao(true)}
+                >
+                  <Trash2 className="size-4" />
+                  Excluir lead
+                </Button>
+              </div>
             </div>
 
             {/* ============ PAINEL DIREITO ============ */}
             <div className="min-h-0 overflow-y-auto">
-              <Tabs defaultValue="historico" className="p-4">
+              {/* Ordem pedida pelo usuário: Negócio primeiro (aba padrão), depois
+                  Atividades e por último Histórico — igual à referência. */}
+              <Tabs defaultValue="negocio" className="p-4">
                 <TabsList className="w-full">
-                  <TabsTrigger value="historico">Historico</TabsTrigger>
-                  <TabsTrigger value="atividades">Atividades</TabsTrigger>
                   <TabsTrigger value="negocio">Informacoes do Negocio</TabsTrigger>
+                  <TabsTrigger value="atividades">Atividades</TabsTrigger>
+                  <TabsTrigger value="historico">Historico</TabsTrigger>
                 </TabsList>
 
                 {/* --- HISTORICO: timeline agrupada por dia --- */}
@@ -1023,6 +1151,107 @@ export function FichaLead({
                           </div>
                         </>
                       )}
+
+                      {/* --- PRODUTOS E VALORES (imagem04): cada negocio do lead
+                          e um produto/servico com valor editavel; total no fim. --- */}
+                      <div className="rounded-lg border">
+                        <div className="flex items-center justify-between border-b px-4 py-3">
+                          <p className="flex items-center gap-2 text-sm font-semibold">
+                            <Package className="size-4 text-muted-foreground" />
+                            Produtos e Valores
+                          </p>
+                        </div>
+
+                        <div className="divide-y">
+                          {ficha.negocios.map((n) => (
+                            <div key={n.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">
+                                  {rotuloServico(n.servico)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  #{n.numero}
+                                  {n.status === 'ganha' && ' · Ganho'}
+                                  {n.status === 'perdida' && ' · Perdido'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">R$</span>
+                                <Input
+                                  value={valoresRascunho[n.id] ?? (n.valor != null ? String(n.valor) : '')}
+                                  onChange={(e) =>
+                                    setValoresRascunho((prev) => ({ ...prev, [n.id]: e.target.value }))
+                                  }
+                                  onBlur={() => void salvarValorProduto(n.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                  }}
+                                  inputMode="decimal"
+                                  placeholder="0,00"
+                                  className="h-8 w-28 text-right tabular-nums"
+                                />
+                                <button
+                                  type="button"
+                                  title="Remover produto"
+                                  aria-label="Remover produto"
+                                  onClick={() => void excluirProduto(n.id)}
+                                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Adicionar produto: servico + valor numa linha so. */}
+                        <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-3">
+                          <Select
+                            value={novoProdutoServico || undefined}
+                            onValueChange={(v) => setNovoProdutoServico(v as ServicoJsr)}
+                          >
+                            <SelectTrigger size="sm" className="w-52">
+                              <SelectValue placeholder="Adicionar produto..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(Object.keys(SERVICOS_JSR) as ServicoJsr[]).map((chave) => (
+                                <SelectItem key={chave} value={chave}>
+                                  {SERVICOS_JSR[chave]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={novoProdutoValor}
+                            onChange={(e) => setNovoProdutoValor(e.target.value)}
+                            inputMode="decimal"
+                            placeholder="Valor (R$)"
+                            className="h-8 w-28 text-right tabular-nums"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={salvandoProduto || !novoProdutoServico}
+                            onClick={() => void adicionarProduto()}
+                          >
+                            <Plus className="size-3.5" />
+                            Adicionar
+                          </Button>
+                        </div>
+
+                        {/* Total: soma dos negocios NAO perdidos. */}
+                        <div className="flex items-center justify-between border-t px-4 py-3">
+                          <p className="text-sm font-semibold">Total</p>
+                          <p className="text-sm font-bold tabular-nums">
+                            {formatoBRL.format(
+                              ficha.negocios
+                                .filter((n) => n.status !== 'perdida')
+                                .reduce((soma, n) => soma + (n.valor ?? 0), 0),
+                            )}
+                          </p>
+                        </div>
+                      </div>
                     </>
                   )}
                 </TabsContent>
@@ -1052,6 +1281,30 @@ export function FichaLead({
             }}
           />
         )}
+        {/* Confirmacao de exclusao do lead (leva os negocios junto). */}
+        <AlertDialog open={confirmarExclusao} onOpenChange={setConfirmarExclusao}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir o lead “{ficha?.perfil.nome}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                O cadastro e TODOS os negocios deste lead serao excluidos. Esta acao nao pode
+                ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={excluindo}
+                onClick={(e) => {
+                  e.preventDefault()
+                  void confirmarExcluirLead()
+                }}
+              >
+                {excluindo ? 'Excluindo...' : 'Excluir lead'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   )

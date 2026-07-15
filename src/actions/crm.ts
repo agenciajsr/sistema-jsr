@@ -79,6 +79,35 @@ export async function criarPipeline(input: PipelineInput) {
   }
 }
 
+/**
+ * Cria um pipeline JÁ COM as 6 etapas padrão (mesmo seed da migration 0019).
+ * É o caminho do botão "Nova pipeline" da /crm — um pipeline sem etapas não
+ * aceita negócios, então nunca criamos um vazio pela UI.
+ */
+export async function criarPipelineComEtapas(input: PipelineInput) {
+  const criado = await criarPipeline(input)
+  if ('error' in criado && criado.error) return criado
+  const id = (criado as { data: { id: string } }).data.id
+
+  try {
+    const ETAPAS_PADRAO = [
+      { nome: 'Novo Lead', ordem: 0, probabilidade: 10 },
+      { nome: 'Contato Feito', ordem: 1, probabilidade: 20 },
+      { nome: 'Qualificado', ordem: 2, probabilidade: 40 },
+      { nome: 'Reunião Agendada', ordem: 3, probabilidade: 60 },
+      { nome: 'Proposta Enviada', ordem: 4, probabilidade: 75 },
+      { nome: 'Negociação', ordem: 5, probabilidade: 90 },
+    ]
+    await db.insert(crmEtapas).values(ETAPAS_PADRAO.map((e) => ({ ...e, pipelineId: id })))
+
+    revalidatePath('/crm')
+    return { data: { id } }
+  } catch (e) {
+    console.error('[criarPipelineComEtapas]', e)
+    return { error: 'Pipeline criado, mas houve erro ao criar as etapas padrão.' }
+  }
+}
+
 export async function renomearPipeline(id: string, input: PipelineInput) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }

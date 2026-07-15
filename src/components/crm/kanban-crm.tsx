@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   DndContext,
@@ -62,9 +62,52 @@ function Coluna({ id, children }: { id: string; children: React.ReactNode }) {
     <div
       ref={setNodeRef}
       className={cn(
-        'flex w-72 shrink-0 flex-col gap-3 rounded-lg transition-colors',
+        'flex h-full w-72 shrink-0 flex-col gap-3 rounded-lg transition-colors',
         isOver && 'bg-muted/60 ring-2 ring-primary/30',
       )}
+    >
+      {children}
+    </div>
+  )
+}
+
+/**
+ * Board com PAN por arrasto ("mãozinha"): segurar e arrastar o FUNDO do board
+ * rola na horizontal. Cards/botões ficam de fora (senão brigaria com o
+ * drag-and-drop do dnd-kit, que já começa no pointerdown do card).
+ */
+function BoardComPan({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const pan = useRef<{ startX: number; scrollLeft: number } | null>(null)
+
+  function aoPressionar(e: React.PointerEvent<HTMLDivElement>) {
+    // Só o fundo: elementos interativos (cards dnd, botões, inputs) não iniciam pan.
+    const alvo = e.target as HTMLElement
+    if (alvo.closest('[data-kanban-card], button, input, a, [role="button"]')) return
+    if (!ref.current) return
+    pan.current = { startX: e.clientX, scrollLeft: ref.current.scrollLeft }
+    ref.current.setPointerCapture(e.pointerId)
+  }
+
+  function aoMover(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pan.current || !ref.current) return
+    ref.current.scrollLeft = pan.current.scrollLeft - (e.clientX - pan.current.startX)
+  }
+
+  function aoSoltar() {
+    pan.current = null
+  }
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={aoPressionar}
+      onPointerMove={aoMover}
+      onPointerUp={aoSoltar}
+      onPointerCancel={aoSoltar}
+      // Altura fixa pela viewport: a PÁGINA não cresce com os cards — cada
+      // coluna rola por dentro. Ajuste fino do desconto se o header mudar.
+      className="flex h-[calc(100dvh-350px)] min-h-[420px] cursor-grab gap-4 overflow-x-auto overflow-y-hidden pb-2 active:cursor-grabbing"
     >
       {children}
     </div>
@@ -210,7 +253,7 @@ export function KanbanCrm({
   return (
     <>
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <BoardComPan>
           {/* As etapas REAIS do pipeline. */}
           {colunas.map((coluna) => {
             const cards = quadro[coluna.etapa.id] ?? []
@@ -246,19 +289,20 @@ export function KanbanCrm({
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
                   {visiveis.length === 0 ? (
                     <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                       {filtrando && cards.length > 0 ? 'Nada encontrado' : 'Sem negocios'}
                     </p>
                   ) : (
                     visiveis.map((oportunidade) => (
-                      <CardOportunidade
-                        key={oportunidade.id}
-                        oportunidade={oportunidade}
-                        onAbrirFicha={setContatoAberto}
-                        arrastando={arrastandoId === oportunidade.id}
-                      />
+                      <div key={oportunidade.id} data-kanban-card>
+                        <CardOportunidade
+                          oportunidade={oportunidade}
+                          onAbrirFicha={setContatoAberto}
+                          arrastando={arrastandoId === oportunidade.id}
+                        />
+                      </div>
                     ))
                   )}
                 </div>
@@ -326,7 +370,7 @@ export function KanbanCrm({
                   </p>
                 )}
 
-                <div className="space-y-2">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
                   {visiveis.length === 0 ? (
                     <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                       {filtrando && cards.length > 0
@@ -337,19 +381,20 @@ export function KanbanCrm({
                     </p>
                   ) : (
                     visiveis.map((oportunidade) => (
-                      <CardOportunidade
-                        key={oportunidade.id}
-                        oportunidade={oportunidade}
-                        onAbrirFicha={setContatoAberto}
-                        arrastando={arrastandoId === oportunidade.id}
-                      />
+                      <div key={oportunidade.id} data-kanban-card>
+                        <CardOportunidade
+                          oportunidade={oportunidade}
+                          onAbrirFicha={setContatoAberto}
+                          arrastando={arrastandoId === oportunidade.id}
+                        />
+                      </div>
                     ))
                   )}
                 </div>
               </Coluna>
             )
           })}
-        </div>
+        </BoardComPan>
 
         {/* O card segue o cursor durante o arrasto. */}
         <DragOverlay>

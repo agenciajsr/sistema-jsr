@@ -82,11 +82,16 @@ export type ColunaFechada = {
   somaValor: number // soma das CARREGADAS (não do total)
 }
 
+export type PipelineResumo = { id: string; nome: string; padrao: boolean }
+
 export type Kanban = {
   // false = workspace/pipeline não existem (migration 0019 ainda não aplicada):
   // a página degrada graciosamente com aviso em vez de quebrar.
   configurado: boolean
+  pipelineId: string | null
   pipelineNome: string | null
+  // Todos os pipelines do workspace — alimenta o seletor do header.
+  pipelines: PipelineResumo[]
   etapas: EtapaKanban[]
   colunas: ColunaKanban[]
 }
@@ -120,7 +125,9 @@ const KPIS_ZERO: KpisCrm = {
 
 const VISAO_VAZIA: CrmVisaoGeral = {
   configurado: false,
+  pipelineId: null,
   pipelineNome: null,
+  pipelines: [],
   etapas: [],
   colunas: [],
   kpis: KPIS_ZERO,
@@ -221,18 +228,24 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
 // getKanban): entrega o kanban + os 6 KPIs + a distribuição de origem + as
 // colunas virtuais Ganho/Perdido, tudo com queries sequenciais/agregadas.
 // Degrada para VISAO_VAZIA sem quebrar.
-export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
+export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVisaoGeral> {
   try {
     // (1) workspace único do v1 (null = 0019 não aplicada)
     const workspace = await getWorkspaceAtual()
     if (!workspace) return VISAO_VAZIA
 
-    // (2) pipeline padrão
-    const [pipeline] = await db
-      .select({ id: crmPipelines.id, nome: crmPipelines.nome })
+    // (2) todos os pipelines do workspace (seletor) + o pipeline ATIVO:
+    // o pedido via ?pipeline=id, senão o padrão, senão o primeiro.
+    const pipelines = await db
+      .select({ id: crmPipelines.id, nome: crmPipelines.nome, padrao: crmPipelines.padrao })
       .from(crmPipelines)
-      .where(and(eq(crmPipelines.workspaceId, workspace.id), eq(crmPipelines.padrao, true)))
-      .limit(1)
+      .where(eq(crmPipelines.workspaceId, workspace.id))
+      .orderBy(asc(crmPipelines.ordem), asc(crmPipelines.createdAt))
+
+    const pipeline =
+      pipelines.find((p) => p.id === pipelineIdParam) ??
+      pipelines.find((p) => p.padrao) ??
+      pipelines[0]
 
     if (!pipeline) return VISAO_VAZIA
 
@@ -514,7 +527,9 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
 
     return {
       configurado: true,
+      pipelineId: pipeline.id,
       pipelineNome: pipeline.nome,
+      pipelines,
       etapas,
       colunas,
       kpis,

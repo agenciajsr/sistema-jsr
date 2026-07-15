@@ -1,48 +1,98 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CalendarDays, ChevronDown, LayoutGrid, List, Search, Settings2, SlidersHorizontal } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  LayoutGrid,
+  List,
+  Loader2,
+  Plus,
+  Search,
+  Settings2,
+  SlidersHorizontal,
+  Star,
+  Trash2,
+} from 'lucide-react'
+import { toast } from 'sonner'
 
+import {
+  criarPipelineComEtapas,
+  definirPipelinePadrao,
+  excluirPipeline,
+  renomearPipeline,
+} from '@/actions/crm'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { KpisCrm } from '@/components/crm/kpis-crm'
 import { KanbanCrm } from '@/components/crm/kanban-crm'
+import { ListaCrm } from '@/components/crm/lista-crm'
 import { BarraOrigemLeads } from '@/components/crm/barra-origem-leads'
 import { NovoLeadDialog } from '@/components/crm/novo-lead-dialog'
-import { rotuloServico } from '@/lib/crm/servicos'
+import { nomeOrigem } from '@/lib/crm/origem'
+import { rotuloServico, SERVICOS_JSR, type ServicoJsr } from '@/lib/crm/servicos'
 import type { CrmVisaoGeral } from '@/lib/crm/dados'
 
-// Orquestrador da /crm no formato do mockup: header + seletor de pipeline +
-// abas de visao + busca. Os controles ainda sem backend (periodo, filtro,
-// configuracao, Lista/Calendario) aparecem como placeholder HONESTO — visiveis
-// mas inertes com title="Em breve", nunca com dado falso.
-
-// Placeholder das visoes que ainda nao existem.
-function VisaoEmConstrucao({ nome }: { nome: string }) {
-  return (
-    <div className="rounded-lg border border-dashed p-12 text-center">
-      <p className="text-sm font-medium">Visao em construcao</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        A visao de {nome} entra numa proxima entrega. Use o Kanban por enquanto.
-      </p>
-    </div>
-  )
-}
+// Orquestrador da /crm: header compacto + seletor de pipelines (multi-pipeline)
+// + abas Kanban/Lista + busca + filtros por servico/origem + gerenciamento de
+// pipelines (criar/renomear/padrao/excluir). O periodo continua inerte (honesto).
 
 export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
+  const router = useRouter()
   const [busca, setBusca] = useState('')
+  const [filtroServicos, setFiltroServicos] = useState<Set<string>>(new Set())
+  const [filtroOrigens, setFiltroOrigens] = useState<Set<string>>(new Set())
 
-  // Filtro CLIENT-SIDE sobre os cards ja carregados. Mundo LEAD-FIRST: procura
-  // pelo NOME DO LEAD, empresa e servico (o titulo entra so como rede de
-  // seguranca dos negocios antigos). Busca vazia => undefined => mostra tudo.
-  //
-  // Varre TAMBEM as colunasFechadas: sem isso a busca esconderia todos os cards
-  // de Ganho/Perdido (eles nao estao em dados.colunas).
+  // Gerenciamento de pipelines.
+  const [dialogPipeline, setDialogPipeline] = useState<'nova' | 'renomear' | null>(null)
+  const [nomePipeline, setNomePipeline] = useState('')
+  const [salvandoPipeline, setSalvandoPipeline] = useState(false)
+  const [confirmarExcluirPipeline, setConfirmarExcluirPipeline] = useState(false)
+
+  // Origens presentes no board (para o filtro) — vem da distribuicao ja carregada.
+  const origensDisponiveis = dados.origens.map((o) => o.origem)
+
+  const temFiltro = filtroServicos.size > 0 || filtroOrigens.size > 0
+
+  // Busca + filtros CLIENT-SIDE sobre os cards ja carregados (lead-first:
+  // nome do lead, empresa e servico). Sem termo e sem filtro => undefined
+  // => mostra tudo. Varre TAMBEM as colunasFechadas.
   const oportunidadesVisiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    if (!termo) return undefined
+    if (!termo && !temFiltro) return undefined
     const ids = new Set<string>()
     const todas = [
       ...dados.colunas.map((c) => c.oportunidades),
@@ -50,28 +100,139 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
     ]
     for (const oportunidades of todas) {
       for (const o of oportunidades) {
-        const alvo = `${o.contatoNome ?? ''} ${o.empresaNome ?? ''} ${rotuloServico(
-          o.servico
-        )} ${o.titulo}`.toLowerCase()
-        if (alvo.includes(termo)) ids.add(o.id)
+        if (termo) {
+          const alvo = `${o.contatoNome ?? ''} ${o.empresaNome ?? ''} ${rotuloServico(
+            o.servico
+          )} ${o.titulo}`.toLowerCase()
+          if (!alvo.includes(termo)) continue
+        }
+        if (filtroServicos.size > 0 && !filtroServicos.has(o.servico ?? '')) continue
+        if (filtroOrigens.size > 0 && !filtroOrigens.has(o.origem ?? 'outro')) continue
+        ids.add(o.id)
       }
     }
     return ids
-  }, [busca, dados.colunas, dados.colunasFechadas])
+  }, [busca, temFiltro, filtroServicos, filtroOrigens, dados.colunas, dados.colunasFechadas])
+
+  function alternarNoSet(set: Set<string>, valor: string): Set<string> {
+    const novo = new Set(set)
+    if (novo.has(valor)) novo.delete(valor)
+    else novo.add(valor)
+    return novo
+  }
+
+  async function salvarPipeline() {
+    const nome = nomePipeline.trim()
+    if (nome.length < 2) {
+      toast.error('Informe o nome do pipeline.')
+      return
+    }
+    setSalvandoPipeline(true)
+    try {
+      if (dialogPipeline === 'nova') {
+        const result = await criarPipelineComEtapas({ nome })
+        if ('error' in result && result.error) {
+          toast.error(result.error)
+          return
+        }
+        toast.success(`Pipeline "${nome}" criado com as etapas padrão.`)
+        const id = (result as { data: { id: string } }).data.id
+        router.push(`/crm?pipeline=${id}`)
+      } else if (dialogPipeline === 'renomear' && dados.pipelineId) {
+        const result = await renomearPipeline(dados.pipelineId, { nome })
+        if ('error' in result && result.error) {
+          toast.error(result.error)
+          return
+        }
+        toast.success('Pipeline renomeado.')
+        router.refresh()
+      }
+      setDialogPipeline(null)
+    } finally {
+      setSalvandoPipeline(false)
+    }
+  }
+
+  async function tornarPadrao() {
+    if (!dados.pipelineId) return
+    const result = await definirPipelinePadrao(dados.pipelineId)
+    if ('error' in result && result.error) toast.error(result.error)
+    else {
+      toast.success('Este agora é o pipeline padrão.')
+      router.refresh()
+    }
+  }
+
+  async function excluirPipelineAtual() {
+    if (!dados.pipelineId) return
+    const result = await excluirPipeline(dados.pipelineId)
+    if ('error' in result && result.error) toast.error(result.error)
+    else {
+      toast.success('Pipeline excluído.')
+      router.push('/crm')
+    }
+    setConfirmarExcluirPipeline(false)
+  }
+
+  const pipelineAtual = dados.pipelines.find((p) => p.id === dados.pipelineId)
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">CRM</h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie seu pipeline de vendas e oportunidades
-          </p>
+    <div className="space-y-4">
+      {/* Header compacto: titulo + seletor de pipeline + periodo na MESMA faixa. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">CRM</h1>
+          </div>
+
+          {/* Seletor de pipelines (multi-pipeline). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-[var(--shadow-sm)] transition-colors hover:bg-accent/50"
+              >
+                <span className="size-2 rounded-full bg-primary" />
+                <span className="text-sm font-medium">{dados.pipelineNome}</span>
+                {pipelineAtual?.padrao && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    Padrão
+                  </Badge>
+                )}
+                <ChevronDown className="size-4 text-muted-foreground/60" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel>Pipelines</DropdownMenuLabel>
+              {dados.pipelines.map((p) => (
+                <DropdownMenuItem
+                  key={p.id}
+                  onClick={() => router.push(`/crm?pipeline=${p.id}`)}
+                >
+                  <span className="flex-1 truncate">{p.nome}</span>
+                  {p.padrao && <Badge variant="secondary" className="text-[10px]">Padrão</Badge>}
+                  {p.id === dados.pipelineId && <Check className="size-4 text-primary" />}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setNomePipeline('')
+                  setDialogPipeline('nova')
+                }}
+              >
+                <Plus className="size-4" />
+                Nova pipeline
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+
         {/* Periodo: inerte por ora (o recorte por data ainda nao existe). */}
         <Button
           type="button"
           variant="outline"
+          size="sm"
           className="cursor-not-allowed text-muted-foreground"
           title="Em breve"
         >
@@ -80,17 +241,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
         </Button>
       </div>
 
-      {/* Seletor de pipeline — o v1 tem um unico pipeline padrao. */}
-      <div className="flex w-fit items-center gap-2 rounded-lg border bg-card px-3 py-2 shadow-[var(--shadow-sm)]">
-        <span className="size-2 rounded-full bg-primary" />
-        <span className="text-sm font-medium">{dados.pipelineNome}</span>
-        <Badge variant="secondary" className="text-[10px]">
-          Padrao
-        </Badge>
-        <ChevronDown className="size-4 text-muted-foreground/60" aria-hidden />
-      </div>
-
-      <Tabs defaultValue="kanban" className="space-y-6">
+      <Tabs defaultValue="kanban" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <NovoLeadDialog etapas={dados.etapas} />
@@ -99,31 +250,123 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
               <Input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar oportunidades..."
+                placeholder="Buscar lead, empresa ou servico..."
                 className="w-64 pl-8"
-                aria-label="Buscar oportunidades"
+                aria-label="Buscar leads"
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="cursor-not-allowed text-muted-foreground"
-              title="Em breve"
-              aria-label="Filtros (em breve)"
-            >
-              <SlidersHorizontal className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="cursor-not-allowed text-muted-foreground"
-              title="Em breve"
-              aria-label="Configuracoes do pipeline (em breve)"
-            >
-              <Settings2 className="size-4" />
-            </Button>
+
+            {/* Filtros por servico e origem (client-side). */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant={temFiltro ? 'default' : 'outline'}
+                  size="icon"
+                  aria-label="Filtros"
+                  title="Filtros"
+                >
+                  <SlidersHorizontal className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 space-y-3">
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Servico
+                  </p>
+                  <div className="space-y-1.5">
+                    {(Object.keys(SERVICOS_JSR) as ServicoJsr[]).map((chave) => (
+                      <label key={chave} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={filtroServicos.has(chave)}
+                          onCheckedChange={() =>
+                            setFiltroServicos((s) => alternarNoSet(s, chave))
+                          }
+                        />
+                        {SERVICOS_JSR[chave]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {origensDisponiveis.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Origem
+                    </p>
+                    <div className="space-y-1.5">
+                      {origensDisponiveis.map((origem) => (
+                        <label key={origem} className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={filtroOrigens.has(origem)}
+                            onCheckedChange={() =>
+                              setFiltroOrigens((s) => alternarNoSet(s, origem))
+                            }
+                          />
+                          {nomeOrigem(origem)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {temFiltro && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setFiltroServicos(new Set())
+                      setFiltroOrigens(new Set())
+                    }}
+                  >
+                    Limpar filtros
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
+
+            {/* Configuracoes do pipeline atual. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Configuracoes do pipeline"
+                  title="Configuracoes do pipeline"
+                >
+                  <Settings2 className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="truncate">
+                  {dados.pipelineNome}
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setNomePipeline(dados.pipelineNome ?? '')
+                    setDialogPipeline('renomear')
+                  }}
+                >
+                  Renomear pipeline
+                </DropdownMenuItem>
+                {!pipelineAtual?.padrao && (
+                  <DropdownMenuItem onClick={tornarPadrao}>
+                    <Star className="size-4" />
+                    Definir como padrão
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={dados.pipelines.length <= 1}
+                  onClick={() => setConfirmarExcluirPipeline(true)}
+                >
+                  <Trash2 className="size-4" />
+                  Excluir pipeline
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <TabsList>
@@ -135,14 +378,10 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
               <List className="size-4" />
               Lista
             </TabsTrigger>
-            <TabsTrigger value="calendario">
-              <CalendarDays className="size-4" />
-              Calendario
-            </TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="kanban" className="space-y-6">
+        <TabsContent value="kanban" className="space-y-4">
           <KpisCrm kpis={dados.kpis} />
           <KanbanCrm
             colunas={dados.colunas}
@@ -153,13 +392,67 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
         </TabsContent>
 
         <TabsContent value="lista">
-          <VisaoEmConstrucao nome="lista" />
-        </TabsContent>
-
-        <TabsContent value="calendario">
-          <VisaoEmConstrucao nome="calendario" />
+          <ListaCrm
+            colunas={dados.colunas}
+            colunasFechadas={dados.colunasFechadas}
+            oportunidadesVisiveis={oportunidadesVisiveis}
+          />
         </TabsContent>
       </Tabs>
+
+      {/* Dialog nova pipeline / renomear. */}
+      <Dialog open={dialogPipeline !== null} onOpenChange={(open) => !open && setDialogPipeline(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {dialogPipeline === 'nova' ? 'Nova pipeline' : 'Renomear pipeline'}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogPipeline === 'nova'
+                ? 'A pipeline nasce com as 6 etapas padrão — ex.: Operações (gestão de projetos) ou Produção (calendário de conteúdo).'
+                : 'Altere o nome da pipeline atual.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="nome-pipeline">Nome</Label>
+            <Input
+              id="nome-pipeline"
+              value={nomePipeline}
+              onChange={(e) => setNomePipeline(e.target.value)}
+              placeholder="Ex.: Operações"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void salvarPipeline()
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDialogPipeline(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={salvarPipeline} disabled={salvandoPipeline}>
+              {salvandoPipeline && <Loader2 className="size-4 animate-spin" />}
+              {dialogPipeline === 'nova' ? 'Criar pipeline' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmacao de exclusao de pipeline. */}
+      <AlertDialog open={confirmarExcluirPipeline} onOpenChange={setConfirmarExcluirPipeline}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir a pipeline “{dados.pipelineNome}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Só é possível excluir uma pipeline sem negócios — mova ou exclua os negócios antes.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={excluirPipelineAtual}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -11,11 +11,12 @@ import {
   crmEmpresas,
   crmEtapas,
   crmOportunidades,
+  crmPipelines,
   crmTags,
   crmTarefas,
   profiles,
 } from '@/lib/db/schema'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { normalizarTelefone } from '@/lib/crm/lead'
@@ -760,5 +761,160 @@ export async function atualizarAtendenteLead(contatoId: string, donoId: string |
   } catch (e) {
     console.error('[atualizarAtendenteLead]', e)
     return { error: 'Nao foi possivel trocar o atendente.' }
+  }
+}
+
+/**
+ * Adiciona um NEGOCIO (produto/servico de interesse) a um lead existente —
+ * secao "Produtos e Valores" da ficha (imagem04). O negocio nasce na primeira
+ * etapa do pipeline informado (fallback: pipeline padrao do workspace).
+ */
+export async function adicionarNegocioLead(
+  contatoId: string,
+  servico: keyof typeof SERVICOS_JSR,
+  valor: number | null,
+  pipelineId?: string,
+) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  if (!SERVICOS_JSR[servico]) return { error: 'Servico invalido.' }
+  if (valor !== null && (!Number.isFinite(valor) || valor < 0)) {
+    return { error: 'O valor nao pode ser negativo.' }
+  }
+
+  try {
+    const [contato] = await db
+      .select({ id: crmContatos.id, nome: crmContatos.nome, empresaId: crmContatos.empresaId, origem: crmContatos.origem })
+      .from(crmContatos)
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+    if (!contato) return { error: 'Lead nao encontrado.' }
+
+    // Pipeline alvo: o informado ou o padrao do workspace.
+    let pipeline: { id: string } | undefined
+    if (pipelineId) {
+      ;[pipeline] = await db
+        .select({ id: crmPipelines.id })
+        .from(crmPipelines)
+        .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.workspaceId, workspace.id)))
+    }
+    if (!pipeline) {
+      ;[pipeline] = await db
+        .select({ id: crmPipelines.id })
+        .from(crmPipelines)
+        .where(and(eq(crmPipelines.workspaceId, workspace.id), eq(crmPipelines.padrao, true)))
+        .limit(1)
+    }
+    if (!pipeline) return { error: 'Pipeline nao encontrado.' }
+
+    const [primeiraEtapa] = await db
+      .select({ id: crmEtapas.id })
+      .from(crmEtapas)
+      .where(eq(crmEtapas.pipelineId, pipeline.id))
+      .orderBy(asc(crmEtapas.ordem))
+      .limit(1)
+    if (!primeiraEtapa) return { error: 'O pipeline nao tem etapas.' }
+
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(crmOportunidades)
+      .where(and(eq(crmOportunidades.etapaId, primeiraEtapa.id), eq(crmOportunidades.status, 'aberta')))
+
+    const titulo = `${SERVICOS_JSR[servico]} — ${contato.nome}`
+    const [oportunidade] = await db
+      .insert(crmOportunidades)
+      .values({
+        workspaceId: workspace.id,
+        pipelineId: pipeline.id,
+        etapaId: primeiraEtapa.id,
+        empresaId: contato.empresaId,
+        contatoId,
+        titulo,
+        servico,
+        valor: valor !== null ? String(valor) : null, // dinheiro NUNCA float
+        origem: contato.origem,
+        status: 'aberta',
+        donoId: currentUser.id,
+        ordemNaEtapa: total,
+      })
+      .returning({ id: crmOportunidades.id })
+
+    await registrarAtividadeCrm(workspace.id, currentUser, {
+      tipo: 'criacao',
+      oportunidadeId: oportunidade.id,
+      contatoId,
+      detalhe: titulo,
+    })
+
+    revalidatePath('/crm')
+    return { data: { oportunidadeId: oportunidade.id } }
+  } catch (e) {
+    console.error('[adicionarNegocioLead]', e)
+    return { error: 'Nao foi possivel adicionar o produto.' }
+  }
+}
+
+/** Atualiza o VALOR de um negocio (edicao inline em Produtos e Valores). */
+export async function atualizarValorNegocio(oportunidadeId: string, valor: number | null) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  if (valor !== null && (!Number.isFinite(valor) || valor < 0)) {
+    return { error: 'O valor nao pode ser negativo.' }
+  }
+
+  try {
+    const [salvo] = await db
+      .update(crmOportunidades)
+      .set({ valor: valor !== null ? String(valor) : null, updatedAt: new Date() })
+      .where(
+        and(eq(crmOportunidades.id, oportunidadeId), eq(crmOportunidades.workspaceId, workspace.id)),
+      )
+      .returning({ id: crmOportunidades.id })
+    if (!salvo) return { error: 'Negocio nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[atualizarValorNegocio]', e)
+    return { error: 'Nao foi possivel atualizar o valor.' }
+  }
+}
+
+/**
+ * EXCLUI o lead por completo: todos os negocios + o cadastro do contato.
+ * Acao destrutiva restrita a administradores (mesma regra do deletarContato).
+ */
+export async function excluirLead(contatoId: string) {
+  const admin = await requireAdmin()
+  if ('error' in admin) return { error: 'Apenas administradores podem excluir leads.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    // Sequencial de proposito (pool max=3): negocios primeiro, depois o contato.
+    await db
+      .delete(crmOportunidades)
+      .where(
+        and(eq(crmOportunidades.contatoId, contatoId), eq(crmOportunidades.workspaceId, workspace.id)),
+      )
+    const [removido] = await db
+      .delete(crmContatos)
+      .where(and(eq(crmContatos.id, contatoId), eq(crmContatos.workspaceId, workspace.id)))
+      .returning({ id: crmContatos.id })
+    if (!removido) return { error: 'Lead nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[excluirLead]', e)
+    return { error: 'Nao foi possivel excluir o lead.' }
   }
 }

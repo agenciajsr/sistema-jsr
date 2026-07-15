@@ -8,8 +8,13 @@ export const maxDuration = 60
 
 // Página do CRM no formato do mockup: os dados (kanban + KPIs + origens) vêm
 // todos de getCrmVisaoGeral no server; o CrmView cuida do header/abas/busca.
-export default async function CrmPage() {
-  const dados = await getCrmVisaoGeral()
+export default async function CrmPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pipeline?: string }>
+}) {
+  const { pipeline } = await searchParams
+  const dados = await getCrmVisaoGeral(pipeline)
 
   // Degradação graciosa: sem workspace/pipeline (migration 0019 não aplicada) a
   // página avisa em vez de quebrar.
