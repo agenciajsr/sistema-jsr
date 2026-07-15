@@ -1,24 +1,21 @@
 'use client'
 
-import { useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { AlertTriangle, Building2, Clock, User } from 'lucide-react'
-import { toast } from 'sonner'
+import { useDraggable } from '@dnd-kit/core'
+import { AlertTriangle, Building2, Clock, MessageSquare, User } from 'lucide-react'
 
-import { moverOportunidade, ganharOportunidade, perderOportunidade } from '@/actions/crm'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { corOrigem, rotuloOrigem } from '@/lib/crm/origem'
+import { rotuloServico } from '@/lib/crm/servicos'
 import { tempoRelativoCurto } from '@/lib/crm/tempo'
-import type { EtapaKanban, OportunidadeCard } from '@/lib/crm/dados'
+import type { OportunidadeCard } from '@/lib/crm/dados'
+
+// O card do LEAD-negocio (D-03): o NOME DO LEAD e o destaque e o servico e o
+// subtitulo. Um negocio = um card; a mesma pessoa pode aparecer em varios.
+//
+// Sem Select de etapa e sem botoes Ganhar/Perder: mover virou DRAG (o Select
+// dentro do card foi rejeitado pelo usuario). Por isso este componente nao chama
+// action nenhuma — quem despacha e o board, no onDragEnd.
 
 const formatoBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -29,69 +26,39 @@ const ROTULO_RECEITA: Record<string, string> = {
 
 export function CardOportunidade({
   oportunidade,
-  etapas,
+  onAbrirFicha,
+  arrastando,
 }: {
   oportunidade: OportunidadeCard
-  etapas: EtapaKanban[]
+  onAbrirFicha?: (contatoId: string) => void
+  // Estilo fantasma: o card original enquanto a copia segue o cursor.
+  arrastando?: boolean
 }) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: oportunidade.id })
 
-  function mover(etapaId: string) {
-    if (etapaId === oportunidade.etapaId) return
-    startTransition(async () => {
-      const result = await moverOportunidade(oportunidade.id, etapaId)
-      if ('error' in result) {
-        toast.error(result.error ?? 'Nao foi possivel mover a oportunidade.')
-        return
-      }
-      router.refresh()
-    })
-  }
-
-  function ganhar() {
-    // v1 sem modal próprio: confirm() decide se o ganho também cria o cliente
-    // na carteira (só faz efeito quando a oportunidade tem empresa vinculada).
-    const criarCliente = window.confirm(
-      'Oportunidade ganha! Deseja também criar o cliente na carteira da agência?'
-    )
-    startTransition(async () => {
-      const result = await ganharOportunidade(oportunidade.id, { criarCliente })
-      if ('error' in result) {
-        toast.error(result.error ?? 'Nao foi possivel marcar como ganha.')
-        return
-      }
-      toast.success(
-        result.data?.clienteId
-          ? 'Oportunidade ganha — cliente criado na carteira.'
-          : 'Oportunidade ganha.'
-      )
-      router.refresh()
-    })
-  }
-
-  function perder() {
-    const motivo = window.prompt('Qual o motivo da perda?')
-    if (motivo === null) return
-    if (!motivo.trim()) {
-      toast.error('Informe o motivo da perda.')
-      return
-    }
-    startTransition(async () => {
-      const result = await perderOportunidade(oportunidade.id, motivo)
-      if ('error' in result) {
-        toast.error(result.error ?? 'Nao foi possivel marcar como perdida.')
-        return
-      }
-      toast.success('Oportunidade marcada como perdida.')
-      router.refresh()
-    })
-  }
+  const podeAbrir = Boolean(oportunidade.contatoId && onAbrirFicha)
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-3 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]">
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      // O sensor usa activationConstraint por DISTANCIA: clique parado abre a
+      // ficha, arrastar 8px vira drag — os dois gestos nao brigam.
+      onClick={() => {
+        if (oportunidade.contatoId && onAbrirFicha) onAbrirFicha(oportunidade.contatoId)
+      }}
+      className={cn(
+        'space-y-2 rounded-lg border bg-card p-3 text-left shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]',
+        podeAbrir && 'cursor-pointer',
+        arrastando && 'opacity-40',
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium leading-snug">{oportunidade.titulo}</p>
+        {/* NOME DO LEAD em destaque (titulo so como rede de seguranca do dado antigo). */}
+        <p className="text-sm font-semibold leading-snug">
+          {oportunidade.contatoNome ?? oportunidade.titulo}
+        </p>
         {oportunidade.tipoReceita && (
           <Badge variant="secondary" className="shrink-0 text-[10px]">
             {ROTULO_RECEITA[oportunidade.tipoReceita] ?? oportunidade.tipoReceita}
@@ -99,7 +66,10 @@ export function CardOportunidade({
         )}
       </div>
 
-      {/* Origem do lead + ha quanto tempo a oportunidade existe (mockup). */}
+      {/* Servico como subtitulo — o que ESTE negocio esta vendendo. */}
+      <p className="text-xs text-muted-foreground">{rotuloServico(oportunidade.servico)}</p>
+
+      {/* Origem do lead + ha quanto tempo o negocio existe (mockup). */}
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
           <span className={cn('size-1.5 shrink-0 rounded-full', corOrigem(oportunidade.origem))} />
@@ -122,59 +92,42 @@ export function CardOportunidade({
         </p>
       )}
 
-      <div className="space-y-1 text-xs text-muted-foreground">
-        {oportunidade.empresaNome && (
-          <p className="flex items-center gap-1.5">
-            <Building2 className="size-3 shrink-0" />
-            {oportunidade.empresaNome}
-          </p>
-        )}
-        {oportunidade.contatoNome && (
-          <p className="flex items-center gap-1.5">
-            <User className="size-3 shrink-0" />
-            {oportunidade.contatoNome}
-          </p>
-        )}
-      </div>
+      {oportunidade.empresaNome && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Building2 className="size-3 shrink-0" />
+          {oportunidade.empresaNome}
+        </p>
+      )}
+
+      {/* Motivo da perda: so existe no card perdido. */}
+      {oportunidade.status === 'perdida' && oportunidade.motivoPerda && (
+        <p className="text-xs text-muted-foreground">Motivo: {oportunidade.motivoPerda}</p>
+      )}
 
       {oportunidade.valor != null && (
         <p className="text-sm font-semibold tabular-nums">{formatoBRL.format(oportunidade.valor)}</p>
       )}
 
-      <Select value={oportunidade.etapaId} onValueChange={mover} disabled={isPending}>
-        <SelectTrigger className="h-8 w-full text-xs">
-          <SelectValue placeholder="Etapa" />
-        </SelectTrigger>
-        <SelectContent>
-          {etapas.map((etapa) => (
-            <SelectItem key={etapa.id} value={etapa.id} className="text-xs">
-              {etapa.nome}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 flex-1 text-xs text-emerald-600 hover:text-emerald-700"
-          disabled={isPending}
-          onClick={ganhar}
+      <div className="flex items-center justify-between gap-2 border-t pt-2">
+        {/* Atendente: 'Sem atendente' e INFORMACAO (lead orfao), nao espaco vazio. */}
+        <span className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <User className="size-3 shrink-0" />
+          <span className="truncate">{oportunidade.donoNome ?? 'Sem atendente'}</span>
+        </span>
+        <span
+          className={cn(
+            'flex shrink-0 items-center gap-1 text-[10px] tabular-nums text-muted-foreground',
+            oportunidade.qtdTarefasAbertas > 0 && 'font-semibold text-amber-600',
+          )}
+          title={
+            oportunidade.qtdTarefasAbertas > 0
+              ? `${oportunidade.qtdTarefasAbertas} tarefa(s) em aberto`
+              : 'Atividades registradas'
+          }
         >
-          Ganhar
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 flex-1 text-xs text-destructive hover:text-destructive"
-          disabled={isPending}
-          onClick={perder}
-        >
-          Perder
-        </Button>
+          <MessageSquare className="size-3" />
+          {oportunidade.qtdAtividades}
+        </span>
       </div>
     </div>
   )

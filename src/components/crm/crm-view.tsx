@@ -146,7 +146,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
           <KpisCrm kpis={dados.kpis} />
           <KanbanCrm
             colunas={dados.colunas}
-            etapas={dados.etapas}
+            colunasFechadas={dados.colunasFechadas}
             oportunidadesVisiveis={oportunidadesVisiveis}
           />
           <BarraOrigemLeads origens={dados.origens} />
