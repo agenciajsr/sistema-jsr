@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { KpisCrm } from '@/components/crm/kpis-crm'
 import { KanbanCrm } from '@/components/crm/kanban-crm'
 import { BarraOrigemLeads } from '@/components/crm/barra-origem-leads'
-import { NovaOportunidadeDialog } from '@/components/crm/nova-oportunidade-dialog'
+import { NovoLeadDialog } from '@/components/crm/novo-lead-dialog'
+import { rotuloServico } from '@/lib/crm/servicos'
 import type { CrmVisaoGeral } from '@/lib/crm/dados'
 
 // Orquestrador da /crm no formato do mockup: header + seletor de pipeline +
@@ -33,20 +34,30 @@ function VisaoEmConstrucao({ nome }: { nome: string }) {
 export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const [busca, setBusca] = useState('')
 
-  // Filtro CLIENT-SIDE sobre as oportunidades ja carregadas (titulo/contato/
-  // empresa). Busca vazia => undefined => o kanban mostra tudo.
+  // Filtro CLIENT-SIDE sobre os cards ja carregados. Mundo LEAD-FIRST: procura
+  // pelo NOME DO LEAD, empresa e servico (o titulo entra so como rede de
+  // seguranca dos negocios antigos). Busca vazia => undefined => mostra tudo.
+  //
+  // Varre TAMBEM as colunasFechadas: sem isso a busca esconderia todos os cards
+  // de Ganho/Perdido (eles nao estao em dados.colunas).
   const oportunidadesVisiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo) return undefined
     const ids = new Set<string>()
-    for (const coluna of dados.colunas) {
-      for (const o of coluna.oportunidades) {
-        const alvo = `${o.titulo} ${o.contatoNome ?? ''} ${o.empresaNome ?? ''}`.toLowerCase()
+    const todas = [
+      ...dados.colunas.map((c) => c.oportunidades),
+      ...dados.colunasFechadas.map((c) => c.oportunidades),
+    ]
+    for (const oportunidades of todas) {
+      for (const o of oportunidades) {
+        const alvo = `${o.contatoNome ?? ''} ${o.empresaNome ?? ''} ${rotuloServico(
+          o.servico
+        )} ${o.titulo}`.toLowerCase()
         if (alvo.includes(termo)) ids.add(o.id)
       }
     }
     return ids
-  }, [busca, dados.colunas])
+  }, [busca, dados.colunas, dados.colunasFechadas])
 
   return (
     <div className="space-y-6">
@@ -82,7 +93,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
       <Tabs defaultValue="kanban" className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <NovaOportunidadeDialog etapas={dados.etapas} />
+            <NovoLeadDialog etapas={dados.etapas} />
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
