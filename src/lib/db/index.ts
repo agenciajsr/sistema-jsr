@@ -20,22 +20,27 @@ import * as schema from './schema'
 //                     conexão do Postgres, em ms). Fail-fast: durante um soluço
 //                     do Supabase, uma query lenta erra rapido em vez de deixar
 //                     a função serverless pendurada ate os 300s da Vercel.
-// - max_pipeline: 0 → CAUSA RAIZ dos travamentos intermitentes (financeiro e
-//                     páginas pesadas). Por padrão (100), o postgres.js empilha
-//                     várias queries na MESMA conexão ocupada ("pipelining"),
-//                     mas o Supavisor em transaction mode NÃO suporta pipeline:
+// - max_pipeline: 1 → evita os travamentos intermitentes (financeiro e páginas
+//                     pesadas). Por padrão (100), o postgres.js empilha várias
+//                     queries na MESMA conexão ocupada ("pipelining"), mas o
+//                     Supavisor em transaction mode NÃO suporta pipeline:
 //                     entrega a 1ª query e as demais penduram PARA SEMPRE (nem
 //                     o statement_timeout dispara, pois nunca chegam ao Postgres).
 //                     Reproduzido e provado localmente em 14/jul/2026: 8 queries
-//                     paralelas travavam 3+ min; com 0, completam em ~0,5s.
-//                     Com 0, cada conexão executa 1 query por vez e o excedente
+//                     paralelas travavam 3+ min; sem pipeline completam em ~0,5s.
+//                     Com 1, cada conexão executa 1 query por vez e o excedente
 //                     espera na fila do pool — nunca pipelina.
+//                     ATENÇÃO: NÃO usar 0 — com 0 o postgres.js quebra o
+//                     sql.begin (erro UNSAFE_TRANSACTION) e TODA db.transaction
+//                     falha (criar cliente, criar relatório...). Provado em
+//                     15/jul/2026: begin falha com 0 e funciona com 1, mantendo
+//                     o mesmo comportamento sem pipelining.
 // `max_pipeline` existe no runtime do postgres.js (src/index.js) mas falta na
 // declaração de tipos — a interseção preserva a checagem dos demais campos.
 const opcoes: postgres.Options<Record<string, never>> & { max_pipeline: number } = {
   prepare: false,
   max: 3,
-  max_pipeline: 0,
+  max_pipeline: 1,
   idle_timeout: 20,
   max_lifetime: 60 * 30,
   connect_timeout: 10,
