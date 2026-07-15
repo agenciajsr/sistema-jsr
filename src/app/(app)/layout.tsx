@@ -64,7 +64,11 @@ export default async function AppLayout({
             </Button>
           </div>
         </header>
-        <main className="flex-1 bg-background p-6 lg:p-8">{children}</main>
+        {/* min-w-0: sem isto, um item flex nunca encolhe abaixo da largura do
+            proprio conteudo — uma linha larga (ex.: o kanban do CRM) estica a
+            PAGINA INTEIRA e joga header/abas para fora da tela. Com min-w-0 a
+            pagina respeita a viewport e quem rola e so o container interno. */}
+        <main className="min-w-0 flex-1 bg-background p-6 lg:p-8">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )
