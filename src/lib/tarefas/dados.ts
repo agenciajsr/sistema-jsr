@@ -32,7 +32,7 @@ import {
 // queries aqui são AGREGADAS: o número delas NÃO cresce com o nº de tarefas.
 //
 // MATERIALIZAÇÃO PREGUIÇOSA (sem cron novo): os 2 slots de cron do plano Hobby
-// da Vercel já estão ocupados (sync-meta + relatorios-semanais). Então abrir
+// da Vercel já estão ocupados (sync-meta + relatorios). Então abrir
 // /tarefas é o ÚNICO caminho que materializa ocorrências — e é idempotente:
 // a engine pura filtra o que já existe e o índice único (tarefa_mae_id, data)
 // derruba qualquer duplicata que escape por corrida entre requests.

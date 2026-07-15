@@ -1,6 +1,6 @@
 {
   "crons": [
     { "path": "/api/cron/sync-meta", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/relatorios-semanais", "schedule": "0 10 * * 1" }
+    { "path": "/api/cron/relatorios", "schedule": "0 10 * * *" }
   ]
 }

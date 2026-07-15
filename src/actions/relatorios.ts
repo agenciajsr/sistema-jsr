@@ -136,7 +136,7 @@ export async function gerarRelatoriosEmLote(
 export type RelatorioHistorico = {
   id: string
   clienteNome: string
-  tipo: string // 'semanal' | 'manual'
+  tipo: string // 'semanal' (legado) | 'manual' | 'automatico'
   periodoInicio: string
   periodoFim: string
   conteudo: string

@@ -79,6 +79,94 @@ function detectarObjetivo(cliente: { nicho: string; objetivoPrincipal: string | 
 
 // --- Agregação por conta ---
 
+/**
+ * Agrega campaign_insights de UMA conta no período (opcionalmente filtrando
+ * campanhas específicas). Retorna null quando não há dados.
+ * Reutilizada pelo fluxo legado e pelos relatórios configuráveis.
+ */
+export async function agregarContaPeriodo(
+  conta: { id: string; nome: string },
+  dataInicio: string,
+  dataFim: string,
+  campanhaIds?: string[],
+): Promise<{ metricas: MetricasConta; totalCampanhas: number } | null> {
+  const filtros = [
+    eq(campaignInsights.adAccountId, conta.id),
+    gte(campaignInsights.date, dataInicio),
+    lte(campaignInsights.date, dataFim),
+  ]
+  if (campanhaIds && campanhaIds.length > 0) {
+    filtros.push(inArray(campaignInsights.campaignId, campanhaIds))
+  }
+
+  const rows = await db
+    .select({
+      campaignId: campaignInsights.campaignId,
+      spend: campaignInsights.spend,
+      impressions: campaignInsights.impressions,
+      clicks: campaignInsights.clicks,
+      reach: campaignInsights.reach,
+      actions: campaignInsights.actions,
+      actionValues: campaignInsights.actionValues,
+    })
+    .from(campaignInsights)
+    .where(and(...filtros))
+
+  if (rows.length === 0) return null
+
+  const campanhasUnicas = new Set(rows.map((r) => r.campaignId))
+
+  let spend = 0, reach = 0, impressions = 0, clicks = 0
+  let compras = 0, leads = 0, conversas = 0, addToCart = 0, checkout = 0
+  let landingPageView = 0, linkClicks = 0, engajamento = 0, receita = 0
+
+  for (const row of rows) {
+    spend += Number(row.spend) || 0
+    reach += row.reach ?? 0
+    impressions += row.impressions ?? 0
+    clicks += row.clicks ?? 0
+
+    const metrics = parseActionsRelatorio(row.actions)
+    compras += metrics.compras
+    leads += metrics.leads
+    conversas += metrics.conversas
+    addToCart += metrics.addToCart
+    checkout += metrics.checkout
+    landingPageView += metrics.landingPageView
+    linkClicks += metrics.linkClicks
+    engajamento += metrics.engajamento
+    receita += parseReceitaRelatorio(row.actionValues)
+  }
+
+  const metricas: MetricasConta = {
+    contaId: conta.id,
+    contaNome: conta.nome,
+    spend,
+    reach,
+    impressions,
+    clicks,
+    landingPageView,
+    addToCart,
+    checkout,
+    compras,
+    leads,
+    conversas,
+    engajamento,
+    linkClicks,
+    receita,
+    roas: spend > 0 && receita > 0 ? receita / spend : null,
+    cpv: compras > 0 ? spend / compras : null,
+    cpl: leads > 0 ? spend / leads : null,
+    cpConv: conversas > 0 ? spend / conversas : null,
+    ticketMedio: compras > 0 ? receita / compras : null,
+    cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
+    taxaCheckoutCompra: checkout > 0 && compras > 0 ? (compras / checkout) * 100 : null,
+  }
+
+  return { metricas, totalCampanhas: campanhasUnicas.size }
+}
+
 async function agregarPorConta(
   contasDb: { id: string; nome: string }[],
   dataInicio: string,
@@ -87,80 +175,12 @@ async function agregarPorConta(
   const resultado: MetricasConta[] = []
   let totalCampanhas = 0
 
+  // Queries sequenciais de propósito (pool pequeno em serverless).
   for (const conta of contasDb) {
-    const rows = await db
-      .select({
-        campaignId: campaignInsights.campaignId,
-        spend: campaignInsights.spend,
-        impressions: campaignInsights.impressions,
-        clicks: campaignInsights.clicks,
-        reach: campaignInsights.reach,
-        actions: campaignInsights.actions,
-        actionValues: campaignInsights.actionValues,
-      })
-      .from(campaignInsights)
-      .where(
-        and(
-          eq(campaignInsights.adAccountId, conta.id),
-          gte(campaignInsights.date, dataInicio),
-          lte(campaignInsights.date, dataFim),
-        ),
-      )
-
-    if (rows.length === 0) continue
-
-    // Contar campanhas únicas
-    const campanhasUnicas = new Set(rows.map((r) => r.campaignId))
-    totalCampanhas += campanhasUnicas.size
-
-    // Agregar métricas
-    let spend = 0, reach = 0, impressions = 0, clicks = 0
-    let compras = 0, leads = 0, conversas = 0, addToCart = 0, checkout = 0
-    let landingPageView = 0, linkClicks = 0, engajamento = 0, receita = 0
-
-    for (const row of rows) {
-      spend += Number(row.spend) || 0
-      reach += row.reach ?? 0
-      impressions += row.impressions ?? 0
-      clicks += row.clicks ?? 0
-
-      const metrics = parseActionsRelatorio(row.actions)
-      compras += metrics.compras
-      leads += metrics.leads
-      conversas += metrics.conversas
-      addToCart += metrics.addToCart
-      checkout += metrics.checkout
-      landingPageView += metrics.landingPageView
-      linkClicks += metrics.linkClicks
-      engajamento += metrics.engajamento
-      receita += parseReceitaRelatorio(row.actionValues)
-    }
-
-    resultado.push({
-      contaId: conta.id,
-      contaNome: conta.nome,
-      spend,
-      reach,
-      impressions,
-      clicks,
-      landingPageView,
-      addToCart,
-      checkout,
-      compras,
-      leads,
-      conversas,
-      engajamento,
-      linkClicks,
-      receita,
-      roas: spend > 0 && receita > 0 ? receita / spend : null,
-      cpv: compras > 0 ? spend / compras : null,
-      cpl: leads > 0 ? spend / leads : null,
-      cpConv: conversas > 0 ? spend / conversas : null,
-      ticketMedio: compras > 0 ? receita / compras : null,
-      cpm: impressions > 0 ? (spend / impressions) * 1000 : null,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : null,
-      taxaCheckoutCompra: checkout > 0 && compras > 0 ? (compras / checkout) * 100 : null,
-    })
+    const agregado = await agregarContaPeriodo(conta, dataInicio, dataFim)
+    if (!agregado) continue
+    resultado.push(agregado.metricas)
+    totalCampanhas += agregado.totalCampanhas
   }
 
   return { contas: resultado, totalCampanhas }
