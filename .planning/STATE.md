@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Concluido quick 260714-rnx (Tarefas = quadro Kanban); migration 0016 GERADA e NAO aplicada
-last_updated: "2026-07-14T23:26:32.016Z"
-last_activity: "2026-07-14 - Completed quick task 260714-rnx: /tarefas refeito como QUADRO KANBAN de 4 colunas (mockup 1) + /tarefas/[id] como pagina cheia (mockup 2); modulo puro quadro.ts sob TDD (29 testes); getTarefasDoDia -> getTarefasDoPeriodo; migration 0016 aditiva GERADA, NAO aplicada (a 0015 tambem segue pendente — rodam em ordem)"
+stopped_at: Concluido quick 260715-0zf (backend completo do CRM comercial + /crm kanban); migration 0019 GERADA e NAO aplicada (0015-0019 pendentes, aplicar em ordem); falta env CRM_LEADS_TOKEN
+last_updated: "2026-07-15T04:05:00.000Z"
+last_activity: "2026-07-15 - Completed quick task 260715-0zf: CRM comercial completo — 10 tabelas (workspaces single-tenant + crm_*), migration 0019 GERADA c/ seed idempotente (workspace JSR, pipeline Vendas, 6 etapas) e NAO aplicada; actions padrao Pipedrive (mover/ganhar c/ conversao em cliente/perder c/ motivo/reabrir, tudo em crm_atividades); POST /api/crm/leads protegido por x-crm-token (sem modo desprotegido) com dedup idempotente por dia; /crm kanban real, /funil vira redirect, item CRM na sidebar; 199 testes"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -90,6 +90,10 @@ Recent decisions affecting current work:
 - [quick-260714-qsy]: Tarefas recorrentes nascem pelo CALENDARIO, nunca pelo check — a de ontem em aberto vira `nao_realizada` e a de hoje aparece do mesmo jeito. Modelo MOLDE (eh_molde=true, nunca listado) + ocorrencias via tarefa_mae_id; a regra vive SO no molde.
 - [quick-260714-qsy]: Materializacao de ocorrencias e PREGUICOSA (ao abrir /tarefas), nao por cron — os 2 slots de cron do plano Hobby da Vercel ja estao ocupados (sync-meta + relatorios-semanais). Se o plano virar Pro, um cron diario pode assumir sem reescrever: getTarefasDoDia e idempotente pelo indice unico (tarefa_mae_id, data).
 - [quick-260714-qsy]: Janela de materializacao = hoje-30 .. hoje+60 (teto proposital: navegar para 2030 nao explode linhas).
+- [quick-260715-0zf]: CRM segue padrao Pipedrive — ganho/perdido sao STATUS da oportunidade ('aberta'|'ganha'|'perdida'), NUNCA etapas do pipeline. Etapa com oportunidades nao pode ser excluida (action recusa + FK restrict como trava final).
+- [quick-260715-0zf]: Helpers internos de log (registrarAtividadeCrm) moram em src/lib (modulo server comum), NUNCA exportados de arquivo 'use server' — todo export de arquivo 'use server' vira endpoint chamavel de fora.
+- [quick-260715-0zf]: getWorkspaceAtual() retorna null tanto sem linha quanto com 'relation does not exist' — e o mecanismo de degradacao graciosa das telas do CRM enquanto a migration 0019 nao for aplicada. Multi-tenant futuro = trocar SO este helper.
+- [quick-260715-0zf]: API publica de captacao (POST /api/crm/leads) NAO tem modo desprotegido (diferente dos crons): CRM_LEADS_TOKEN ausente = 401 para tudo. Dedup idempotente em 2 niveis: inbox por sha256(fonte|email-ou-telefone|dia) e contato por email (case-insensitive) OU telefone normalizado.
 
 ### Pending Todos
 
@@ -139,9 +143,10 @@ None yet.
 | 260714-j92 | Clientes — /clientes vira lista compacta (1 linha/cliente) com busca por nome e abas por status (Ativos/Aguardando Inicio/Em Aviso/Pausados/Inativos/Todos); N+1 removido: getClientesLista() faz 6 queries AGREGADAS sequenciais + merge em modulo puro testado (14 testes); status novos aguardando_inicio/em_aviso + migration 0014 GERADA e NAO aplicada; cliente-card.tsx removido | 2026-07-14 | 773d120 | [260714-j92-clientes-lista-compacta-com-abas-por-sta](./quick/260714-j92-clientes-lista-compacta-com-abas-por-sta/) |
 | 260714-qsy | Modulo Tarefas estilo ClickUp — tabelas tarefas/tarefa_checklist_items (migration 0015 GERADA, NAO aplicada); modelo MOLDE + ocorrencias materializadas PREGUICOSAMENTE ao abrir /tarefas (sem cron novo: 2 slots do Hobby ocupados), idempotente por engine pura + indice unico (tarefa_mae_id, data) com onConflictDoNothing; engine de recorrencia PURA sob TDD (26 testes: dias uteis, dia sim/dia nao, mensal grampeando 31 jan->28 fev, anual 29/fev); getTarefasDoDia com 10 queries sequenciais agregadas; tela /tarefas (seletor de dia, blocos Atrasadas/Dia/Concluidas, sheet com checklist interno e recorrencia); D-03: ocorrencia atrasada vira nao_realizada e a do dia nasce pelo calendario; /checklist DELETADO do menu e das rotas (checklist da ficha do cliente intocado, V2) | 2026-07-14 | 88892a3 | [260714-qsy-modulo-tarefas-estilo-clickup-checklist-](./quick/260714-qsy-modulo-tarefas-estilo-clickup-checklist-/) |
 | 260714-vy7 | Ajustes na Tarefa — FIX1: coluna subtitulo (text nullable) ponta a ponta (schema/validation/actions/dados) + migration 0018 GERADA e NAO aplicada, titulo 36px e Input de subtitulo no detalhe e na criacao (separado da descricao); FIX2: recorrencia so no dia — intervaloPadrao passa a [hoje-30, hoje] (nunca futuro por padrao), engine (ocorreEm/datasDaRegra/janelaMaterializacao) intacta, Nova Tarefa nasce em HOJE; FIX3: datas com um unico calendario nativo (CalendarDays redundante removido); 190 testes passando | 2026-07-14 | e3321d4 | [260714-vy7-ajustes-tarefa-1-titulo-maior-campo-subt](./quick/260714-vy7-ajustes-tarefa-1-titulo-maior-campo-subt/) |
+| 260715-0zf | Backend completo do CRM comercial — 10 tabelas (workspaces single-tenant + crm_empresas/contatos/pipelines/etapas/oportunidades/tarefas/atividades/lead_inbox), migration 0019 GERADA c/ seed idempotente e NAO aplicada; actions padrao Pipedrive (ganho/perdido = STATUS; mover/ganhar c/ conversao opcional em cliente aguardando_inicio/perder c/ motivo obrigatorio/reabrir — tudo em crm_atividades); POST /api/crm/leads (x-crm-token, dedup sha256 por dia, inbox c/ trilha de erro); /crm kanban real (mover via select, nova oportunidade), /funil vira redirect, item CRM na sidebar; pendente: env CRM_LEADS_TOKEN | 2026-07-15 | f66ed2b | [260715-0zf-backend-completo-do-crm-comercial-worksp](./quick/260715-0zf-backend-completo-do-crm-comercial-worksp/) |
 
 ## Session Continuity
 
-Last session: 2026-07-14T23:26:32.011Z
-Stopped at: Concluido quick 260714-vy7 (subtitulo + recorrencia so no dia + datas); migration 0018 GERADA e NAO aplicada
+Last session: 2026-07-15T04:05:00.000Z
+Stopped at: Concluido quick 260715-0zf (backend do CRM comercial + /crm kanban); migrations 0015-0019 pendentes (aplicar em ordem); falta env CRM_LEADS_TOKEN no .env.local e na Vercel
 Resume file: None
