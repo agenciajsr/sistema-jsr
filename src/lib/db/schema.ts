@@ -783,6 +783,25 @@ export const crmLeadInbox = pgTable('crm_lead_inbox', {
   dedupHashIdx: uniqueIndex('crm_lead_inbox_dedup_hash_idx').on(table.dedupHash),
 }))
 
+// --- Preferências do painel /campanhas (por CLIENTE, não por usuário —
+// pensado para o futuro portal do cliente) ---
+// kpis: [{ id, ativo }] na ORDEM de exibição da grade de KPIs.
+// funil: { campanhas: string[] | null (null = todas), etapas: MetricaId[] (2-6) }.
+export const preferenciasCampanhas = pgTable('preferencias_campanhas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  kpis: jsonb('kpis'),
+  funil: jsonb('funil'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteIdx: uniqueIndex('preferencias_campanhas_cliente_id_idx').on(table.clienteId),
+}))
+
+export const preferenciasCampanhasRelations = relations(preferenciasCampanhas, ({ one }) => ({
+  cliente: one(clientes, { fields: [preferenciasCampanhas.clienteId], references: [clientes.id] }),
+}))
+
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
   membros: many(workspaceMembros),
   empresas: many(crmEmpresas),

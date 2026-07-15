@@ -4,7 +4,7 @@ import { eq, and, gte, sql, desc, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { adAccounts, campaignInsights, clientes } from '@/lib/db/schema'
+import { adAccounts, campaignInsights, clientes, preferenciasCampanhas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { sincronizarContasMeta } from '@/lib/meta/sync'
 
@@ -246,5 +246,84 @@ export async function vincularContaAoCliente(
   } catch (err) {
     console.error('[vincularContaAoCliente] Erro ao vincular conta:', err)
     return { error: 'Nao foi possivel vincular a conta. Tente novamente.' }
+  }
+}
+
+// --- Preferências do painel /campanhas (por cliente) ---
+
+export type PreferenciaKpi = { id: string; ativo: boolean }
+export type PreferenciaFunil = { campanhas: string[] | null; etapas: string[] }
+export type PreferenciasCampanhas = {
+  kpis: PreferenciaKpi[] | null
+  funil: PreferenciaFunil | null
+}
+
+/**
+ * Preferências salvas do cliente para a grade de KPIs e o funil.
+ * Degradação graciosa (padrão getWorkspaceAtual): erro/'relation does not exist'
+ * (migration 0024 ainda não aplicada) -> null, a página usa os padrões.
+ */
+export async function getPreferenciasCampanhas(
+  clienteId: string,
+): Promise<PreferenciasCampanhas | null> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return null
+
+  try {
+    const [row] = await db
+      .select({ kpis: preferenciasCampanhas.kpis, funil: preferenciasCampanhas.funil })
+      .from(preferenciasCampanhas)
+      .where(eq(preferenciasCampanhas.clienteId, clienteId))
+      .limit(1)
+    if (!row) return { kpis: null, funil: null }
+    return {
+      kpis: (row.kpis as PreferenciaKpi[] | null) ?? null,
+      funil: (row.funil as PreferenciaFunil | null) ?? null,
+    }
+  } catch (e) {
+    // Migration 0024 ainda não aplicada ou soluço de conexão — usar padrões.
+    console.error('[getPreferenciasCampanhas]', e)
+    return null
+  }
+}
+
+/**
+ * Salva (upsert por cliente) as preferências da grade de KPIs e/ou do funil.
+ * Só sobrescreve o campo enviado (kpis e funil são independentes).
+ */
+export async function salvarPreferenciasCampanhas(
+  clienteId: string,
+  prefs: { kpis?: PreferenciaKpi[]; funil?: PreferenciaFunil },
+) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  try {
+    await db
+      .insert(preferenciasCampanhas)
+      .values({
+        clienteId,
+        kpis: prefs.kpis ?? null,
+        funil: prefs.funil ?? null,
+      })
+      .onConflictDoUpdate({
+        target: preferenciasCampanhas.clienteId,
+        set: {
+          ...(prefs.kpis !== undefined ? { kpis: prefs.kpis } : {}),
+          ...(prefs.funil !== undefined ? { funil: prefs.funil } : {}),
+          updatedAt: new Date(),
+        },
+      })
+
+    revalidatePath('/campanhas')
+    return { data: { ok: true } }
+  } catch (err) {
+    console.error('[salvarPreferenciasCampanhas] Erro ao salvar:', err)
+    return {
+      error:
+        'Nao foi possivel salvar as preferencias (a migration 0024 pode nao ter sido aplicada). A configuracao vale so para esta sessao.',
+    }
   }
 }

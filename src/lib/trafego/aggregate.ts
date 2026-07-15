@@ -5,92 +5,25 @@ import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/sch
 import { getCurrentUser } from '@/lib/auth/session'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 
+// A mecânica de parsing de actions/action_values agora mora em ./metricas
+// (módulo PURO, testável sem banco). Este arquivo reexporta para manter a
+// fonte única e a compatibilidade dos imports existentes.
+import { parseActions, parseActionValues } from './metricas'
+
+export {
+  parseActions,
+  parseActionsExtendido,
+  parseActionValues,
+  somarGrupo,
+  isActionItem,
+  type ActionItem,
+  type ResultadoActions,
+  type ResultadoActionsExtendido,
+} from './metricas'
+
+import type { ResultadoActions } from './metricas'
+
 export type Nicho = 'ecommerce' | 'negocio_local' | 'infoproduto'
-
-export type ResultadoActions = {
-  leads: number
-  vendas: number
-  conversas: number
-  linkClicks: number
-}
-
-// Mapeamento dos action_types da Meta por metrica de negocio.
-// A ORDEM de cada lista e a PRIORIDADE de dedup: usamos o valor do PRIMEIRO
-// action_type presente na linha, nunca somando grupos diferentes de compra/conversa
-// na mesma linha (evita dupla contagem — a Meta emite variantes redundantes do
-// mesmo evento, ex.: purchase + omni_purchase + offsite_conversion.fb_pixel_purchase).
-const LEADS_TYPES = [
-  'lead',
-  'leadgen_grouped',
-  'onsite_conversion.lead_grouped',
-  'offsite_conversion.fb_pixel_lead',
-]
-const VENDAS_TYPES = [
-  'omni_purchase', // prioridade: consolida on/offsite
-  'purchase',
-  'offsite_conversion.fb_pixel_purchase',
-  'onsite_conversion.purchase',
-]
-const CONVERSAS_TYPES = [
-  'onsite_conversion.messaging_conversation_started_7d', // prioridade
-  'onsite_conversion.total_messaging_connection',
-]
-const LINK_CLICK_TYPES = ['link_click']
-
-type ActionItem = { action_type: string; value: string }
-
-function isActionItem(x: unknown): x is ActionItem {
-  return (
-    typeof x === 'object' &&
-    x !== null &&
-    typeof (x as { action_type?: unknown }).action_type === 'string' &&
-    typeof (x as { value?: unknown }).value === 'string'
-  )
-}
-
-/**
- * Soma (com dedup por prioridade) os valores dos action_types de um grupo.
- * Percorre `types` na ordem de prioridade e retorna o total do PRIMEIRO
- * action_type presente na linha — evita dupla contagem entre variantes do
- * mesmo evento. Se houver o mesmo action_type repetido, soma essas ocorrencias.
- */
-function somarGrupo(items: ActionItem[], types: string[]): number {
-  for (const t of types) {
-    const matches = items.filter((a) => a.action_type === t)
-    if (matches.length > 0) {
-      return matches.reduce((s, a) => s + (parseFloat(a.value) || 0), 0)
-    }
-  }
-  return 0
-}
-
-/**
- * Extrai leads/vendas/conversas/linkClicks do campo `actions` (jsonb) da Meta.
- * Type-narrowing seguro: qualquer valor null/undefined/nao-array -> tudo 0 (nunca lanca).
- */
-export function parseActions(actions: unknown): ResultadoActions {
-  if (!Array.isArray(actions)) {
-    return { leads: 0, vendas: 0, conversas: 0, linkClicks: 0 }
-  }
-  const items = actions.filter(isActionItem)
-  return {
-    leads: somarGrupo(items, LEADS_TYPES),
-    vendas: somarGrupo(items, VENDAS_TYPES),
-    conversas: somarGrupo(items, CONVERSAS_TYPES),
-    linkClicks: somarGrupo(items, LINK_CLICK_TYPES),
-  }
-}
-
-/**
- * Extrai a RECEITA total (valor monetário de compras) do campo `action_values` (jsonb) da Meta.
- * Usa a mesma lógica de dedup/prioridade de VENDAS_TYPES.
- * Retorna 0 quando não há dados válidos (nunca lança).
- */
-export function parseActionValues(actionValues: unknown): number {
-  if (!Array.isArray(actionValues)) return 0
-  const items = actionValues.filter(isActionItem)
-  return somarGrupo(items, VENDAS_TYPES)
-}
 
 export type ChaveHeroi = 'vendas' | 'conversas' | 'leads'
 export type Heroi = { chave: ChaveHeroi; label: string }
