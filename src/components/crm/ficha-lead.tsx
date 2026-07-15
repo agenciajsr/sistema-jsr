@@ -1,13 +1,38 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import {
+  ArrowRightLeft,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Handshake,
+  Inbox,
+  Pencil,
+  Plus,
+  Tag,
+  Trophy,
+  UserPlus,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
-import { atualizarLead, getFichaLead } from '@/actions/crm-lead'
+import {
+  atualizarAtendenteLead,
+  atualizarFotoLead,
+  atualizarLead,
+  getFichaLead,
+  renomearLead,
+  salvarNotasLead,
+} from '@/actions/crm-lead'
+import { desvincularTagLead, vincularTagLead } from '@/actions/crm-tags'
+import { concluirAtividadeCrm } from '@/actions/crm-atividades'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,27 +44,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { CriarAtividadeDialog } from '@/components/crm/criar-atividade-dialog'
+import { TagsSelect } from '@/components/crm/tags-select'
 import { mascararDocumento, mascararTelefone } from '@/lib/crm/mascaras'
 import { nomeOrigem } from '@/lib/crm/origem'
 import { rotuloServico } from '@/lib/crm/servicos'
+import { classesCorTag } from '@/lib/crm/tags'
 import { tempoRelativoCurto } from '@/lib/crm/tempo'
+import { cn } from '@/lib/utils'
 import { leadPerfilSchema, ORIGENS_LEAD } from '@/lib/validations/crm'
 
-// Ficha do LEAD (nao do negocio): um lead tem N negocios (D-02), entao a ficha
-// e a pessoa — Perfil (editavel), Negocios (todos dela) e Historico.
+// Ficha COMPLETA do lead (imagens 04-06): painel ESQUERDO com foto (upload
+// real), nome inline, tags, atendente, Metricas/Notas recolhiveis e as abas
+// Perfil/Endereco/Campos adicionais; painel DIREITO com Historico (timeline),
+// Atividades (agendaveis) e Informacoes do Negocio (cards + Pipeline Completa).
+// Um lead tem N negocios (D-02) — a ficha e a PESSOA.
 //
-// Escopo desta entrega: leitura + edicao do perfil. Anexos, produtos, metricas
-// e jornada visual NAO entram — nem como placeholder falso.
+// Sem placeholders falsos de proposito: nada de Produtos e Valores (nao existe
+// catalogo), automacao ou anexos.
 
 const formatoBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -53,26 +79,95 @@ const ROTULO_ATIVIDADE: Record<string, string> = {
   perda: 'Negocio perdido',
   reabertura: 'Negocio reaberto',
   lead_recebido: 'Lead recebido',
-  tarefa_criada: 'Tarefa criada',
-  tarefa_concluida: 'Tarefa concluida',
+  tarefa_criada: 'Atividade criada',
+  tarefa_concluida: 'Atividade concluida',
+  tag_adicionada: 'Tag adicionada',
+  tag_removida: 'Tag removida',
 }
 
-function BadgeStatus({ status }: { status: string }) {
-  if (status === 'ganha') {
-    return (
-      <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-        Ganho
-      </Badge>
-    )
+const ICONE_ATIVIDADE: Record<string, LucideIcon> = {
+  criacao: Handshake,
+  contato_criado: UserPlus,
+  mudanca_etapa: ArrowRightLeft,
+  ganho: Trophy,
+  perda: XCircle,
+  reabertura: ArrowRightLeft,
+  lead_recebido: Inbox,
+  tarefa_criada: Plus,
+  tarefa_concluida: CheckCircle2,
+  tag_adicionada: Tag,
+  tag_removida: Tag,
+}
+
+const ROTULO_TIPO_TAREFA: Record<string, string> = {
+  ligacao: 'Ligacao',
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
+  reuniao: 'Reuniao',
+  followup: 'Follow-up',
+  outro: 'Outro',
+}
+
+const CLASSE_PRIORIDADE: Record<string, string> = {
+  baixa: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  media: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  alta: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+}
+
+const ROTULO_PRIORIDADE: Record<string, string> = {
+  baixa: 'Baixa',
+  media: 'Media',
+  alta: 'Alta',
+}
+
+function formatarDia(iso: string): string {
+  const d = new Date(iso)
+  const dia = String(d.getDate()).padStart(2, '0')
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dia}/${mes}/${d.getFullYear()}`
+}
+
+function formatarHora(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** Agrupa itens por dia (dd/MM/yyyy) preservando a ordem de chegada. */
+function agruparPorDia<T>(itens: T[], dataDe: (item: T) => string): [string, T[]][] {
+  const grupos = new Map<string, T[]>()
+  for (const item of itens) {
+    const dia = formatarDia(dataDe(item))
+    const lista = grupos.get(dia)
+    if (lista) lista.push(item)
+    else grupos.set(dia, [item])
   }
-  if (status === 'perdida') {
-    return (
-      <Badge className="border-transparent bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
-        Perdido
-      </Badge>
-    )
-  }
-  return <Badge variant="secondary">Aberta</Badge>
+  return [...grupos.entries()]
+}
+
+/** Secao recolhivel do painel esquerdo (Metricas/Notas) — chevron gira. */
+function SecaoRecolhivel({
+  titulo,
+  children,
+}: {
+  titulo: string
+  children: React.ReactNode
+}) {
+  const [aberta, setAberta] = useState(true)
+  return (
+    <div className="border-t">
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-semibold hover:bg-accent/40"
+      >
+        {titulo}
+        <ChevronDown
+          className={cn('size-4 text-muted-foreground transition-transform', !aberta && '-rotate-90')}
+        />
+      </button>
+      {aberta && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  )
 }
 
 export function FichaLead({
@@ -88,6 +183,19 @@ export function FichaLead({
   const [erro, setErro] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Painel esquerdo — estados locais de edicao.
+  const [editandoNome, setEditandoNome] = useState(false)
+  const [nomeRascunho, setNomeRascunho] = useState('')
+  const [mostrarTags, setMostrarTags] = useState(false)
+  const [notasRascunho, setNotasRascunho] = useState('')
+  const [salvandoNotas, setSalvandoNotas] = useState(false)
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
+  const inputFotoRef = useRef<HTMLInputElement>(null)
+
+  // Painel direito.
+  const [modalAtividade, setModalAtividade] = useState(false)
+  const [negocioSelecionado, setNegocioSelecionado] = useState<string | null>(null)
+
   const { register, handleSubmit, reset, setValue, watch } = useForm<
     z.input<typeof leadPerfilSchema>,
     unknown,
@@ -97,9 +205,11 @@ export function FichaLead({
   })
 
   const carregar = useCallback(
-    async (id: string) => {
-      setCarregando(true)
-      setErro(null)
+    async (id: string, silencioso = false) => {
+      if (!silencioso) {
+        setCarregando(true)
+        setErro(null)
+      }
       const result = await getFichaLead(id)
       if ('error' in result) {
         setErro(result.error ?? 'Nao foi possivel carregar a ficha do lead.')
@@ -107,6 +217,12 @@ export function FichaLead({
       } else if (result.data) {
         setFicha(result.data)
         const p = result.data.perfil
+        setNomeRascunho(p.nome)
+        setNotasRascunho(p.notas ?? '')
+        // Negocio padrao da aba Informacoes: o mais recente ABERTO (fallback:
+        // o mais recente de todos).
+        const aberto = result.data.negocios.find((n) => n.status === 'aberta')
+        setNegocioSelecionado(aberto?.id ?? result.data.negocios[0]?.id ?? null)
         // Inputs controlados nao aceitam null: '' e o vazio do form.
         reset({
           nome: p.nome,
@@ -118,20 +234,28 @@ export function FichaLead({
           dataNascimento: p.dataNascimento ?? '',
           cep: p.cep ?? '',
           endereco: p.endereco ?? '',
+          pais: p.pais ?? '',
+          numero: p.numero ?? '',
+          complemento: p.complemento ?? '',
+          bairro: p.bairro ?? '',
           cidade: p.cidade ?? '',
           estado: p.estado ?? '',
           notas: p.notas ?? '',
           origem: (p.origem as (typeof ORIGENS_LEAD)[number]) ?? 'manual',
         })
       }
-      setCarregando(false)
+      if (!silencioso) setCarregando(false)
     },
     [reset]
   )
 
   useEffect(() => {
     // contatoId null = fechada: nao carrega nada.
-    if (!contatoId) return
+    if (!contatoId) {
+      setEditandoNome(false)
+      setMostrarTags(false)
+      return
+    }
     void carregar(contatoId)
   }, [contatoId, carregar])
 
@@ -148,200 +272,785 @@ export function FichaLead({
         return
       }
       toast.success('Lead atualizado.')
+      void carregar(contatoId, true)
       router.refresh()
     })
   }
 
+  // --- Foto (lapis sobre o avatar) ---
+  async function aoEscolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite reescolher o mesmo arquivo
+    if (!file || !contatoId) return
+    setEnviandoFoto(true)
+    const fd = new FormData()
+    fd.set('file', file)
+    const result = await atualizarFotoLead(contatoId, fd)
+    setEnviandoFoto(false)
+    if ('error' in result) {
+      toast.error(result.error ?? 'Nao foi possivel enviar a foto.')
+      return
+    }
+    toast.success('Foto atualizada.')
+    if (result.data) {
+      setFicha((atual) =>
+        atual ? { ...atual, perfil: { ...atual.perfil, fotoUrl: result.data.fotoUrl } } : atual
+      )
+    }
+    router.refresh()
+  }
+
+  // --- Nome inline ---
+  async function salvarNome() {
+    if (!contatoId || !ficha) return
+    const limpo = nomeRascunho.trim()
+    setEditandoNome(false)
+    if (!limpo || limpo === ficha.perfil.nome) {
+      setNomeRascunho(ficha.perfil.nome)
+      return
+    }
+    const result = await renomearLead(contatoId, limpo)
+    if ('error' in result) {
+      toast.error(result.error ?? 'Nao foi possivel renomear o lead.')
+      setNomeRascunho(ficha.perfil.nome)
+      return
+    }
+    setFicha((atual) =>
+      atual ? { ...atual, perfil: { ...atual.perfil, nome: limpo } } : atual
+    )
+    setValue('nome', limpo)
+    router.refresh()
+  }
+
+  // --- Tags (diff do TagsSelect → vincular/desvincular) ---
+  async function aoMudarTags(novas: string[]) {
+    if (!contatoId || !ficha) return
+    const atuais = ficha.tags.map((t) => t.id)
+    const adicionada = novas.find((id) => !atuais.includes(id))
+    const removida = atuais.find((id) => !novas.includes(id))
+    // O TagsSelect alterna UMA tag por clique: trata um evento por vez.
+    if (adicionada) {
+      const result = await vincularTagLead(contatoId, adicionada)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Nao foi possivel adicionar a tag.')
+        return
+      }
+    } else if (removida) {
+      const result = await desvincularTagLead(contatoId, removida)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Nao foi possivel remover a tag.')
+        return
+      }
+    }
+    void carregar(contatoId, true)
+    router.refresh()
+  }
+
+  // --- Atendente ---
+  function aoTrocarAtendente(valor: string) {
+    if (!contatoId) return
+    const donoId = valor === 'nenhum' ? null : valor
+    startTransition(async () => {
+      const result = await atualizarAtendenteLead(contatoId, donoId)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Nao foi possivel trocar o atendente.')
+        return
+      }
+      toast.success('Atendente atualizado.')
+      void carregar(contatoId, true)
+      router.refresh()
+    })
+  }
+
+  // --- Notas (salva no blur) ---
+  async function salvarNotas() {
+    if (!contatoId || !ficha) return
+    if ((ficha.perfil.notas ?? '') === notasRascunho.trim()) return
+    setSalvandoNotas(true)
+    const result = await salvarNotasLead(contatoId, notasRascunho)
+    setSalvandoNotas(false)
+    if ('error' in result) {
+      toast.error(result.error ?? 'Nao foi possivel salvar as notas.')
+      return
+    }
+    setFicha((atual) =>
+      atual
+        ? { ...atual, perfil: { ...atual.perfil, notas: notasRascunho.trim() || null } }
+        : atual
+    )
+  }
+
+  // --- Atividades ---
+  function concluirAtividade(id: string) {
+    if (!contatoId) return
+    startTransition(async () => {
+      const result = await concluirAtividadeCrm(id)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Nao foi possivel concluir a atividade.')
+        return
+      }
+      toast.success('Atividade concluida.')
+      void carregar(contatoId, true)
+      router.refresh()
+    })
+  }
+
+  function copiarTelefone() {
+    if (!telefone) return
+    void navigator.clipboard.writeText(telefone).then(() => toast.success('Telefone copiado.'))
+  }
+
+  const negocio = ficha?.negocios.find((n) => n.id === negocioSelecionado) ?? null
+  // Etapas do pipeline do negocio selecionado (Pipeline Completa).
+  const etapasDoNegocio = negocio
+    ? (ficha?.etapas ?? []).filter((e) => e.pipelineId === negocio.pipelineId)
+    : []
+
+  const inicial = (ficha?.perfil.nome ?? '?').trim().charAt(0).toUpperCase() || '?'
+
   return (
     <Sheet open={contatoId !== null} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>{ficha?.perfil.nome ?? 'Ficha do lead'}</SheetTitle>
-          <SheetDescription>
-            {ficha?.perfil.empresaNome ?? 'Lead sem empresa vinculada'}
-          </SheetDescription>
-        </SheetHeader>
+      <SheetContent className="w-full gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        {/* Titulo acessivel (a UI mostra o nome no painel esquerdo). */}
+        <SheetTitle className="sr-only">
+          {ficha?.perfil.nome ?? 'Ficha do lead'}
+        </SheetTitle>
 
         {carregando && (
-          <div className="space-y-3 px-4 pb-4">
-            <Skeleton className="h-9 w-full" />
+          <div className="space-y-3 p-6">
             <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
           </div>
         )}
 
-        {!carregando && erro && (
-          <p className="px-4 pb-4 text-sm text-destructive">{erro}</p>
-        )}
+        {!carregando && erro && <p className="p-6 text-sm text-destructive">{erro}</p>}
 
         {!carregando && !erro && ficha && (
-          <Tabs defaultValue="perfil" className="px-4 pb-6">
-            <TabsList className="w-full">
-              <TabsTrigger value="perfil">Perfil</TabsTrigger>
-              <TabsTrigger value="negocios">Negocios ({ficha.negocios.length})</TabsTrigger>
-              <TabsTrigger value="historico">Historico</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="perfil" className="mt-4">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-                <div className="space-y-2">
-                  <Label htmlFor="ficha-nome">Nome</Label>
-                  <Input id="ficha-nome" {...register('nome')} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Empresa</Label>
-                  {/* Somente leitura por ora: trocar a empresa do lead exige um
-                      seletor de empresas que nao entra nesta entrega. */}
-                  <Input value={ficha.perfil.empresaNome ?? 'Sem empresa'} readOnly disabled />
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-email">Email</Label>
-                    <Input id="ficha-email" type="email" {...register('email')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-telefone">Telefone</Label>
-                    <Input
-                      id="ficha-telefone"
-                      inputMode="tel"
-                      value={telefone}
-                      onChange={(e) => setValue('telefone', mascararTelefone(e.target.value))}
+          <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[340px_1fr]">
+            {/* ============ PAINEL ESQUERDO ============ */}
+            <div className="min-h-0 overflow-y-auto border-r">
+              {/* Faixa suave + avatar grande com o lapis de upload. */}
+              <div className="bg-gradient-to-b from-emerald-100/80 to-transparent px-4 pt-8 pb-2 text-center dark:from-emerald-950/40">
+                <div className="relative mx-auto size-24">
+                  {ficha.perfil.fotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- URL publica do Supabase Storage; next/image exigiria configurar dominio remoto
+                    <img
+                      src={ficha.perfil.fotoUrl}
+                      alt={`Foto de ${ficha.perfil.nome}`}
+                      className="size-24 rounded-full border-2 border-background object-cover shadow"
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-documento">CPF / CNPJ</Label>
-                    <Input
-                      id="ficha-documento"
-                      inputMode="numeric"
-                      value={documento}
-                      onChange={(e) => setValue('documento', mascararDocumento(e.target.value))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-site">Site</Label>
-                    <Input id="ficha-site" {...register('site')} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-nascimento">Nascimento</Label>
-                    <Input id="ficha-nascimento" type="date" {...register('dataNascimento')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-cep">CEP</Label>
-                    <Input id="ficha-cep" {...register('cep')} />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="ficha-endereco">Endereco</Label>
-                  <Input id="ficha-endereco" {...register('endereco')} />
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-cidade">Cidade</Label>
-                    <Input id="ficha-cidade" {...register('cidade')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ficha-estado">Estado</Label>
-                    <Input id="ficha-estado" {...register('estado')} />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Origem</Label>
-                  <Select
-                    value={origem ?? 'manual'}
-                    onValueChange={(v) => setValue('origem', v as (typeof ORIGENS_LEAD)[number])}
+                  ) : (
+                    <span className="flex size-24 items-center justify-center rounded-full border-2 border-background bg-emerald-200 text-3xl font-semibold text-emerald-700 shadow dark:bg-emerald-900 dark:text-emerald-200">
+                      {inicial}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    title="Trocar foto do lead"
+                    aria-label="Trocar foto do lead"
+                    disabled={enviandoFoto}
+                    onClick={() => inputFotoRef.current?.click()}
+                    className="absolute right-0 bottom-0 flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground shadow transition-colors hover:text-foreground disabled:opacity-50"
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Origem" />
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <input
+                    ref={inputFotoRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={aoEscolherFoto}
+                  />
+                </div>
+                {enviandoFoto && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">Enviando foto...</p>
+                )}
+
+                {/* Nome com edicao inline: clique vira Input. */}
+                {editandoNome ? (
+                  <Input
+                    autoFocus
+                    value={nomeRascunho}
+                    onChange={(e) => setNomeRascunho(e.target.value)}
+                    onBlur={() => void salvarNome()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void salvarNome()
+                      if (e.key === 'Escape') {
+                        setNomeRascunho(ficha.perfil.nome)
+                        setEditandoNome(false)
+                      }
+                    }}
+                    className="mx-auto mt-2 h-8 max-w-56 text-center text-base font-semibold"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    title="Clique para renomear"
+                    onClick={() => setEditandoNome(true)}
+                    className="mt-2 w-full truncate text-lg font-semibold hover:underline"
+                  >
+                    {ficha.perfil.nome}
+                  </button>
+                )}
+
+                {/* Tags do lead + botao "+" abrindo o seletor existente. */}
+                <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
+                  {ficha.tags.map((t) => (
+                    <span
+                      key={t.id}
+                      className={cn(
+                        'rounded-md px-2 py-0.5 text-[10px] font-medium',
+                        classesCorTag(t.cor)
+                      )}
+                    >
+                      {t.nome}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    title="Adicionar tag"
+                    aria-label="Adicionar tag"
+                    onClick={() => setMostrarTags((v) => !v)}
+                    className="flex size-5 items-center justify-center rounded-full border text-muted-foreground hover:bg-accent"
+                  >
+                    <Plus className="size-3" />
+                  </button>
+                </div>
+                {mostrarTags && (
+                  <div className="mt-2 text-left">
+                    <TagsSelect
+                      value={ficha.tags.map((t) => t.id)}
+                      onChange={(ids) => void aoMudarTags(ids)}
+                    />
+                  </div>
+                )}
+
+                {/* Atendente responsavel. */}
+                <div className="mt-3 pb-2 text-left">
+                  <Label className="text-xs text-muted-foreground">Atendente</Label>
+                  <Select
+                    value={ficha.perfil.donoId ?? 'nenhum'}
+                    onValueChange={aoTrocarAtendente}
+                  >
+                    <SelectTrigger className="mt-1 h-8 w-full bg-background">
+                      <SelectValue placeholder="Sem atendente" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ORIGENS_LEAD.map((o) => (
-                        <SelectItem key={o} value={o}>
-                          {nomeOrigem(o)}
+                      <SelectItem value="nenhum">Sem atendente</SelectItem>
+                      {ficha.atendentes.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="ficha-notas">Notas</Label>
-                  <Textarea id="ficha-notas" rows={3} {...register('notas')} />
+              {/* Metricas (imagem04): derivadas dos negocios GANHOS. */}
+              <SecaoRecolhivel titulo="Metricas">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { rotulo: 'Ticket medio', valor: formatoBRL.format(ficha.metricas.ticketMedio) },
+                    { rotulo: 'Total', valor: formatoBRL.format(ficha.metricas.total) },
+                    { rotulo: 'Ciclo de compra', valor: `${ficha.metricas.cicloCompraDias}d` },
+                    { rotulo: 'Ultima compra', valor: `${ficha.metricas.ultimaCompraDias}d` },
+                  ].map((m) => (
+                    <div key={m.rotulo} className="rounded-lg border bg-card px-3 py-2">
+                      <p className="text-[10px] text-muted-foreground">{m.rotulo}</p>
+                      <p className="text-sm font-semibold tabular-nums">{m.valor}</p>
+                    </div>
+                  ))}
                 </div>
+              </SecaoRecolhivel>
 
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? 'Salvando...' : 'Salvar perfil'}
-                </Button>
-              </form>
-            </TabsContent>
+              {/* Notas: salva no blur. */}
+              <SecaoRecolhivel titulo="Notas">
+                <Textarea
+                  rows={4}
+                  value={notasRascunho}
+                  onChange={(e) => setNotasRascunho(e.target.value)}
+                  onBlur={() => void salvarNotas()}
+                  placeholder="Anotacoes sobre o lead..."
+                />
+                {salvandoNotas && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">Salvando...</p>
+                )}
+              </SecaoRecolhivel>
 
-            <TabsContent value="negocios" className="mt-4 space-y-2">
-              {ficha.negocios.length === 0 ? (
-                <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                  Esse lead ainda nao tem negocios.
-                </p>
-              ) : (
-                ficha.negocios.map((n) => (
-                  <div key={n.id} className="space-y-1.5 rounded-lg border bg-card p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium">{rotuloServico(n.servico)}</p>
-                      <BadgeStatus status={n.status} />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span>{n.etapaNome ?? 'Sem etapa'}</span>
-                      <span className="tabular-nums">
-                        {n.valor != null ? formatoBRL.format(n.valor) : '—'}
-                      </span>
-                    </div>
-                    {n.status === 'perdida' && n.motivoPerda && (
-                      <p className="text-xs text-muted-foreground">Motivo: {n.motivoPerda}</p>
-                    )}
-                  </div>
-                ))
-              )}
-            </TabsContent>
+              {/* Cadastro em abas (form RHF unico — Salvar vale para as 3). */}
+              <div className="border-t px-4 py-4">
+                <form onSubmit={handleSubmit(onSubmit)} noValidate>
+                  <Tabs defaultValue="perfil">
+                    <TabsList className="w-full">
+                      <TabsTrigger value="perfil">Perfil</TabsTrigger>
+                      <TabsTrigger value="endereco">Endereco</TabsTrigger>
+                      <TabsTrigger value="adicionais">Campos adicionais</TabsTrigger>
+                    </TabsList>
 
-            <TabsContent value="historico" className="mt-4 space-y-2">
-              {ficha.historico.length === 0 ? (
-                <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                  Sem historico registrado.
-                </p>
-              ) : (
-                ficha.historico.map((h) => (
-                  <div key={h.id} className="flex items-start justify-between gap-3 border-b pb-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium">
-                        {ROTULO_ATIVIDADE[h.tipo] ?? h.tipo}
-                        {h.de && h.para && (
-                          <span className="font-normal text-muted-foreground">
-                            {' '}
-                            — {h.de} para {h.para}
+                    {/* forceMount + hidden: trocar de aba NAO pode desmontar os
+                        inputs do RHF (mesmo padrao do modal Novo Lead). */}
+                    <TabsContent
+                      value="perfil"
+                      forceMount
+                      className="mt-3 space-y-3 data-[state=inactive]:hidden"
+                    >
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-nome">Nome</Label>
+                        <Input id="ficha-nome" {...register('nome')} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Empresa</Label>
+                        {/* Somente leitura por ora: trocar a empresa exige um
+                            seletor de empresas que nao entra nesta entrega. */}
+                        <Input value={ficha.perfil.empresaNome ?? 'Sem empresa'} readOnly disabled />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-email">E-mail</Label>
+                        <Input id="ficha-email" type="email" {...register('email')} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-telefone">Telefone</Label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base" aria-hidden="true">
+                            🇧🇷
                           </span>
-                        )}
+                          <Input
+                            id="ficha-telefone"
+                            inputMode="tel"
+                            value={telefone}
+                            onChange={(e) => setValue('telefone', mascararTelefone(e.target.value))}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Copiar telefone"
+                            onClick={copiarTelefone}
+                            className="size-8 shrink-0"
+                          >
+                            <Copy className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-documento">Documento</Label>
+                        <Input
+                          id="ficha-documento"
+                          inputMode="numeric"
+                          placeholder="Informe o CPF ou CNPJ"
+                          value={documento}
+                          onChange={(e) => setValue('documento', mascararDocumento(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Origem</Label>
+                        <Select
+                          value={origem ?? 'manual'}
+                          onValueChange={(v) =>
+                            setValue('origem', v as (typeof ORIGENS_LEAD)[number])
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Origem" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ORIGENS_LEAD.map((o) => (
+                              <SelectItem key={o} value={o}>
+                                {nomeOrigem(o)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-site">Site</Label>
+                        <Input id="ficha-site" {...register('site')} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-nascimento">Data de nascimento</Label>
+                        <Input id="ficha-nascimento" type="date" {...register('dataNascimento')} />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent
+                      value="endereco"
+                      forceMount
+                      className="mt-3 space-y-3 data-[state=inactive]:hidden"
+                    >
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-cep">CEP</Label>
+                        <Input id="ficha-cep" {...register('cep')} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-endereco">Endereco</Label>
+                        <Input id="ficha-endereco" {...register('endereco')} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ficha-numero">Numero</Label>
+                          <Input id="ficha-numero" {...register('numero')} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ficha-complemento">Complemento</Label>
+                          <Input id="ficha-complemento" {...register('complemento')} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-bairro">Bairro</Label>
+                        <Input id="ficha-bairro" {...register('bairro')} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ficha-cidade">Cidade</Label>
+                          <Input id="ficha-cidade" {...register('cidade')} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="ficha-estado">Estado</Label>
+                          <Input id="ficha-estado" {...register('estado')} />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-pais">Pais</Label>
+                        <Input id="ficha-pais" {...register('pais')} />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent
+                      value="adicionais"
+                      forceMount
+                      className="mt-3 space-y-3 data-[state=inactive]:hidden"
+                    >
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ficha-cargo">Cargo</Label>
+                        <Input id="ficha-cargo" {...register('cargo')} />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Lead cadastrado em {formatarDia(ficha.perfil.createdAt)}.
                       </p>
-                      {h.detalhe && (
-                        <p className="truncate text-xs text-muted-foreground">{h.detalhe}</p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground">{h.autorNome}</p>
-                    </div>
-                    <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                      {tempoRelativoCurto(h.createdAt)}
-                    </span>
+                    </TabsContent>
+                  </Tabs>
+
+                  <Button type="submit" disabled={isPending} className="mt-4 w-full">
+                    {isPending ? 'Salvando...' : 'Salvar cadastro'}
+                  </Button>
+                </form>
+              </div>
+            </div>
+
+            {/* ============ PAINEL DIREITO ============ */}
+            <div className="min-h-0 overflow-y-auto">
+              <Tabs defaultValue="historico" className="p-4">
+                <TabsList className="w-full">
+                  <TabsTrigger value="historico">Historico</TabsTrigger>
+                  <TabsTrigger value="atividades">Atividades</TabsTrigger>
+                  <TabsTrigger value="negocio">Informacoes do Negocio</TabsTrigger>
+                </TabsList>
+
+                {/* --- HISTORICO: timeline agrupada por dia --- */}
+                <TabsContent value="historico" className="mt-4 space-y-4">
+                  {ficha.historico.length === 0 ? (
+                    <p className="rounded-lg border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">
+                      Sem historico registrado.
+                    </p>
+                  ) : (
+                    agruparPorDia(ficha.historico, (h) => h.createdAt).map(([dia, itens]) => (
+                      <div key={dia}>
+                        <p className="mb-2 text-xs font-semibold text-muted-foreground">{dia}</p>
+                        <div className="space-y-2 border-l pl-4">
+                          {itens.map((h) => {
+                            const Icone = ICONE_ATIVIDADE[h.tipo] ?? Check
+                            return (
+                              <div key={h.id} className="relative flex items-start gap-3 pb-1">
+                                <span className="absolute -left-[25px] flex size-4 items-center justify-center rounded-full border bg-background">
+                                  <Icone className="size-2.5 text-muted-foreground" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium">
+                                    {ROTULO_ATIVIDADE[h.tipo] ?? h.tipo}
+                                    {h.de && h.para && (
+                                      <span className="font-normal text-muted-foreground">
+                                        {' '}
+                                        — {h.de} para {h.para}
+                                      </span>
+                                    )}
+                                  </p>
+                                  {h.detalhe && (
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {h.detalhe}
+                                    </p>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground">{h.autorNome}</p>
+                                </div>
+                                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                                  {tempoRelativoCurto(h.createdAt)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </TabsContent>
+
+                {/* --- ATIVIDADES: lista por dia + modal Criar atividade --- */}
+                <TabsContent value="atividades" className="mt-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Atividades</p>
+                    <Button type="button" size="sm" onClick={() => setModalAtividade(true)}>
+                      <Plus className="size-3.5" />
+                      Atividade
+                    </Button>
                   </div>
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
+
+                  {ficha.atividades.length === 0 ? (
+                    <p className="rounded-lg border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">
+                      Nenhuma atividade. Crie a primeira.
+                    </p>
+                  ) : (
+                    agruparPorDia(
+                      ficha.atividades,
+                      (a) => a.dataInicio ?? a.dataVencimento
+                    ).map(([dia, itens]) => (
+                      <div key={dia}>
+                        <p className="mb-2 text-xs font-semibold text-muted-foreground">{dia}</p>
+                        <div className="space-y-2">
+                          {itens.map((a) => (
+                            <div
+                              key={a.id}
+                              className={cn(
+                                'flex items-start gap-3 rounded-lg border bg-card p-3',
+                                a.concluida && 'opacity-60'
+                              )}
+                            >
+                              <button
+                                type="button"
+                                title={a.concluida ? 'Atividade concluida' : 'Concluir atividade'}
+                                aria-label={
+                                  a.concluida ? 'Atividade concluida' : 'Concluir atividade'
+                                }
+                                disabled={a.concluida || isPending}
+                                onClick={() => concluirAtividade(a.id)}
+                                className={cn(
+                                  'mt-0.5 flex size-4.5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                                  a.concluida
+                                    ? 'border-emerald-500 bg-emerald-500 text-white'
+                                    : 'hover:border-emerald-400'
+                                )}
+                              >
+                                {a.concluida && <Check className="size-3" />}
+                              </button>
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className={cn(
+                                    'text-sm font-medium',
+                                    a.concluida && 'line-through'
+                                  )}
+                                >
+                                  {a.titulo}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {ROTULO_TIPO_TAREFA[a.tipo] ?? a.tipo}
+                                  {a.dataInicio && a.dataFim && (
+                                    <>
+                                      {' · '}
+                                      {formatarHora(a.dataInicio)}–{formatarHora(a.dataFim)}
+                                    </>
+                                  )}
+                                  {a.donoNome && <> · {a.donoNome}</>}
+                                </p>
+                                {a.notas && (
+                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                    {a.notas}
+                                  </p>
+                                )}
+                              </div>
+                              {a.prioridade && (
+                                <span
+                                  className={cn(
+                                    'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium',
+                                    CLASSE_PRIORIDADE[a.prioridade] ?? CLASSE_PRIORIDADE.baixa
+                                  )}
+                                >
+                                  {ROTULO_PRIORIDADE[a.prioridade] ?? a.prioridade}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </TabsContent>
+
+                {/* --- INFORMACOES DO NEGOCIO: cards + Pipeline Completa --- */}
+                <TabsContent value="negocio" className="mt-4 space-y-4">
+                  {ficha.negocios.length === 0 ? (
+                    <p className="rounded-lg border border-dashed px-3 py-8 text-center text-xs text-muted-foreground">
+                      Esse lead ainda nao tem negocios.
+                    </p>
+                  ) : (
+                    <>
+                      {/* Seletor do negocio (default: o mais recente aberto). */}
+                      {ficha.negocios.length > 1 && (
+                        <Select
+                          value={negocioSelecionado ?? undefined}
+                          onValueChange={setNegocioSelecionado}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Escolha o negocio" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ficha.negocios.map((n) => (
+                              <SelectItem key={n.id} value={n.id}>
+                                #{n.numero} — {rotuloServico(n.servico)}
+                                {n.status === 'ganha'
+                                  ? ' (Ganho)'
+                                  : n.status === 'perdida'
+                                    ? ' (Perdido)'
+                                    : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {negocio && (
+                        <>
+                          {/* Tres cards coloridos da imagem04. */}
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
+                              <p className="text-xs text-blue-700 dark:text-blue-300">Numero</p>
+                              <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                                #{negocio.numero}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950/40">
+                              <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                                Valor Total
+                              </p>
+                              <p className="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                {negocio.valor != null ? formatoBRL.format(negocio.valor) : '—'}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:bg-violet-950/40">
+                              <p className="text-xs text-violet-700 dark:text-violet-300">
+                                Data de Criacao
+                              </p>
+                              <p className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                                {formatarDia(negocio.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Servico + motivo de perda (contexto honesto). */}
+                          <p className="text-xs text-muted-foreground">
+                            {rotuloServico(negocio.servico)}
+                            {negocio.status === 'perdida' && negocio.motivoPerda && (
+                              <> · Motivo da perda: {negocio.motivoPerda}</>
+                            )}
+                          </p>
+
+                          {/* Pipeline Completa: etapas reais + Ganho/Perdido no fim. */}
+                          <div>
+                            <p className="mb-3 text-sm font-semibold">Pipeline Completa</p>
+                            <div className="flex items-start gap-0 overflow-x-auto pb-2">
+                              {[
+                                ...etapasDoNegocio.map((e) => ({
+                                  chave: e.id,
+                                  nome: e.nome,
+                                  atual: negocio.status === 'aberta' && e.id === negocio.etapaId,
+                                  fechada: false,
+                                })),
+                                {
+                                  chave: 'ganho',
+                                  nome: 'Ganho',
+                                  atual: negocio.status === 'ganha',
+                                  fechada: true,
+                                },
+                                {
+                                  chave: 'perdido',
+                                  nome: 'Perdido',
+                                  atual: negocio.status === 'perdida',
+                                  fechada: true,
+                                },
+                              ].map((etapa, i, lista) => (
+                                <div
+                                  key={etapa.chave}
+                                  className="flex min-w-20 flex-1 flex-col items-center"
+                                >
+                                  <div className="flex w-full items-center">
+                                    <div
+                                      className={cn(
+                                        'h-px flex-1',
+                                        i === 0 ? 'bg-transparent' : 'bg-border'
+                                      )}
+                                    />
+                                    <span
+                                      className={cn(
+                                        'flex size-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold',
+                                        etapa.atual
+                                          ? etapa.chave === 'perdido'
+                                            ? 'border-red-500 bg-red-500 text-white'
+                                            : 'border-emerald-500 bg-emerald-500 text-white'
+                                          : 'bg-background text-muted-foreground'
+                                      )}
+                                    >
+                                      {etapa.atual ? <Check className="size-3.5" /> : i + 1}
+                                    </span>
+                                    <div
+                                      className={cn(
+                                        'h-px flex-1',
+                                        i === lista.length - 1 ? 'bg-transparent' : 'bg-border'
+                                      )}
+                                    />
+                                  </div>
+                                  <p
+                                    className={cn(
+                                      'mt-1.5 max-w-24 truncate text-center text-[10px]',
+                                      etapa.atual
+                                        ? 'font-semibold text-foreground'
+                                        : 'text-muted-foreground'
+                                    )}
+                                  >
+                                    {etapa.nome}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        )}
+
+        {/* Modal "Criar atividade" (cria_atividade.png). */}
+        {ficha && contatoId && (
+          <CriarAtividadeDialog
+            aberto={modalAtividade}
+            onOpenChange={setModalAtividade}
+            contatoId={contatoId}
+            contatoNome={ficha.perfil.nome}
+            negocios={ficha.negocios.map((n) => ({
+              id: n.id,
+              servico: n.servico,
+              numero: n.numero,
+              status: n.status,
+            }))}
+            atendentes={ficha.atendentes}
+            donoPadraoId={ficha.usuarioId}
+            onCriada={() => {
+              if (contatoId) void carregar(contatoId, true)
+              router.refresh()
+            }}
+          />
         )}
       </SheetContent>
     </Sheet>

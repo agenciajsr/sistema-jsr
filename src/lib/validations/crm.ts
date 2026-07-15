@@ -201,6 +201,11 @@ export const leadPerfilSchema = z.object({
   dataNascimento: opcionalData,
   cep: opcionalTexto,
   endereco: opcionalTexto,
+  // Endereço completo (aba Endereço da ficha de dois painéis).
+  pais: opcionalTexto,
+  numero: opcionalTexto,
+  complemento: opcionalTexto,
+  bairro: opcionalTexto,
   cidade: opcionalTexto,
   estado: opcionalTexto,
   notas: opcionalTexto,

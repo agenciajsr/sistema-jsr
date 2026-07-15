@@ -572,6 +572,8 @@ export async function getFichaLead(contatoId: string) {
         atividades,
         historico,
         metricas,
+        // Default do Select de atendente no modal "Criar atividade".
+        usuarioId: currentUser.id,
       },
     }
   } catch (e) {
@@ -608,6 +610,10 @@ export async function atualizarLead(id: string, input: LeadPerfilInput) {
         dataNascimento: v.dataNascimento ?? null,
         cep: v.cep ?? null,
         endereco: v.endereco ?? null,
+        pais: v.pais ?? null,
+        numero: v.numero ?? null,
+        complemento: v.complemento ?? null,
+        bairro: v.bairro ?? null,
         cidade: v.cidade ?? null,
         estado: v.estado ?? null,
         notas: v.notas ?? null,
