@@ -3,11 +3,14 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarDays,
   Check,
   ChevronDown,
   LayoutGrid,
   List,
+  ListOrdered,
   Loader2,
   Plus,
   Search,
@@ -19,10 +22,14 @@ import {
 import { toast } from 'sonner'
 
 import {
+  atualizarEtapa,
+  criarEtapa,
   criarPipelineComEtapas,
   definirPipelinePadrao,
+  excluirEtapa,
   excluirPipeline,
   renomearPipeline,
+  reordenarEtapas,
 } from '@/actions/crm'
 import {
   AlertDialog,
@@ -81,6 +88,12 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const [nomePipeline, setNomePipeline] = useState('')
   const [salvandoPipeline, setSalvandoPipeline] = useState(false)
   const [confirmarExcluirPipeline, setConfirmarExcluirPipeline] = useState(false)
+
+  // Edicao das ETAPAS do pipeline atual (ex.: Briefing → Planejamento → ...).
+  const [dialogEtapas, setDialogEtapas] = useState(false)
+  const [nomesEtapas, setNomesEtapas] = useState<Record<string, string>>({})
+  const [novaEtapaNome, setNovaEtapaNome] = useState('')
+  const [salvandoEtapa, setSalvandoEtapa] = useState(false)
 
   // Origens presentes no board (para o filtro) — vem da distribuicao ja carregada.
   const origensDisponiveis = dados.origens.map((o) => o.origem)
@@ -175,6 +188,64 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   }
 
   const pipelineAtual = dados.pipelines.find((p) => p.id === dados.pipelineId)
+
+  // --- Edicao de etapas ---
+
+  async function salvarNomeEtapa(etapaId: string) {
+    const etapa = dados.etapas.find((e) => e.id === etapaId)
+    const nome = (nomesEtapas[etapaId] ?? '').trim()
+    if (!etapa || !nome || nome === etapa.nome) return
+    const result = await atualizarEtapa(etapaId, {
+      nome,
+      cor: etapa.cor ?? undefined,
+      probabilidade: etapa.probabilidade ?? undefined,
+    })
+    if ('error' in result && result.error) toast.error(result.error)
+    else router.refresh()
+  }
+
+  async function moverEtapa(etapaId: string, direcao: -1 | 1) {
+    if (!dados.pipelineId) return
+    const ids = dados.etapas.map((e) => e.id)
+    const idx = ids.indexOf(etapaId)
+    const alvo = idx + direcao
+    if (idx < 0 || alvo < 0 || alvo >= ids.length) return
+    ;[ids[idx], ids[alvo]] = [ids[alvo], ids[idx]]
+    const result = await reordenarEtapas(dados.pipelineId, ids)
+    if ('error' in result && result.error) toast.error(result.error)
+    else router.refresh()
+  }
+
+  async function removerEtapa(etapaId: string) {
+    const result = await excluirEtapa(etapaId)
+    if ('error' in result && result.error) toast.error(result.error)
+    else {
+      toast.success('Etapa excluída.')
+      router.refresh()
+    }
+  }
+
+  async function adicionarEtapa() {
+    if (!dados.pipelineId) return
+    const nome = novaEtapaNome.trim()
+    if (!nome) {
+      toast.error('Informe o nome da etapa.')
+      return
+    }
+    setSalvandoEtapa(true)
+    try {
+      const result = await criarEtapa(dados.pipelineId, { nome })
+      if ('error' in result && result.error) {
+        toast.error(result.error)
+        return
+      }
+      setNovaEtapaNome('')
+      toast.success('Etapa criada no fim do funil.')
+      router.refresh()
+    } finally {
+      setSalvandoEtapa(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -350,6 +421,15 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
                 >
                   Renomear pipeline
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setNomesEtapas({})
+                    setDialogEtapas(true)
+                  }}
+                >
+                  <ListOrdered className="size-4" />
+                  Editar etapas
+                </DropdownMenuItem>
                 {!pipelineAtual?.padrao && (
                   <DropdownMenuItem onClick={tornarPadrao}>
                     <Star className="size-4" />
@@ -432,6 +512,104 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
             <Button type="button" onClick={salvarPipeline} disabled={salvandoPipeline}>
               {salvandoPipeline && <Loader2 className="size-4 animate-spin" />}
               {dialogPipeline === 'nova' ? 'Criar pipeline' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog editar etapas do pipeline atual. */}
+      <Dialog open={dialogEtapas} onOpenChange={setDialogEtapas}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Etapas de “{dados.pipelineNome}”</DialogTitle>
+            <DialogDescription>
+              Renomeie, reordene, adicione ou exclua as etapas do funil — ex.: Briefing,
+              Planejamento, Produção, Revisão, Aprovação, Entregue. Etapa com negócios não
+              pode ser excluída (mova-os antes).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {dados.etapas.map((etapa, idx) => (
+              <div key={etapa.id} className="flex items-center gap-2">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: etapa.cor ?? 'var(--border)' }}
+                />
+                <Input
+                  value={nomesEtapas[etapa.id] ?? etapa.nome}
+                  onChange={(e) =>
+                    setNomesEtapas((prev) => ({ ...prev, [etapa.id]: e.target.value }))
+                  }
+                  onBlur={() => void salvarNomeEtapa(etapa.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                  }}
+                  className="h-8 flex-1"
+                />
+                <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {etapa.probabilidade != null ? `${etapa.probabilidade}%` : '—'}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={idx === 0}
+                  onClick={() => void moverEtapa(etapa.id, -1)}
+                  aria-label="Mover etapa para cima"
+                >
+                  <ArrowUp className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={idx === dados.etapas.length - 1}
+                  onClick={() => void moverEtapa(etapa.id, 1)}
+                  aria-label="Mover etapa para baixo"
+                >
+                  <ArrowDown className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={dados.etapas.length <= 1}
+                  onClick={() => void removerEtapa(etapa.id)}
+                  aria-label="Excluir etapa"
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+
+            {/* Adicionar etapa no fim do funil. */}
+            <div className="flex items-center gap-2 border-t pt-3">
+              <Input
+                value={novaEtapaNome}
+                onChange={(e) => setNovaEtapaNome(e.target.value)}
+                placeholder="Nova etapa (ex.: Briefing)"
+                className="h-8 flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void adicionarEtapa()
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={salvandoEtapa}
+                onClick={() => void adicionarEtapa()}
+              >
+                {salvandoEtapa ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                Adicionar
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" onClick={() => setDialogEtapas(false)}>
+              Concluir
             </Button>
           </DialogFooter>
         </DialogContent>
