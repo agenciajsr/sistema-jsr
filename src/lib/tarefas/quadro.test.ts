@@ -12,6 +12,11 @@ import {
   filtrarTarefas,
   intervaloPadrao,
   formatarIntervalo,
+  tempoRelativo,
+  formatarTamanho,
+  tipoDeArquivo,
+  textoAtividade,
+  aplicarMarcacao,
   COLUNAS_ORDEM,
 } from './quadro'
 import type { TarefaStatus, TarefaPrioridade } from './recorrencia'
@@ -253,5 +258,196 @@ describe('intervaloPadrao', () => {
 describe('formatarIntervalo', () => {
   it("formata a partir da STRING, sem new Date() — '14/07/2026 - 20/07/2026'", () => {
     expect(formatarIntervalo('2026-07-14', '2026-07-20')).toBe('14/07/2026 - 20/07/2026')
+  })
+})
+
+// --- Derivados novos (so8): comentário, anexo, atividade, notas ---
+
+describe('tempoRelativo', () => {
+  const agora = '2026-06-01T12:00:00.000Z'
+  // Constrói um ISO "agora - N segundos" para os casos determinísticos.
+  const atras = (segundos: number) =>
+    new Date(new Date(agora).getTime() - segundos * 1000).toISOString()
+
+  it('menos de 1 minuto -> "agora há pouco"', () => {
+    expect(tempoRelativo(agora, agora)).toBe('agora há pouco')
+    expect(tempoRelativo(atras(30), agora)).toBe('agora há pouco')
+  })
+
+  it('minutos: singular e plural', () => {
+    expect(tempoRelativo(atras(60), agora)).toBe('há 1 minuto')
+    expect(tempoRelativo(atras(5 * 60), agora)).toBe('há 5 minutos')
+  })
+
+  it('horas: singular e plural', () => {
+    expect(tempoRelativo(atras(60 * 60), agora)).toBe('há 1 hora')
+    expect(tempoRelativo(atras(3 * 60 * 60), agora)).toBe('há 3 horas')
+  })
+
+  it('dias: singular e plural', () => {
+    expect(tempoRelativo(atras(24 * 60 * 60), agora)).toBe('há 1 dia')
+    expect(tempoRelativo(atras(4 * 24 * 60 * 60), agora)).toBe('há 4 dias')
+  })
+
+  it('30 dias ou mais -> data dd/MM/yyyy', () => {
+    // agora = 01/06/2026; -30 dias = 02/05/2026.
+    expect(tempoRelativo(atras(30 * 24 * 60 * 60), agora)).toBe('02/05/2026')
+  })
+
+  it('entrada inválida/vazia -> "" (nunca lança, nunca Invalid Date)', () => {
+    expect(tempoRelativo('', agora)).toBe('')
+    expect(tempoRelativo('não é data', agora)).toBe('')
+    expect(() => tempoRelativo('x', agora)).not.toThrow()
+  })
+})
+
+describe('formatarTamanho', () => {
+  it('casos do mockup', () => {
+    expect(formatarTamanho(0)).toBe('0 KB')
+    expect(formatarTamanho(900)).toBe('900 B')
+    expect(formatarTamanho(1024)).toBe('1 KB')
+    expect(formatarTamanho(1536)).toBe('1,5 KB')
+    expect(formatarTamanho(1048576)).toBe('1 MB')
+    expect(formatarTamanho(5242880)).toBe('5 MB')
+  })
+
+  it('separador decimal é vírgula (pt-BR) e sem casa quando inteiro', () => {
+    expect(formatarTamanho(1536)).toContain(',')
+    expect(formatarTamanho(2048)).toBe('2 KB')
+  })
+
+  it('negativo/NaN/null -> "—"', () => {
+    expect(formatarTamanho(-1)).toBe('—')
+    expect(formatarTamanho(Number.NaN)).toBe('—')
+    expect(formatarTamanho(null)).toBe('—')
+    expect(formatarTamanho(undefined)).toBe('—')
+  })
+})
+
+describe('tipoDeArquivo', () => {
+  it('planilha (verde chart-success)', () => {
+    expect(tipoDeArquivo('vendas.xlsx').rotulo).toBe('Planilha')
+    expect(tipoDeArquivo('dados.csv').rotulo).toBe('Planilha')
+    expect(tipoDeArquivo('x', 'application/vnd.ms-excel').rotulo).toBe('Planilha')
+    expect(tipoDeArquivo('vendas.xlsx').classe).toContain('chart-success')
+  })
+
+  it('pdf (vermelho destructive)', () => {
+    expect(tipoDeArquivo('contrato.pdf').rotulo).toBe('PDF')
+    expect(tipoDeArquivo('contrato.pdf').classe).toContain('destructive')
+  })
+
+  it('apresentação (laranja chart-warning)', () => {
+    expect(tipoDeArquivo('pitch.pptx').rotulo).toBe('Apresentação')
+    expect(tipoDeArquivo('pitch.pptx').classe).toContain('chart-warning')
+  })
+
+  it('imagem e documento usam primary', () => {
+    expect(tipoDeArquivo('logo.png').rotulo).toBe('Imagem')
+    expect(tipoDeArquivo('logo.png').classe).toContain('primary')
+    expect(tipoDeArquivo('brief.docx').rotulo).toBe('Documento')
+    expect(tipoDeArquivo('nota.txt').rotulo).toBe('Documento')
+  })
+
+  it('desconhecido/vazio -> "Arquivo" com muted-foreground', () => {
+    expect(tipoDeArquivo('').rotulo).toBe('Arquivo')
+    expect(tipoDeArquivo('semponto').rotulo).toBe('Arquivo')
+    expect(tipoDeArquivo('semponto').classe).toContain('muted-foreground')
+  })
+
+  it('a extensão ganha do mime e é case-insensitive', () => {
+    // .pdf ganha do mime de imagem.
+    expect(tipoDeArquivo('doc.pdf', 'image/png').rotulo).toBe('PDF')
+    expect(tipoDeArquivo('REL.PDF').rotulo).toBe('PDF')
+  })
+
+  it('a classe nunca contém cor hardcoded (# ou rgb)', () => {
+    for (const nome of ['a.xlsx', 'a.pdf', 'a.pptx', 'a.png', 'a.docx', 'a']) {
+      const classe = tipoDeArquivo(nome).classe
+      expect(classe).not.toMatch(/#|rgb/)
+    }
+  })
+})
+
+describe('textoAtividade', () => {
+  it('campo status -> frase + rótulo do status', () => {
+    expect(textoAtividade({ tipo: 'campo_alterado', campo: 'status', para: 'concluida' })).toEqual({
+      frase: 'alterou o status para',
+      valor: 'Concluída',
+    })
+  })
+
+  it('campo prioridade -> frase + rótulo da prioridade', () => {
+    expect(
+      textoAtividade({ tipo: 'campo_alterado', campo: 'prioridade', para: 'alta' })
+    ).toEqual({ frase: 'alterou a prioridade para', valor: 'Alta' })
+  })
+
+  it('campo titulo -> renomeou, sem valor', () => {
+    expect(textoAtividade({ tipo: 'campo_alterado', campo: 'titulo' })).toEqual({
+      frase: 'renomeou a tarefa',
+      valor: null,
+    })
+  })
+
+  it('comentou / anexou / removeu_anexo carregam o detalhe', () => {
+    expect(textoAtividade({ tipo: 'comentou', detalhe: 'texto...' })).toEqual({
+      frase: 'comentou',
+      valor: 'texto...',
+    })
+    expect(textoAtividade({ tipo: 'anexou', detalhe: 'plan.xlsx' })).toEqual({
+      frase: 'anexou um arquivo',
+      valor: 'plan.xlsx',
+    })
+    expect(textoAtividade({ tipo: 'removeu_anexo', detalhe: 'x.pdf' })).toEqual({
+      frase: 'removeu um arquivo',
+      valor: 'x.pdf',
+    })
+  })
+
+  it('criou / checklist_concluido', () => {
+    expect(textoAtividade({ tipo: 'criou' })).toEqual({ frase: 'criou a tarefa', valor: null })
+    expect(textoAtividade({ tipo: 'checklist_concluido', detalhe: 'Revisar' })).toEqual({
+      frase: 'concluiu o item',
+      valor: 'Revisar',
+    })
+  })
+
+  it('tipo desconhecido -> "atualizou a tarefa" (nunca lança — tipo é text livre)', () => {
+    expect(textoAtividade({ tipo: 'tipo_do_futuro' })).toEqual({
+      frase: 'atualizou a tarefa',
+      valor: null,
+    })
+    expect(() => textoAtividade({ tipo: 'qualquer' })).not.toThrow()
+  })
+})
+
+describe('aplicarMarcacao', () => {
+  it('envolve a seleção com o marcador', () => {
+    expect(aplicarMarcacao('abc', 0, 3, 'negrito').texto).toBe('**abc**')
+    expect(aplicarMarcacao('abc', 0, 3, 'italico').texto).toBe('*abc*')
+    expect(aplicarMarcacao('abc', 0, 3, 'sublinhado').texto).toBe('_abc_')
+    expect(aplicarMarcacao('JSR', 0, 3, 'link').texto).toBe('[JSR](url)')
+  })
+
+  it('seleção vazia em negrito -> "****" com cursor no meio', () => {
+    const r = aplicarMarcacao('', 0, 0, 'negrito')
+    expect(r.texto).toBe('****')
+    expect(r.cursor).toBe(2)
+  })
+
+  it('prefixa cada linha da seleção', () => {
+    expect(aplicarMarcacao('a\nb', 0, 3, 'lista').texto).toBe('- a\n- b')
+    expect(aplicarMarcacao('a\nb', 0, 3, 'lista_numerada').texto).toBe('1. a\n2. b')
+    expect(aplicarMarcacao('a', 0, 1, 'checkbox').texto).toBe('- [ ] a')
+  })
+
+  it('seleção vazia no meio de uma linha já marcada não duplica o marcador', () => {
+    expect(aplicarMarcacao('- item', 3, 3, 'lista').texto).toBe('- item')
+  })
+
+  it('índices fora do intervalo não lançam nem corrompem o texto', () => {
+    expect(() => aplicarMarcacao('abc', -5, 99, 'negrito')).not.toThrow()
+    expect(aplicarMarcacao('abc', 10, 20, 'negrito').texto).toContain('abc')
   })
 })
