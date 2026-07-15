@@ -8,8 +8,17 @@ import * as schema from './schema'
 // conexões do pooler ("max client connections reached, limit: 200") porque cada
 // instância abre seu próprio pool e as conexões ociosas nunca fechavam:
 // - prepare: false  → transaction mode não suporta prepared statements.
-// - max: 3          → poucas conexões por instância (o pooler multiplexa entre
+// - max: 5          → poucas conexões por instância (o pooler multiplexa entre
 //                     muitas instâncias; um pool grande por instância estoura o total).
+//                     Era 3; subiu para 5 em 15/jul/2026 por causa da cascata do
+//                     /financeiro: o withRetry não cancela as queries da 1ª
+//                     tentativa (só selects, morrem em ≤12s pelo statement_timeout),
+//                     e com max=3 elas ocupavam o pool inteiro — a 2ª tentativa e o
+//                     getCurrentUser de TODAS as outras páginas na mesma instância
+//                     Fluid Compute disputavam conexões e estouravam timeout.
+//                     max=5 dá folga para a 2ª tentativa rodar mesmo com queries
+//                     órfãs ocupando conexões. Seguro: Supavisor limita 200 clients
+//                     e o app roda em pouquíssimas instâncias (região gru1).
 // - idle_timeout    → fecha conexões ociosas após 20s, devolvendo-as ao pooler
 //                     em vez de acumular (principal causa do esgotamento).
 // - max_lifetime    → recicla conexões periodicamente (evita conexões zumbis).
@@ -39,7 +48,7 @@ import * as schema from './schema'
 // declaração de tipos — a interseção preserva a checagem dos demais campos.
 const opcoes: postgres.Options<Record<string, never>> & { max_pipeline: number } = {
   prepare: false,
-  max: 3,
+  max: 5,
   max_pipeline: 1,
   idle_timeout: 20,
   max_lifetime: 60 * 30,

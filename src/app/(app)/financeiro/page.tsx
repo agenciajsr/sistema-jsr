@@ -50,15 +50,21 @@ export default async function FinanceiroPage({
   // Estratégia anti-travamento (nesta ordem):
   // 1. Aquecimento: valida a sessão e abre UMA conexão antes das queries.
   // 2. Carga em 2 lotes sequenciais de 4 (achata o pico de conexões frias).
-  // 3. Retry automático (withRetry) — o "F5 automático" — antes de desistir.
+  // 3. Retry automático (withRetry) — o "F5 automático" — antes de desistir,
+  //    com delay de 3s entre as tentativas: dá tempo de parte das queries
+  //    órfãs da 1ª tentativa concluírem (são selects que terminam sozinhos)
+  //    ou serem mortas pelo statement_timeout, liberando conexões do pool
+  //    (max=5) antes da 2ª tentativa — quebra a cascata de 15/jul/2026.
   // 4. Tela de erro estática só como ÚLTIMO recurso (2 tentativas falharam).
   await getCurrentUser()
 
   // Factory (não Promise pronta): cada tentativa do withRetry redispara as
   // queries do zero — a 2ª tentativa pega as conexões já quentes do pool.
   const carregarDados = async () => {
-    // Lote 1: com pool max=3, disparar 8 queries de uma vez força 2 conexões
-    // frias extras no pico do cold start — 2 lotes de 4 achatam esse pico.
+    // Lote 1: disparar as 9 queries de uma vez força conexões frias extras no
+    // pico do cold start — 2 lotes sequenciais (4+5) achatam esse pico. Mesmo
+    // com pool max=5, os lotes continuam sequenciais (decisão do STATE.md:
+    // nada de paralelismo além do padrão atual).
     const [resumo, mrr, transacoes, clientesAtivos] = await Promise.all([
       getResumoFinanceiro(mes, ano),
       calcularMrr(),
@@ -94,6 +100,7 @@ export default async function FinanceiroPage({
     dados = await withRetry(carregarDados, {
       timeoutMs: 12_000, // 1ª tentativa: falha rápido no soluço do pooler
       retryTimeoutMs: 15_000, // 2ª tentativa: conexões já quentes — o "F5 automático"
+      delayMs: 3_000, // espera queries órfãs da 1ª tentativa liberarem o pool
       label: 'financeiro-load',
     })
   } catch {
