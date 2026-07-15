@@ -4,12 +4,15 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
 import { createClient } from '@/lib/supabase/server'
-import { withTimeout } from '@/lib/utils/with-timeout'
+import { withRetry } from '@/lib/utils/with-retry'
 
-// Teto para a revalidação de sessão contra o Supabase. Se estourar, propagamos
-// o erro (tratado pelo error.tsx do grupo (app)) em vez de virar null → redirect
-// para /login com usuário logado (evita loop e não expõe rota logada).
-const AUTH_TIMEOUT_MS = 8_000
+// Tetos da revalidação de sessão (auth.getUser + profiles.findFirst).
+// 1ª tentativa curta (5s) para falhar RÁPIDO quando o pool da instância está
+// entupido; retry com 8s (o teto antigo). Se as DUAS falharem, propagamos o
+// erro (tratado pelo error boundary) em vez de virar null → redirect para
+// /login com usuário logado (evita loop e não expõe rota logada).
+const SESSAO_TIMEOUT_MS = 5_000
+const SESSAO_RETRY_TIMEOUT_MS = 8_000
 
 export type CurrentUser = {
   id: string
@@ -29,32 +32,48 @@ export type CurrentUser = {
 export const getCurrentUser = cache(
   async (): Promise<CurrentUser | null> => {
     const supabase = await createClient()
-    // Fail-fast: se o Supabase Auth pendurar (soluço/incidente), o withTimeout
-    // rejeita em 8s e o erro sobe para o error.tsx do grupo (app), em vez de a
-    // função serverless congelar ate os 300s da Vercel.
-    const {
-      data: { user },
-    } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS, 'auth.getUser')
-    if (!user) return null
 
-    // Fail-fast também na consulta ao banco: numa conexão "morta" do pooler
-    // (Supavisor), esta query pode congelar para sempre (o statement_timeout não
-    // dispara em socket morto). Sem este teto, a função inteira trava até o
-    // maxDuration — a causa nº1 dos 504 em TODAS as páginas (getCurrentUser roda
-    // no layout de todas). Em timeout, rejeita → error.tsx (recarregar resolve).
-    const profile = await withTimeout(
-      db.query.profiles.findFirst({ where: eq(profiles.id, user.id) }),
-      AUTH_TIMEOUT_MS,
-      'profiles.findFirst',
-    )
-    if (!profile) return null
+    // Factory da revalidação completa (auth + profile), no mesmo padrão do
+    // /financeiro: cada tentativa do withRetry redispara tudo do zero.
+    //
+    // Fail-fast continua valendo: numa conexão "morta" do pooler (Supavisor),
+    // a query de profile pode congelar para sempre (o statement_timeout não
+    // dispara em socket morto). Sem teto, a função inteira trava até o
+    // maxDuration — a causa nº1 dos 504 em TODAS as páginas (getCurrentUser
+    // roda no layout de todas).
+    //
+    // Por que RETRY aqui: na cascata de 15/jul/2026, o /financeiro entupia o
+    // pool da instância (queries abandonadas da 1ª tentativa do withRetry) e a
+    // sessão de TODAS as páginas caía na 1ª tentativa — com Supabase Auth e o
+    // banco saudáveis por fora. A 2ª tentativa costuma passar (pool já
+    // liberado/quente). Curto-circuitos de "não logado"/"sem profile" retornam
+    // null SEM gastar retry (deslogado não é erro).
+    const revalidarSessao = async (): Promise<CurrentUser | null> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return null
 
-    return {
-      id: user.id,
-      email: user.email,
-      nome: profile.nome,
-      role: profile.role,
+      const profile = await db.query.profiles.findFirst({
+        where: eq(profiles.id, user.id),
+      })
+      if (!profile) return null
+
+      return {
+        id: user.id,
+        email: user.email,
+        nome: profile.nome,
+        role: profile.role,
+      }
     }
+
+    // Lança SÓ quando as duas tentativas falham — o erro sobe para o error
+    // boundary (recarregar resolve), nunca vira redirect indevido para /login.
+    return withRetry(revalidarSessao, {
+      timeoutMs: SESSAO_TIMEOUT_MS,
+      retryTimeoutMs: SESSAO_RETRY_TIMEOUT_MS,
+      label: 'sessao',
+    })
   }
 )
 
