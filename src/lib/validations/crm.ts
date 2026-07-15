@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { SERVICOS_KEYS } from '@/lib/crm/servicos'
+
 // Mesma filosofia de validations/tarefa.ts: os Selects/Inputs do form mandam ''
 // quando "Nenhum" está escolhido — normalizamos para undefined aqui.
 
@@ -36,6 +38,19 @@ const opcionalTexto = z
 export const TIPOS_RECEITA = ['mensalidade', 'projeto'] as const
 export const TIPOS_TAREFA_CRM = ['ligacao', 'whatsapp', 'email', 'reuniao', 'followup', 'outro'] as const
 export const FONTES_LEAD = ['landing_page', 'meta_lead_ad', 'whatsapp', 'manual', 'outro'] as const
+
+// Origens do LEAD no cadastro manual (/crm → Novo Lead). São EXATAMENTE as 6
+// chaves de ORIGEM_META (src/lib/crm/origem.ts): o badge de origem do card lê
+// esse mesmo valor, então divergir aqui faria todo card cair no fallback
+// 'outro'. Difere de FONTES_LEAD (API pública), que não tem 'indicacao'.
+export const ORIGENS_LEAD = [
+  'manual',
+  'whatsapp',
+  'landing_page',
+  'meta_lead_ad',
+  'indicacao',
+  'outro',
+] as const
 
 export const empresaSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome da empresa'),
@@ -109,6 +124,57 @@ export const atualizarOportunidadeSchema = z.object({
   donoId: opcionalUuid,
 })
 export type AtualizarOportunidadeInput = z.input<typeof atualizarOportunidadeSchema>
+
+// --- Fluxo LEAD-FIRST (D-01/D-02) ---
+// A porta de entrada do CRM é o LEAD, não um "título" livre de negócio: o lead
+// chega (form Meta, WhatsApp, indicação, prospecção) com nome/contato/origem, e
+// a MESMA pessoa pode ter N negócios (perder Tráfego e ganhar Landing Page).
+// O `titulo` de crm_oportunidades (NOT NULL) é derivado na action a partir de
+// serviço + nome — nunca digitado. oportunidadeSchema continua existindo para
+// não quebrar a API pública/ingest.
+
+export const leadSchema = z
+  .object({
+    nome: z.string().trim().min(1, 'Informe o nome do lead'),
+    empresaNome: opcionalTexto,
+    email: opcionalEmail,
+    telefone: opcionalTexto,
+    documento: opcionalTexto,
+    origem: z.enum(ORIGENS_LEAD).default('manual'),
+    // Lista FECHADA: a JSR vende 4 coisas (ver src/lib/crm/servicos.ts).
+    servico: z.enum(SERVICOS_KEYS),
+    valor: z.coerce.number().nonnegative('O valor nao pode ser negativo').optional(),
+    tipoReceita: z.enum(TIPOS_RECEITA).default('mensalidade'),
+    etapaId: z.string().uuid('Escolha a etapa'),
+    donoId: opcionalUuid,
+  })
+  // Sem email NEM telefone não há identidade para deduplicar o contato (D-02) —
+  // o lead entraria como cadastro novo toda vez.
+  .refine((v) => Boolean(v.email || v.telefone), {
+    message: 'Informe email ou telefone do lead.',
+  })
+export type LeadInput = z.input<typeof leadSchema>
+export type LeadValidado = z.output<typeof leadSchema>
+
+// Edição do perfil do lead na ficha (aba Perfil). Só o nome é obrigatório: o
+// resto vai sendo preenchido conforme a agência descobre.
+export const leadPerfilSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome do lead'),
+  email: opcionalEmail,
+  telefone: opcionalTexto,
+  documento: opcionalTexto,
+  site: opcionalTexto,
+  cargo: opcionalTexto,
+  dataNascimento: opcionalData,
+  cep: opcionalTexto,
+  endereco: opcionalTexto,
+  cidade: opcionalTexto,
+  estado: opcionalTexto,
+  notas: opcionalTexto,
+  empresaId: opcionalUuid,
+  origem: z.enum(ORIGENS_LEAD).optional(),
+})
+export type LeadPerfilInput = z.input<typeof leadPerfilSchema>
 
 export const crmTarefaSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o titulo da tarefa'),

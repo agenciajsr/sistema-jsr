@@ -550,6 +550,16 @@ export const crmContatos = pgTable('crm_contatos', {
   // Só dígitos (normalizarTelefone) — usado no dedup de contato por telefone.
   telefoneNormalizado: text('telefone_normalizado'),
   cargo: text('cargo'),
+  // Perfil do lead (fluxo lead-first). Todos NULLABLE: o lead chega por form
+  // Meta/WhatsApp com o minimo (nome + telefone) e vai sendo completado depois.
+  documento: text('documento'), // CPF ou CNPJ, como o usuario digitou
+  site: text('site'),
+  dataNascimento: date('data_nascimento'),
+  cep: text('cep'),
+  endereco: text('endereco'),
+  cidade: text('cidade'),
+  estado: text('estado'),
+  notas: text('notas'),
   // 'manual' | 'landing_page' | 'meta_lead_ad' | 'whatsapp' | 'indicacao' | 'outro'
   origem: text('origem').notNull().default('manual'),
   origemDetalhe: jsonb('origem_detalhe'),
@@ -601,6 +611,12 @@ export const crmOportunidades = pgTable('crm_oportunidades', {
   perdidaEm: timestamp('perdida_em', { withTimezone: true }),
   donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
   origem: text('origem'),
+  // CHAVE do servico vendido neste negocio ('trafego_pago', 'landing_page',
+  // 'crm_automacao', 'estrategia' — ver src/lib/crm/servicos.ts). Um lead tem N
+  // negocios, um por servico: pode perder o de Trafego e ganhar o de Landing.
+  servico: text('servico'),
+  // LEGADO: array de interesses do form antigo/ingest. NAO e usado no fluxo
+  // lead-first (quem manda e `servico`). Mantido para nao quebrar a API publica.
   servicosInteresse: jsonb('servicos_interesse'), // string[]
   dataPrevistaFechamento: date('data_prevista_fechamento'),
   ordemNaEtapa: integer('ordem_na_etapa').notNull().default(0),
