@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Concluido quick 260715-1rq (/crm reformulada no visual do mockup: 6 KPIs reais, valor parado por etapa, cards c/ origem e tempo, barra de origem dos leads); migrations 0015-0019 pendentes (aplicar em ordem); falta env CRM_LEADS_TOKEN
+stopped_at: Concluido quick 260715-1rq (/crm reformulada no visual do mockup) + migration 0019 APLICADA no Supabase (CRM ativo: workspace JSR, pipeline Vendas, 6 etapas, 2 membros) + PUBLICADO na Vercel (push cfe29c2). NENHUMA migration pendente. Falta so a env CRM_LEADS_TOKEN (necessaria apenas para a API de captacao de leads)
 last_updated: "2026-07-15T04:05:00.000Z"
 last_activity: "2026-07-15 - Completed quick task 260715-1rq: /crm reformulada no visual do mockup definitivo — getCrmVisaoGeral (kanban + 6 KPIs + origens por GROUP BY/count, queries sequenciais) substitui getKanban; colunas c/ VALOR PARADO + probabilidade; cards c/ badge de origem, tempo relativo (helper testado) e aviso 'Nao contatado'; barra 'Origem dos leads' c/ % real; CrmView c/ header, seletor de pipeline, abas e busca client-side; Lista/Calendario/filtros = placeholders honestos; 206 testes. Anterior (260715-0zf): CRM comercial completo — 10 tabelas (workspaces single-tenant + crm_*), migration 0019 GERADA c/ seed idempotente (workspace JSR, pipeline Vendas, 6 etapas) e NAO aplicada; actions padrao Pipedrive (mover/ganhar c/ conversao em cliente/perder c/ motivo/reabrir, tudo em crm_atividades); POST /api/crm/leads protegido por x-crm-token (sem modo desprotegido) com dedup idempotente por dia; /crm kanban real, /funil vira redirect, item CRM na sidebar; 199 testes"
 progress:
@@ -93,6 +93,7 @@ Recent decisions affecting current work:
 - [quick-260715-0zf]: CRM segue padrao Pipedrive — ganho/perdido sao STATUS da oportunidade ('aberta'|'ganha'|'perdida'), NUNCA etapas do pipeline. Etapa com oportunidades nao pode ser excluida (action recusa + FK restrict como trava final).
 - [quick-260715-0zf]: Helpers internos de log (registrarAtividadeCrm) moram em src/lib (modulo server comum), NUNCA exportados de arquivo 'use server' — todo export de arquivo 'use server' vira endpoint chamavel de fora.
 - [quick-260715-0zf]: getWorkspaceAtual() retorna null tanto sem linha quanto com 'relation does not exist' — e o mecanismo de degradacao graciosa das telas do CRM enquanto a migration 0019 nao for aplicada. Multi-tenant futuro = trocar SO este helper.
+- [quick-260715-1rq]: MIGRATIONS — NUNCA rodar `drizzle-kit migrate` neste projeto: a tabela drizzle.__drizzle_migrations esta VAZIA (o historico foi aplicado na mao pelo editor SQL do Supabase), entao o comando faria replay desde a 0000 sobre os dados reais. Aplicar SO o SQL da migration nova, via script Node pontual lendo DIRECT_URL, separando por '--> statement-breakpoint' e rodando dentro de sql.begin() (transacao = rollback total se falhar). SEMPRE conferir o estado REAL do banco antes (information_schema) — este STATE.md ja afirmou "0015-0019 pendentes" quando so a 0019 faltava.
 - [quick-260715-1rq]: getCrmVisaoGeral() e a fonte UNICA da /crm (getKanban foi removida) — kanban + KPIs + origens numa so chamada, com GROUP BY/count no banco e queries SEQUENCIAIS (pool max=3): o numero de queries nao cresce com o numero de oportunidades.
 - [quick-260715-1rq]: "Sem contato (+7d)" e o aviso "Nao contatado" saem de uma HEURISTICA (aberta ha +7d E sem tarefa comercial concluida), nao de uma coluna dedicada — usa so colunas existentes, sem migration. Trocar a heuristica = mexer so em getCrmVisaoGeral.
 - [quick-260715-1rq]: Controles do mockup ainda sem backend (Lista, Calendario, periodo, filtro, engrenagem) sao PLACEHOLDERS HONESTOS (visiveis, inertes, title="Em breve") — nunca preencher com dado falso so para bater com o mockup.
@@ -152,5 +153,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-07-15T09:30:00.000Z
-Stopped at: Concluido quick 260715-1rq (/crm no visual do mockup: 6 KPIs, valor parado por etapa, cards c/ origem/tempo, barra de origem dos leads); migrations 0015-0019 pendentes (aplicar em ordem); falta env CRM_LEADS_TOKEN no .env.local e na Vercel
+Stopped at: Concluido quick 260715-1rq (/crm no visual do mockup) + migration 0019 APLICADA + PUBLICADO na Vercel. NENHUMA migration pendente — o registro anterior ("0015-0019 pendentes") estava ERRADO: 0014-0018 ja estavam no banco (aplicadas na mao). Falta so a env CRM_LEADS_TOKEN (so p/ a API de leads)
 Resume file: None
