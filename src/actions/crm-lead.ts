@@ -7,6 +7,7 @@ import { db } from '@/lib/db'
 import {
   crmAtividades,
   crmContatos,
+  crmContatoTags,
   crmEmpresas,
   crmEtapas,
   crmOportunidades,
@@ -146,6 +147,17 @@ export async function criarLead(input: LeadInput) {
           telefoneNormalizado: crmContatos.telefoneNormalizado,
           documento: crmContatos.documento,
           empresaId: crmContatos.empresaId,
+          site: crmContatos.site,
+          dataNascimento: crmContatos.dataNascimento,
+          pais: crmContatos.pais,
+          cep: crmContatos.cep,
+          endereco: crmContatos.endereco,
+          numero: crmContatos.numero,
+          complemento: crmContatos.complemento,
+          bairro: crmContatos.bairro,
+          cidade: crmContatos.cidade,
+          estado: crmContatos.estado,
+          notas: crmContatos.notas,
         })
         .from(crmContatos)
         .where(eq(crmContatos.id, contatoId))
@@ -159,6 +171,19 @@ export async function criarLead(input: LeadInput) {
         }
         if (!atual.documento && v.documento) set.documento = v.documento
         if (!atual.empresaId && empresaId) set.empresaId = empresaId
+        // Campos do modal novo: mesmo merge conservador — só preenche o que
+        // está null hoje, nunca sobrescreve o cadastro curado.
+        if (!atual.site && v.site) set.site = v.site
+        if (!atual.dataNascimento && v.dataNascimento) set.dataNascimento = v.dataNascimento
+        if (!atual.pais && v.pais) set.pais = v.pais
+        if (!atual.cep && v.cep) set.cep = v.cep
+        if (!atual.endereco && v.endereco) set.endereco = v.endereco
+        if (!atual.numero && v.numero) set.numero = v.numero
+        if (!atual.complemento && v.complemento) set.complemento = v.complemento
+        if (!atual.bairro && v.bairro) set.bairro = v.bairro
+        if (!atual.cidade && v.cidade) set.cidade = v.cidade
+        if (!atual.estado && v.estado) set.estado = v.estado
+        if (!atual.notas && v.notas) set.notas = v.notas
       }
 
       // Nada novo a acrescentar: pula o UPDATE (uma query a menos).
@@ -177,6 +202,17 @@ export async function criarLead(input: LeadInput) {
           telefone: v.telefone ?? null,
           telefoneNormalizado,
           documento: v.documento ?? null,
+          site: v.site ?? null,
+          dataNascimento: v.dataNascimento ?? null,
+          pais: v.pais ?? null,
+          cep: v.cep ?? null,
+          endereco: v.endereco ?? null,
+          numero: v.numero ?? null,
+          complemento: v.complemento ?? null,
+          bairro: v.bairro ?? null,
+          cidade: v.cidade ?? null,
+          estado: v.estado ?? null,
+          notas: v.notas ?? null,
           empresaId,
           origem: v.origem,
           donoId: currentUser.id,
@@ -189,6 +225,15 @@ export async function criarLead(input: LeadInput) {
         contatoId,
         detalhe: v.nome,
       })
+    }
+
+    // (4.5) Tags do modal: vínculos lead↔tag numa query só. onConflictDoNothing
+    // cobre o lead existente que já tinha alguma das tags (índice único).
+    if (v.tagIds.length > 0) {
+      await db
+        .insert(crmContatoTags)
+        .values(v.tagIds.map((tagId) => ({ contatoId: contatoId as string, tagId })))
+        .onConflictDoNothing()
     }
 
     // (5) O NEGÓCIO nasce SEMPRE — inclusive para lead existente (é o que faz
@@ -300,6 +345,10 @@ export async function getFichaLead(contatoId: string) {
         dataNascimento: crmContatos.dataNascimento,
         cep: crmContatos.cep,
         endereco: crmContatos.endereco,
+        pais: crmContatos.pais,
+        numero: crmContatos.numero,
+        complemento: crmContatos.complemento,
+        bairro: crmContatos.bairro,
         cidade: crmContatos.cidade,
         estado: crmContatos.estado,
         notas: crmContatos.notas,

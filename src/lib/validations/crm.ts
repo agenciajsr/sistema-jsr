@@ -20,6 +20,21 @@ const opcionalData = z
   .or(z.literal(''))
   .transform((v) => v || undefined)
 
+/**
+ * Data opcional 'YYYY-MM-DD' que precisa ser um dia REAL do calendário
+ * ('2000-13-99' bate no regex mas não existe). Usada na Data de Nascimento do
+ * modal "Criar novo Lead".
+ */
+const opcionalDataReal = opcionalData.refine(
+  (v) => {
+    if (v === undefined) return true
+    const [ano, mes, dia] = v.split('-').map(Number)
+    const d = new Date(Date.UTC(ano, mes - 1, dia))
+    return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia
+  },
+  { message: 'Data invalida' }
+)
+
 /** Email opcional: '' vira undefined; presente precisa ser válido. */
 const opcionalEmail = z
   .string()
@@ -141,6 +156,24 @@ export const leadSchema = z
     telefone: opcionalTexto,
     documento: opcionalTexto,
     origem: z.enum(ORIGENS_LEAD).default('manual'),
+    // --- Campos do modal "Criar novo Lead" (imagens 07-11), TODOS opcionais ---
+    // Aba Contato
+    site: opcionalTexto,
+    // Aba Dados Pessoais
+    dataNascimento: opcionalDataReal,
+    // Aba Endereço (default 'Brasil' fica no FORM, não aqui: schema neutro)
+    pais: opcionalTexto,
+    cep: opcionalTexto,
+    endereco: opcionalTexto,
+    numero: opcionalTexto,
+    complemento: opcionalTexto,
+    bairro: opcionalTexto,
+    cidade: opcionalTexto,
+    estado: opcionalTexto,
+    // Aba Anotações
+    notas: opcionalTexto,
+    // Tags (crm_tags) escolhidas/criadas no seletor do topo do modal.
+    tagIds: z.array(z.string().uuid()).default([]),
     // Lista FECHADA: a JSR vende 4 coisas (ver src/lib/crm/servicos.ts).
     servico: z.enum(SERVICOS_KEYS),
     valor: z.coerce.number().nonnegative('O valor nao pode ser negativo').optional(),
@@ -175,6 +208,14 @@ export const leadPerfilSchema = z.object({
   origem: z.enum(ORIGENS_LEAD).optional(),
 })
 export type LeadPerfilInput = z.input<typeof leadPerfilSchema>
+
+// Tag do CRM (badges do modal "Criar novo Lead"). `cor` precisa ser uma chave
+// de CORES_TAG — a action valida contra a paleta (src/lib/crm/tags.ts).
+export const tagSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome da tag'),
+  cor: z.string().trim().min(1, 'Escolha a cor da tag'),
+})
+export type TagInput = z.input<typeof tagSchema>
 
 export const crmTarefaSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o titulo da tarefa'),
