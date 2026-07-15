@@ -2,14 +2,16 @@ import { Radio, Target, TrendingUp } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { SyncButton } from '@/components/trafego/sync-button'
 import { SeletorCampanhas } from '@/components/trafego/seletor-campanhas'
 import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
-import { GraficoVerba } from '@/components/trafego/grafico-verba'
 import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
 import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
 import { GradeKpis } from '@/components/trafego/grade-kpis'
+import { GraficoPerformance } from '@/components/trafego/grafico-performance'
+import { TabelaNiveis } from '@/components/trafego/tabela-niveis'
+import { FunilConversao } from '@/components/trafego/funil-conversao'
 import {
   getContasNaoVinculadas,
   getPreferenciasCampanhas,
@@ -54,18 +56,6 @@ export default async function CampanhasPage({
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
-
-  // Série de verba agregada por dia (o gráfico atual mostra só spend).
-  const serieVerba = painel
-    ? Array.from(
-        painel.seriePorDia.reduce((map, p) => {
-          map.set(p.date, (map.get(p.date) ?? 0) + p.spend)
-          return map
-        }, new Map<string, number>()),
-      )
-        .map(([date, spend]) => ({ date, spend }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-    : []
 
   // Criativos campeões derivados do nível anúncios do painel.
   const topCriativos: CriativoRanking[] = painel
@@ -169,20 +159,22 @@ export default async function CampanhasPage({
             clienteId={cliente}
           />
 
-          <Card className="border-none shadow-[var(--shadow-sm)]">
-            <CardHeader>
-              <CardTitle className="text-base">Verba por dia</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {serieVerba.length > 0 ? (
-                <GraficoVerba serie={serieVerba} />
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Sem série de verba no período.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <GraficoPerformance serie={painel.seriePorDia} heroiChave={painel.heroi.chave} />
+
+          <TabelaNiveis
+            campanhas={painel.campanhas}
+            conjuntos={painel.conjuntos}
+            anuncios={painel.anuncios}
+            labelHeroi={painel.heroi.label}
+          />
+
+          {painel.campanhas.length > 0 && (
+            <FunilConversao
+              campanhas={painel.campanhas}
+              funilSalvo={preferencias?.funil ?? null}
+              clienteId={cliente}
+            />
+          )}
 
           <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
         </div>

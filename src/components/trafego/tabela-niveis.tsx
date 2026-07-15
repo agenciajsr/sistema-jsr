@@ -1,0 +1,314 @@
+'use client'
+
+// Tabela por nível (referência: imagem 4): alterna campanhas/conjuntos/anúncios,
+// busca por nome, filtro de status e linha de totais. SOMENTE visualização —
+// status é badge, NUNCA switch de ação sobre a campanha.
+
+import { useMemo, useState } from 'react'
+import Image from 'next/image'
+import { ImageOff, Search } from 'lucide-react'
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
+import type { LinhaAnuncio, LinhaCampanha, LinhaConjunto } from '@/lib/trafego/painel'
+
+const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const formatadorNumero = new Intl.NumberFormat('pt-BR')
+const formatadorPct = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function moeda(v: number | null): string {
+  return v === null ? '—' : formatadorMoeda.format(v)
+}
+
+type Nivel = 'campanhas' | 'conjuntos' | 'anuncios'
+type FiltroStatus = 'todos' | 'ativos' | 'inativos'
+
+// Linha normalizada dos três níveis para uma única tabela.
+type LinhaNormalizada = {
+  id: string
+  nome: string
+  thumbnailUrl: string | null
+  temStatus: boolean
+  ativo: boolean | null // null = nível sem effectiveStatus
+  spend: number
+  impressions: number
+  clicks: number
+  linkClicks: number
+  resultadoHeroi: number
+}
+
+function statusAtivo(effectiveStatus: string | null): boolean | null {
+  if (!effectiveStatus) return null
+  return effectiveStatus === 'ACTIVE'
+}
+
+type TabelaNiveisProps = {
+  campanhas: LinhaCampanha[]
+  conjuntos: LinhaConjunto[]
+  anuncios: LinhaAnuncio[]
+  labelHeroi: string
+}
+
+export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: TabelaNiveisProps) {
+  const [nivel, setNivel] = useState<Nivel>('campanhas')
+  const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
+
+  const linhas: LinhaNormalizada[] = useMemo(() => {
+    if (nivel === 'campanhas') {
+      return campanhas.map((c) => ({
+        id: c.campaignId,
+        nome: c.campaignName,
+        thumbnailUrl: null,
+        temStatus: false,
+        ativo: null,
+        spend: c.spend,
+        impressions: c.impressions,
+        clicks: c.clicks,
+        linkClicks: c.linkClicks,
+        resultadoHeroi: c.resultadoHeroi,
+      }))
+    }
+    if (nivel === 'conjuntos') {
+      return conjuntos.map((c) => ({
+        id: c.adsetId,
+        nome: c.adsetName,
+        thumbnailUrl: null,
+        temStatus: false,
+        ativo: null,
+        spend: c.spend,
+        impressions: c.impressions,
+        clicks: c.clicks,
+        linkClicks: c.linkClicks,
+        resultadoHeroi: c.resultadoHeroi,
+      }))
+    }
+    return anuncios.map((a) => ({
+      id: a.adId,
+      nome: a.adName,
+      thumbnailUrl: a.thumbnailUrl,
+      temStatus: true,
+      ativo: statusAtivo(a.effectiveStatus),
+      spend: a.spend,
+      impressions: a.impressions,
+      clicks: a.clicks,
+      linkClicks: a.linkClicks,
+      resultadoHeroi: a.resultadoHeroi,
+    }))
+  }, [nivel, campanhas, conjuntos, anuncios])
+
+  const filtradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+    return linhas
+      .filter((l) => (termo ? l.nome.toLowerCase().includes(termo) : true))
+      .filter((l) => {
+        if (filtroStatus === 'todos' || l.ativo === null) return true
+        return filtroStatus === 'ativos' ? l.ativo : !l.ativo
+      })
+      .sort((a, b) => b.spend - a.spend)
+  }, [linhas, busca, filtroStatus])
+
+  // Totais recalculados a partir das linhas FILTRADAS (soma + derivadas).
+  const totais = useMemo(() => {
+    const t = filtradas.reduce(
+      (acc, l) => {
+        acc.spend += l.spend
+        acc.impressions += l.impressions
+        acc.clicks += l.clicks
+        acc.linkClicks += l.linkClicks
+        acc.resultadoHeroi += l.resultadoHeroi
+        return acc
+      },
+      { spend: 0, impressions: 0, clicks: 0, linkClicks: 0, resultadoHeroi: 0 },
+    )
+    return {
+      ...t,
+      cpc: t.clicks > 0 ? t.spend / t.clicks : null,
+      ctr: t.impressions > 0 ? (t.clicks / t.impressions) * 100 : null,
+      cpm: t.impressions > 0 ? (t.spend / t.impressions) * 1000 : null,
+      custoPorResultado: t.resultadoHeroi > 0 ? t.spend / t.resultadoHeroi : null,
+    }
+  }, [filtradas])
+
+  function derivadas(l: LinhaNormalizada) {
+    return {
+      cpc: l.clicks > 0 ? l.spend / l.clicks : null,
+      ctr: l.impressions > 0 ? (l.clicks / l.impressions) * 100 : null,
+      cpm: l.impressions > 0 ? (l.spend / l.impressions) * 1000 : null,
+      custoPorResultado: l.resultadoHeroi > 0 ? l.spend / l.resultadoHeroi : null,
+    }
+  }
+
+  const mostraStatus = nivel === 'anuncios'
+
+  return (
+    <Card className="border-none shadow-[var(--shadow-sm)]">
+      <CardHeader className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="text-base">Detalhamento</CardTitle>
+          <Tabs value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
+            <TabsList>
+              <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
+              <TabsTrigger value="conjuntos">Conjuntos</TabsTrigger>
+              <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome..."
+              className="pl-8"
+            />
+          </div>
+          {mostraStatus && (
+            <Select value={filtroStatus} onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}>
+              <SelectTrigger className="w-[140px]" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="ativos">Ativos</SelectItem>
+                <SelectItem value="inativos">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filtradas.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {linhas.length === 0
+              ? 'Sem dados neste nível para o período (sincronize para atualizar).'
+              : 'Nenhum item corresponde à busca/filtro.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[220px]">Nome</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Gasto</TableHead>
+                  <TableHead className="text-right">CPC</TableHead>
+                  <TableHead className="text-right">CTR</TableHead>
+                  <TableHead className="text-right">CPM</TableHead>
+                  <TableHead className="text-right">Impressões</TableHead>
+                  <TableHead className="text-right">{labelHeroi}</TableHead>
+                  <TableHead className="text-right">Custo/result.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtradas.map((l) => {
+                  const d = derivadas(l)
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {nivel === 'anuncios' &&
+                            (l.thumbnailUrl ? (
+                              <Image
+                                src={l.thumbnailUrl}
+                                alt=""
+                                width={32}
+                                height={32}
+                                unoptimized
+                                className="size-8 shrink-0 rounded-md object-cover"
+                              />
+                            ) : (
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                                <ImageOff className="size-4 text-muted-foreground/60" />
+                              </span>
+                            ))}
+                          <span className="max-w-[320px] truncate" title={l.nome}>
+                            {l.nome}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {l.ativo === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          // Badge VISUAL de status — nunca um switch de ação.
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              l.ativo
+                                ? 'border-chart-success/30 bg-chart-success/10 text-chart-success'
+                                : 'border-border bg-muted text-muted-foreground',
+                            )}
+                          >
+                            {l.ativo ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{moeda(l.spend)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{moeda(d.cpc)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {d.ctr === null ? '—' : `${formatadorPct.format(d.ctr)}%`}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{moeda(d.cpm)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatadorNumero.format(l.impressions)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatadorNumero.format(l.resultadoHeroi)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {moeda(d.custoPorResultado)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {/* Linha de TOTAIS dos itens filtrados */}
+                <TableRow className="bg-muted/40 font-medium hover:bg-muted/40">
+                  <TableCell>Totais ({filtradas.length})</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right tabular-nums">{moeda(totais.spend)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{moeda(totais.cpc)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {totais.ctr === null ? '—' : `${formatadorPct.format(totais.ctr)}%`}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{moeda(totais.cpm)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatadorNumero.format(totais.impressions)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatadorNumero.format(totais.resultadoHeroi)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {moeda(totais.custoPorResultado)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
