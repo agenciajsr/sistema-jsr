@@ -53,7 +53,9 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // popper ancora o menu ABAIXO do gatilho e é robusto dentro de containers com overflow-hidden;
+  // "item-aligned" (padrão antigo) posicionava o menu em 0,0 nesses casos (grade de campos da tarefa).
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
