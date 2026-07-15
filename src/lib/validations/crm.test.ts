@@ -57,4 +57,64 @@ describe('leadSchema', () => {
       expect(r.data.origem).toBe('manual')
     }
   })
+
+  // Campos do modal "Criar novo Lead" (imagens 07-11): todos OPCIONAIS — o
+  // lead pode ser cadastrado só com nome + telefone, como antes.
+  it('aceita os campos novos todos vazios (continuam opcionais)', () => {
+    const r = leadSchema.safeParse({
+      ...base,
+      site: '',
+      dataNascimento: '',
+      pais: '',
+      cep: '',
+      endereco: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      estado: '',
+      notas: '',
+    })
+    expect(r.success).toBe(true)
+    if (r.success) {
+      expect(r.data.site).toBeUndefined()
+      expect(r.data.notas).toBeUndefined()
+    }
+  })
+
+  it('mantem o refine "email OU telefone" mesmo com os campos novos preenchidos', () => {
+    const r = leadSchema.safeParse({
+      ...base,
+      telefone: '',
+      email: '',
+      site: 'www.meulead.com.br',
+      cidade: 'Sao Paulo',
+    })
+    expect(r.success).toBe(false)
+  })
+
+  it('tagIds: aceita array de uuid e usa [] como default', () => {
+    const semTags = leadSchema.safeParse(base)
+    expect(semTags.success).toBe(true)
+    if (semTags.success) expect(semTags.data.tagIds).toEqual([])
+
+    const comTags = leadSchema.safeParse({
+      ...base,
+      tagIds: ['22222222-2222-4222-8222-222222222222'],
+    })
+    expect(comTags.success).toBe(true)
+    if (comTags.success) expect(comTags.data.tagIds).toHaveLength(1)
+
+    const invalido = leadSchema.safeParse({ ...base, tagIds: ['nao-e-uuid'] })
+    expect(invalido.success).toBe(false)
+  })
+
+  it('dataNascimento: rejeita 2000-13-99 e aceita 1990-05-20', () => {
+    const invalida = leadSchema.safeParse({ ...base, dataNascimento: '2000-13-99' })
+    expect(invalida.success).toBe(false)
+
+    const valida = leadSchema.safeParse({ ...base, dataNascimento: '1990-05-20' })
+    expect(valida.success).toBe(true)
+    if (valida.success) expect(valida.data.dataNascimento).toBe('1990-05-20')
+  })
 })
