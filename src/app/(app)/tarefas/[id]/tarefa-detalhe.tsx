@@ -650,12 +650,9 @@ export function TarefaDetalhe({
                     }
                     if (limpo !== tarefa.titulo) salvarCampo({ titulo: limpo })
                   }}
-                  className="h-auto border-0 px-0 text-[26px] leading-tight font-semibold shadow-none focus-visible:ring-0"
+                  className="h-auto border-0 px-0 text-[32px] leading-tight font-bold tracking-tight shadow-none focus-visible:ring-0"
                   aria-label="Título da tarefa"
                 />
-                {tarefa.descricao && (
-                  <p className="line-clamp-2 text-sm text-muted-foreground">{tarefa.descricao}</p>
-                )}
               </div>
 
               {/* Grade de 8 células COM BORDA e DIVISÓRIAS */}
