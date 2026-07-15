@@ -1,13 +1,15 @@
-import { and, asc, eq, lt, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, lt, isNotNull, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import {
+  crmAtividades,
   crmEmpresas,
   crmContatos,
   crmEtapas,
   crmPipelines,
   crmOportunidades,
   crmTarefas,
+  profiles,
 } from '@/lib/db/schema'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 
@@ -27,8 +29,18 @@ export type OportunidadeCard = {
   etapaId: string
   ordemNaEtapa: number
   origem: string | null
+  // Chave do serviço vendido (ver src/lib/crm/servicos.ts) — subtítulo do card.
+  servico: string | null
+  status: 'aberta' | 'ganha' | 'perdida'
+  motivoPerda: string | null
+  // É o contatoId que abre a ficha do lead no clique do card.
+  contatoId: string | null
   contatoNome: string | null
   empresaNome: string | null
+  // Atendente responsável (a UI mostra 'Sem atendente' quando null).
+  donoNome: string | null
+  qtdAtividades: number
+  qtdTarefasAbertas: number
   dataPrevistaFechamento: string | null
   // Adicionados para o mockup: tempo relativo e aviso "Nao contatado".
   createdAt: string // ISO
@@ -48,6 +60,16 @@ export type ColunaKanban = {
   oportunidades: OportunidadeCard[]
   total: number
   somaValor: number
+}
+
+// Colunas VIRTUAIS Ganho/Perdido (D-04): derivadas do STATUS da oportunidade —
+// NUNCA viram linhas em crm_etapas (padrão Pipedrive, mantido).
+export type ColunaFechada = {
+  chave: 'ganho' | 'perdido'
+  nome: string // 'Ganho' | 'Perdido'
+  oportunidades: OportunidadeCard[] // até 50, as mais recentes
+  total: number // total REAL no banco (de porStatus) — pode ser > 50
+  somaValor: number // soma das CARREGADAS (não do total)
 }
 
 export type Kanban = {
@@ -71,7 +93,11 @@ export type KpisCrm = {
 
 export type OrigemDistrib = { origem: string; total: number; pct: number }
 
-export type CrmVisaoGeral = Kanban & { kpis: KpisCrm; origens: OrigemDistrib[] }
+export type CrmVisaoGeral = Kanban & {
+  kpis: KpisCrm
+  origens: OrigemDistrib[]
+  colunasFechadas: ColunaFechada[]
+}
 
 const KPIS_ZERO: KpisCrm = {
   totalOportunidades: 0,
@@ -89,14 +115,93 @@ const VISAO_VAZIA: CrmVisaoGeral = {
   colunas: [],
   kpis: KPIS_ZERO,
   origens: [],
+  colunasFechadas: [],
 }
 
 // Janela da heurística "sem contato": aberta há mais de 7 dias.
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000
 
+// Teto de linhas por coluna fechada. Ganho/Perdido só CRESCEM com o tempo: sem
+// teto, a /crm ficaria mais lenta a cada mês que passa. O header mostra o total
+// REAL (do porStatus), então o número exibido nunca mente — só a lista é cortada.
+const TETO_FECHADAS = 50
+
+// Colunas do card, reusadas pelas queries de abertas E de fechadas: mesma forma
+// de linha → mesmo montarCard, sem risco de divergirem com o tempo.
+const CAMPOS_CARD = {
+  id: crmOportunidades.id,
+  titulo: crmOportunidades.titulo,
+  valor: crmOportunidades.valor,
+  tipoReceita: crmOportunidades.tipoReceita,
+  etapaId: crmOportunidades.etapaId,
+  ordemNaEtapa: crmOportunidades.ordemNaEtapa,
+  origem: crmOportunidades.origem,
+  servico: crmOportunidades.servico,
+  status: crmOportunidades.status,
+  motivoPerda: crmOportunidades.motivoPerda,
+  dataPrevistaFechamento: crmOportunidades.dataPrevistaFechamento,
+  createdAt: crmOportunidades.createdAt,
+  contatoId: crmOportunidades.contatoId,
+  contatoNome: crmContatos.nome,
+  empresaNome: crmEmpresas.nome,
+  donoNome: profiles.nome,
+}
+
+type LinhaCard = {
+  id: string
+  titulo: string
+  valor: string | null
+  tipoReceita: string | null
+  etapaId: string
+  ordemNaEtapa: number
+  origem: string | null
+  servico: string | null
+  status: string
+  motivoPerda: string | null
+  dataPrevistaFechamento: string | null
+  createdAt: Date
+  contatoId: string | null
+  contatoNome: string | null
+  empresaNome: string | null
+  donoNome: string | null
+}
+
+// Helper LOCAL (não exportado): a montagem do card mora num lugar só — senão
+// abertas e fechadas divergem silenciosamente.
+function montarCard(
+  o: LinhaCard,
+  semContato: boolean,
+  atividadesPorOportunidade: Map<string, number>,
+  tarefasAbertasPorOportunidade: Map<string, number>
+): OportunidadeCard {
+  const criada = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)
+  return {
+    id: o.id,
+    titulo: o.titulo,
+    valor: o.valor != null ? Number(o.valor) : null,
+    tipoReceita: o.tipoReceita,
+    etapaId: o.etapaId,
+    ordemNaEtapa: o.ordemNaEtapa,
+    origem: o.origem,
+    servico: o.servico,
+    status: (o.status as OportunidadeCard['status']) ?? 'aberta',
+    motivoPerda: o.motivoPerda,
+    contatoId: o.contatoId,
+    contatoNome: o.contatoNome,
+    empresaNome: o.empresaNome,
+    donoNome: o.donoNome,
+    qtdAtividades: atividadesPorOportunidade.get(o.id) ?? 0,
+    qtdTarefasAbertas: tarefasAbertasPorOportunidade.get(o.id) ?? 0,
+    dataPrevistaFechamento: o.dataPrevistaFechamento,
+    createdAt: criada.toISOString(),
+    semContato,
+  }
+}
+
 // getCrmVisaoGeral é a ÚNICA fonte de dados da página /crm (substitui a antiga
-// getKanban): entrega o kanban + os 6 KPIs + a distribuição de origem, tudo com
-// queries sequenciais/agregadas. Degrada para VISAO_VAZIA sem quebrar.
+// getKanban): entrega o kanban + os 6 KPIs + a distribuição de origem + as
+// colunas virtuais Ganho/Perdido, tudo com queries sequenciais/agregadas.
+// Degrada para VISAO_VAZIA sem quebrar.
 export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
   try {
     // (1) workspace único do v1 (null = 0019 não aplicada)
@@ -126,24 +231,13 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       .orderBy(asc(crmEtapas.ordem))
 
     // (4) TODAS as oportunidades ABERTAS do pipeline em UMA query, com os nomes
-    // de contato/empresa via leftJoin (nada de N+1 por coluna). Traz createdAt.
+    // de contato/empresa/atendente via leftJoin (nada de N+1 por coluna).
     const abertas = await db
-      .select({
-        id: crmOportunidades.id,
-        titulo: crmOportunidades.titulo,
-        valor: crmOportunidades.valor,
-        tipoReceita: crmOportunidades.tipoReceita,
-        etapaId: crmOportunidades.etapaId,
-        ordemNaEtapa: crmOportunidades.ordemNaEtapa,
-        origem: crmOportunidades.origem,
-        dataPrevistaFechamento: crmOportunidades.dataPrevistaFechamento,
-        createdAt: crmOportunidades.createdAt,
-        contatoNome: crmContatos.nome,
-        empresaNome: crmEmpresas.nome,
-      })
+      .select(CAMPOS_CARD)
       .from(crmOportunidades)
       .leftJoin(crmContatos, eq(crmOportunidades.contatoId, crmContatos.id))
       .leftJoin(crmEmpresas, eq(crmOportunidades.empresaId, crmEmpresas.id))
+      .leftJoin(profiles, eq(crmOportunidades.donoId, profiles.id))
       .where(
         and(eq(crmOportunidades.pipelineId, pipeline.id), eq(crmOportunidades.status, 'aberta'))
       )
@@ -226,6 +320,71 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       pct: totalOportunidades > 0 ? Math.round((o.total / totalOportunidades) * 100) : 0,
     }))
 
+    // (9)/(10) as FECHADAS — sem elas as colunas virtuais nasceriam vazias.
+    // Duas queries sequenciais porque a ordenação difere (ganhaEm vs perdidaEm);
+    // as mais RECENTES são as que interessam no board.
+    const ganhasRows = await db
+      .select(CAMPOS_CARD)
+      .from(crmOportunidades)
+      .leftJoin(crmContatos, eq(crmOportunidades.contatoId, crmContatos.id))
+      .leftJoin(crmEmpresas, eq(crmOportunidades.empresaId, crmEmpresas.id))
+      .leftJoin(profiles, eq(crmOportunidades.donoId, profiles.id))
+      .where(
+        and(eq(crmOportunidades.pipelineId, pipeline.id), eq(crmOportunidades.status, 'ganha'))
+      )
+      .orderBy(desc(crmOportunidades.ganhaEm))
+      .limit(TETO_FECHADAS)
+
+    const perdidasRows = await db
+      .select(CAMPOS_CARD)
+      .from(crmOportunidades)
+      .leftJoin(crmContatos, eq(crmOportunidades.contatoId, crmContatos.id))
+      .leftJoin(crmEmpresas, eq(crmOportunidades.empresaId, crmEmpresas.id))
+      .leftJoin(profiles, eq(crmOportunidades.donoId, profiles.id))
+      .where(
+        and(eq(crmOportunidades.pipelineId, pipeline.id), eq(crmOportunidades.status, 'perdida'))
+      )
+      .orderBy(desc(crmOportunidades.perdidaEm))
+      .limit(TETO_FECHADAS)
+
+    // (11) atividades por oportunidade — GROUP BY no banco, NUNCA N+1 por card.
+    const atividadesRaw = await db
+      .select({
+        oportunidadeId: crmAtividades.oportunidadeId,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(crmAtividades)
+      .where(
+        and(eq(crmAtividades.workspaceId, workspace.id), isNotNull(crmAtividades.oportunidadeId))
+      )
+      .groupBy(crmAtividades.oportunidadeId)
+
+    const atividadesPorOportunidade = new Map<string, number>()
+    for (const a of atividadesRaw) {
+      if (a.oportunidadeId) atividadesPorOportunidade.set(a.oportunidadeId, a.total)
+    }
+
+    // (12) tarefas ABERTAS por oportunidade — mesmo formato agregado.
+    const tarefasAbertasRaw = await db
+      .select({
+        oportunidadeId: crmTarefas.oportunidadeId,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(crmTarefas)
+      .where(
+        and(
+          eq(crmTarefas.workspaceId, workspace.id),
+          eq(crmTarefas.concluida, false),
+          isNotNull(crmTarefas.oportunidadeId)
+        )
+      )
+      .groupBy(crmTarefas.oportunidadeId)
+
+    const tarefasAbertasPorOportunidade = new Map<string, number>()
+    for (const t of tarefasAbertasRaw) {
+      if (t.oportunidadeId) tarefasAbertasPorOportunidade.set(t.oportunidadeId, t.total)
+    }
+
     // Merge em memória: monta os cards preenchendo createdAt e semContato.
     // Heurística semContato (DOCUMENTADA): uma oportunidade ABERTA está "sem
     // contato" quando foi criada há mais de 7 dias E não possui NENHUMA tarefa
@@ -237,20 +396,12 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       const criada = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)
       const semContato = agora - criada.getTime() > SETE_DIAS_MS && !contatadas.has(o.id)
       if (semContato) semContatoTotal += 1
-      const card: OportunidadeCard = {
-        id: o.id,
-        titulo: o.titulo,
-        valor: o.valor != null ? Number(o.valor) : null,
-        tipoReceita: o.tipoReceita,
-        etapaId: o.etapaId,
-        ordemNaEtapa: o.ordemNaEtapa,
-        origem: o.origem,
-        contatoNome: o.contatoNome,
-        empresaNome: o.empresaNome,
-        dataPrevistaFechamento: o.dataPrevistaFechamento,
-        createdAt: criada.toISOString(),
+      const card = montarCard(
+        o,
         semContato,
-      }
+        atividadesPorOportunidade,
+        tarefasAbertasPorOportunidade
+      )
       const lista = porEtapa.get(o.etapaId)
       if (lista) lista.push(card)
       else porEtapa.set(o.etapaId, [card])
@@ -266,6 +417,33 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       }
     })
 
+    // semContato entra como false nas fechadas: é heurística de negócio ABERTO
+    // ("aguardando contato há +7d") — um negócio já fechado não aguarda nada.
+    const cardsGanhos = ganhasRows.map((o) =>
+      montarCard(o, false, atividadesPorOportunidade, tarefasAbertasPorOportunidade)
+    )
+    const cardsPerdidos = perdidasRows.map((o) =>
+      montarCard(o, false, atividadesPorOportunidade, tarefasAbertasPorOportunidade)
+    )
+
+    const colunasFechadas: ColunaFechada[] = [
+      {
+        chave: 'ganho',
+        nome: 'Ganho',
+        oportunidades: cardsGanhos,
+        // total REAL do banco (porStatus) — não recontar aqui.
+        total: ganhas,
+        somaValor: cardsGanhos.reduce((soma, o) => soma + (o.valor ?? 0), 0),
+      },
+      {
+        chave: 'perdido',
+        nome: 'Perdido',
+        oportunidades: cardsPerdidos,
+        total: perdidas,
+        somaValor: cardsPerdidos.reduce((soma, o) => soma + (o.valor ?? 0), 0),
+      },
+    ]
+
     const kpis: KpisCrm = {
       totalOportunidades,
       valorOrigem,
@@ -275,7 +453,15 @@ export async function getCrmVisaoGeral(): Promise<CrmVisaoGeral> {
       semContato: semContatoTotal,
     }
 
-    return { configurado: true, pipelineNome: pipeline.nome, etapas, colunas, kpis, origens }
+    return {
+      configurado: true,
+      pipelineNome: pipeline.nome,
+      etapas,
+      colunas,
+      kpis,
+      origens,
+      colunasFechadas,
+    }
   } catch (e) {
     // Tabelas ainda não existem ou soluço de conexão: degrada graciosamente.
     console.error('[getCrmVisaoGeral]', e)

@@ -646,6 +646,21 @@ export async function perderOportunidade(id: string, motivoPerda: string) {
   }
 }
 
+// --- Alvos do drag-and-drop nas colunas VIRTUAIS Ganho/Perdido (D-04) ---
+// Wrappers FINOS de propósito: a regra de ganho/perda vive numa única
+// implementação (ganhar/perderOportunidade). O board fala em "mover para a
+// coluna X"; estes dois traduzem isso para o STATUS da oportunidade — Ganho e
+// Perdido NUNCA viram linhas em crm_etapas.
+
+export async function moverParaGanho(id: string, opts?: { criarCliente?: boolean }) {
+  return ganharOportunidade(id, opts)
+}
+
+export async function moverParaPerdido(id: string, motivo: string) {
+  // perderOportunidade já recusa motivo vazio — não duplicar a validação aqui.
+  return perderOportunidade(id, motivo)
+}
+
 export async function reabrirOportunidade(id: string) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
