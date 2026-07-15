@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   ArrowUp,
   Building2,
-  CalendarDays,
   ChevronRight,
   Clock,
   FileText,
@@ -99,6 +98,7 @@ export function NovaTarefaForm({
   const [salvando, startSalvar] = useTransition()
 
   const [titulo, setTitulo] = useState('')
+  const [subtitulo, setSubtitulo] = useState('')
   const [descricao, setDescricao] = useState('')
   const [data, setData] = useState(dataInicial)
   const [dataInicio, setDataInicio] = useState('')
@@ -140,6 +140,7 @@ export function NovaTarefaForm({
       const r = await criarTarefa({
         titulo: titulo.trim(),
         notas: notas.trim(),
+        subtitulo: subtitulo.trim(),
         descricao: descricao.trim(),
         data,
         dataInicio,
@@ -208,16 +209,15 @@ export function NovaTarefaForm({
                   onChange={(e) => setTitulo(e.target.value)}
                   placeholder="Título da tarefa"
                   autoFocus
-                  className="h-auto border-0 px-0 text-[26px] leading-tight font-semibold shadow-none focus-visible:ring-0"
+                  className="h-auto border-0 px-0 text-[36px] leading-tight font-bold tracking-tight shadow-none focus-visible:ring-0"
                   aria-label="Título da tarefa"
                 />
-                <Textarea
-                  value={descricao}
-                  onChange={(e) => setDescricao(e.target.value)}
-                  rows={2}
-                  placeholder="Descrição breve..."
-                  className="resize-none border-0 px-0 text-sm text-muted-foreground shadow-none focus-visible:ring-0"
-                  aria-label="Descrição da tarefa"
+                <Input
+                  value={subtitulo}
+                  onChange={(e) => setSubtitulo(e.target.value)}
+                  placeholder="Adicionar subtítulo..."
+                  aria-label="Subtítulo da tarefa"
+                  className="h-auto border-0 px-0 text-base text-muted-foreground shadow-none focus-visible:ring-0"
                 />
               </div>
 
@@ -311,7 +311,6 @@ export function NovaTarefaForm({
                 <div className="space-y-1.5 p-3">
                   <Label className="text-xs text-muted-foreground">Data de início</Label>
                   <div className="flex items-center gap-2">
-                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                     <Input
                       type="date"
                       value={dataInicio}
@@ -325,7 +324,6 @@ export function NovaTarefaForm({
                 <div className="space-y-1.5 p-3">
                   <Label className="text-xs text-muted-foreground">Prazo</Label>
                   <div className="flex items-center gap-2">
-                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                     <Input
                       type="date"
                       value={data}
