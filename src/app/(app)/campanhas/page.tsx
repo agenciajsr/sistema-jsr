@@ -1,73 +1,30 @@
-import {
-  DollarSign,
-  Eye,
-  MousePointerClick,
-  Percent,
-  Radio,
-  Target,
-  TrendingUp,
-  Users,
-  Wallet,
-} from 'lucide-react'
+import { Radio, Target, TrendingUp } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { StatCard } from '@/components/stat-card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { SyncButton } from '@/components/trafego/sync-button'
 import { SeletorCampanhas } from '@/components/trafego/seletor-campanhas'
 import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
 import { GraficoVerba } from '@/components/trafego/grafico-verba'
 import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
-import { ConjuntosPerformam } from '@/components/trafego/conjuntos-performam'
 import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
+import { GradeKpis } from '@/components/trafego/grade-kpis'
 import {
   getContasNaoVinculadas,
+  getPreferenciasCampanhas,
   getUltimaSync,
   listarClientes,
 } from '@/actions/trafego'
-import { getResumoCliente, listarClientesComContas, type Periodo } from '@/lib/trafego/aggregate'
+import { listarClientesComContas, type CriativoRanking, type Periodo } from '@/lib/trafego/aggregate'
+import { getPainelCampanhas } from '@/lib/trafego/painel'
 import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
-// mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
+// mais que 60s. Coerente com connect_timeout(10s) + statement_timeout(12s).
 export const maxDuration = 60
 
-const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-})
-const formatadorNumero = new Intl.NumberFormat('pt-BR')
-const formatadorPct = new Intl.NumberFormat('pt-BR', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
-function moeda(v: number | null): string {
-  return v === null ? '-' : formatadorMoeda.format(v)
-}
-function numero(v: number | null): string {
-  return v === null ? '-' : formatadorNumero.format(v)
-}
-function pct(v: number | null): string {
-  return v === null ? '-' : `${formatadorPct.format(v)}%`
-}
-
 const PERIODOS_VALIDOS: Periodo[] = ['hoje', 'ontem', '7d', '30d']
-const PERIODO_LABELS: Record<Periodo, string> = {
-  hoje: 'Hoje',
-  ontem: 'Ontem',
-  '7d': '7d',
-  '30d': '30d',
-}
 
 export default async function CampanhasPage({
   searchParams,
@@ -80,6 +37,8 @@ export default async function CampanhasPage({
     ? (sp.periodo as Periodo)
     : '30d'
 
+  // Queries de topo em paralelo (padrão pré-existente da página);
+  // as chamadas pesadas do painel rodam SEQUENCIAIS logo abaixo.
   const [clientesComContas, contasNaoVinculadas, clientesParaVinculo, ultimaSync] =
     await Promise.all([
       listarClientesComContas(),
@@ -88,15 +47,41 @@ export default async function CampanhasPage({
       getUltimaSync(),
     ])
 
-  const resumo = cliente
-    ? await getResumoCliente(cliente, periodo)
-    : null
-
-  // Health score do cliente selecionado (só quando há dados reais no período).
-  const saude = cliente && resumo?.temDados ? await getSaudeDoCliente(cliente) : null
+  // SEQUENCIAL de propósito (pool max=5, decisão 260714-ita): painel -> preferências -> saúde.
+  const painel = cliente ? await getPainelCampanhas(cliente, periodo) : null
+  const preferencias = cliente ? await getPreferenciasCampanhas(cliente) : null
+  const saude = cliente && painel?.temDados ? await getSaudeDoCliente(cliente) : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
+
+  // Série de verba agregada por dia (o gráfico atual mostra só spend).
+  const serieVerba = painel
+    ? Array.from(
+        painel.seriePorDia.reduce((map, p) => {
+          map.set(p.date, (map.get(p.date) ?? 0) + p.spend)
+          return map
+        }, new Map<string, number>()),
+      )
+        .map(([date, spend]) => ({ date, spend }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : []
+
+  // Criativos campeões derivados do nível anúncios do painel.
+  const topCriativos: CriativoRanking[] = painel
+    ? [...painel.anuncios]
+        .map((a) => ({
+          adId: a.adId,
+          adName: a.adName,
+          adsetName: a.adsetName ?? '',
+          thumbUrl: a.thumbnailUrl,
+          spend: a.spend,
+          resultadoPrimario: a.resultadoHeroi,
+          cpaOuCpl: a.resultadoHeroi > 0 ? a.spend / a.resultadoHeroi : null,
+        }))
+        .sort((x, y) => y.resultadoPrimario - x.resultadoPrimario || y.spend - x.spend)
+        .slice(0, 8)
+    : []
 
   return (
     <div className="space-y-6">
@@ -152,7 +137,7 @@ export default async function CampanhasPage({
       )}
 
       {/* Cliente selecionado, sem dados no periodo */}
-      {cliente && resumo && !resumo.temDados && (
+      {cliente && painel && !painel.temDados && (
         <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
           <div className="mx-auto max-w-md space-y-2">
             <TrendingUp className="mx-auto size-12 text-muted-foreground/50" />
@@ -166,94 +151,31 @@ export default async function CampanhasPage({
         </Card>
       )}
 
-      {/* Cliente com dados: dashboard premium */}
-      {cliente && resumo && resumo.temDados && (
+      {/* Cliente com dados: painel completo */}
+      {cliente && painel && painel.temDados && (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm text-muted-foreground">
-              {resumo.contasUnificadas}{' '}
-              {resumo.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
+              {painel.contasUnificadas}{' '}
+              {painel.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
             </p>
             {saude && <HealthScoreCliente score={saude.score} rotulo={saude.rotulo} />}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label={`Verba (${PERIODO_LABELS[periodo]})`}
-              value={formatadorMoeda.format(resumo.totais.spend)}
-              icon={Wallet}
-              color="primary"
-            />
-            <StatCard
-              label={resumo.heroi.label}
-              value={numero(
-                resumo.heroi.chave === 'vendas'
-                  ? resumo.totais.vendas
-                  : resumo.heroi.chave === 'conversas'
-                    ? resumo.totais.conversas
-                    : resumo.totais.leads,
-              )}
-              icon={Target}
-              color="success"
-            />
-            <StatCard
-              label={
-                resumo.heroi.chave === 'vendas'
-                  ? 'CPA (custo/venda)'
-                  : `Custo por ${resumo.heroi.label.toLowerCase()}`
-              }
-              value={moeda(
-                resumo.heroi.chave === 'vendas'
-                  ? resumo.derivadas.cpa
-                  : resumo.derivadas.custoPorResultadoHeroi,
-              )}
-              icon={TrendingUp}
-              color="warning"
-            />
-            <StatCard
-              label="Impressões"
-              value={numero(resumo.totais.impressions)}
-              icon={Eye}
-              color="primary"
-            />
-            <StatCard
-              label="Cliques"
-              value={numero(resumo.totais.clicks)}
-              icon={MousePointerClick}
-              color="primary"
-            />
-            <StatCard label="CTR" value={pct(resumo.derivadas.ctr)} icon={Percent} color="success" />
-            <StatCard
-              label="Alcance"
-              value={numero(resumo.totais.reach)}
-              icon={Users}
-              color="primary"
-            />
-            {resumo.receita > 0 && (
-              <StatCard
-                label="Receita"
-                value={formatadorMoeda.format(resumo.receita)}
-                icon={DollarSign}
-                color="success"
-              />
-            )}
-            {resumo.roas !== null && (
-              <StatCard
-                label="ROAS"
-                value={`${resumo.roas.toFixed(2)}x`}
-                icon={TrendingUp}
-                color="success"
-              />
-            )}
-          </div>
+          <GradeKpis
+            totaisAtual={painel.totaisAtual}
+            totaisAnterior={painel.totaisAnterior}
+            preferencias={preferencias?.kpis ?? null}
+            clienteId={cliente}
+          />
 
           <Card className="border-none shadow-[var(--shadow-sm)]">
             <CardHeader>
               <CardTitle className="text-base">Verba por dia</CardTitle>
             </CardHeader>
             <CardContent>
-              {resumo.serieSpendPorDia.length > 0 ? (
-                <GraficoVerba serie={resumo.serieSpendPorDia} />
+              {serieVerba.length > 0 ? (
+                <GraficoVerba serie={serieVerba} />
               ) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   Sem série de verba no período.
@@ -262,55 +184,7 @@ export default async function CampanhasPage({
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-[var(--shadow-sm)]">
-            <CardHeader>
-              <CardTitle className="text-base">Campanhas que mais performam</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {resumo.ranking.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campanha</TableHead>
-                      <TableHead className="text-right">Gasto</TableHead>
-                      <TableHead className="text-right">{resumo.heroi.label}</TableHead>
-                      <TableHead className="text-right">
-                        {resumo.heroi.chave === 'vendas' ? 'CPA' : 'Custo/result.'}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {resumo.ranking.map((c) => (
-                      <TableRow key={c.campaignId}>
-                        <TableCell className="font-medium">{c.campaignName}</TableCell>
-                        <TableCell className="text-right">
-                          {formatadorMoeda.format(c.spend)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatadorNumero.format(c.resultadoPrimario)}
-                        </TableCell>
-                        <TableCell className="text-right">{moeda(c.cpaOuCpl)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Sem campanhas com resultados no período.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <CriativosCampeoes
-            topCriativos={resumo.topCriativos}
-            labelHeroi={resumo.heroi.label}
-          />
-
-          <ConjuntosPerformam
-            topConjuntos={resumo.topConjuntos}
-            labelHeroi={resumo.heroi.label}
-          />
+          <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
         </div>
       )}
 
