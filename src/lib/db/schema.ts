@@ -484,3 +484,265 @@ export const googleCredentials = pgTable('google_credentials', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// --- CRM comercial ---
+// Prefixo crm_ em todas as tabelas do módulo. `workspaces` está preparado para
+// multi-tenant no futuro, mas o v1 tem UMA única linha (workspace 'JSR', criado
+// pelo seed da migration 0019) — o helper getWorkspaceAtual() resolve essa linha.
+// ⚠️ NÃO confundir `crm_tarefas` (tarefas COMERCIAIS: ligação, follow-up,
+// reunião de venda) com o módulo Tarefas operacional acima (`tarefas`), que
+// segue vivo e INTOCADO.
+// Padrão Pipedrive: ganho/perdido NÃO são etapas do pipeline — são STATUS da
+// oportunidade ('aberta' | 'ganha' | 'perdida'); as etapas só descrevem o
+// caminho da negociação.
+// Status/tipos/papéis/origens são `text` (NÃO pgEnum) de propósito: valores
+// novos não podem exigir migration.
+
+export const workspaces = pgTable('workspaces', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  nome: text('nome').notNull(),
+  slug: text('slug').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  slugIdx: uniqueIndex('workspaces_slug_idx').on(table.slug),
+}))
+
+export const workspaceMembros = pgTable('workspace_membros', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  profileId: uuid('profile_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+  // 'admin' | 'gestor' | 'vendedor' — text de propósito (papéis novos sem migration)
+  papel: text('papel').notNull().default('vendedor'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  workspaceProfileIdx: uniqueIndex('workspace_membros_workspace_profile_idx').on(table.workspaceId, table.profileId),
+}))
+
+export const crmEmpresas = pgTable('crm_empresas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  cnpj: text('cnpj'),
+  segmento: text('segmento'),
+  site: text('site'),
+  instagram: text('instagram'),
+  telefone: text('telefone'),
+  cidade: text('cidade'),
+  estado: text('estado'),
+  notas: text('notas'),
+  donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
+  // Preenchido quando a empresa vira cliente da agência (ganharOportunidade
+  // com criarCliente=true) — liga o CRM à carteira em `clientes`.
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  workspaceNomeIdx: index('crm_empresas_workspace_nome_idx').on(table.workspaceId, table.nome),
+}))
+
+export const crmContatos = pgTable('crm_contatos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  empresaId: uuid('empresa_id').references(() => crmEmpresas.id, { onDelete: 'set null' }),
+  nome: text('nome').notNull(),
+  email: text('email'),
+  telefone: text('telefone'),
+  // Só dígitos (normalizarTelefone) — usado no dedup de contato por telefone.
+  telefoneNormalizado: text('telefone_normalizado'),
+  cargo: text('cargo'),
+  // 'manual' | 'landing_page' | 'meta_lead_ad' | 'whatsapp' | 'indicacao' | 'outro'
+  origem: text('origem').notNull().default('manual'),
+  origemDetalhe: jsonb('origem_detalhe'),
+  donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  workspaceEmailIdx: index('crm_contatos_workspace_email_idx').on(table.workspaceId, table.email),
+  workspaceTelefoneIdx: index('crm_contatos_workspace_telefone_idx').on(table.workspaceId, table.telefoneNormalizado),
+}))
+
+export const crmPipelines = pgTable('crm_pipelines', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  ordem: integer('ordem').notNull().default(0),
+  // Invariante mantida por definirPipelinePadrao: SEMPRE exatamente 1 padrão.
+  padrao: boolean('padrao').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const crmEtapas = pgTable('crm_etapas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  pipelineId: uuid('pipeline_id').notNull().references(() => crmPipelines.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  ordem: integer('ordem').notNull(),
+  cor: text('cor'),
+  // Probabilidade de fechamento (0-100). Ganho/perdido NÃO são etapas — são
+  // status da oportunidade (padrão Pipedrive).
+  probabilidade: integer('probabilidade'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const crmOportunidades = pgTable('crm_oportunidades', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  // restrict: pipeline/etapa com oportunidades não podem ser excluídos —
+  // a action recusa antes, o FK é a trava final.
+  pipelineId: uuid('pipeline_id').notNull().references(() => crmPipelines.id, { onDelete: 'restrict' }),
+  etapaId: uuid('etapa_id').notNull().references(() => crmEtapas.id, { onDelete: 'restrict' }),
+  empresaId: uuid('empresa_id').references(() => crmEmpresas.id, { onDelete: 'set null' }),
+  contatoId: uuid('contato_id').references(() => crmContatos.id, { onDelete: 'set null' }),
+  titulo: text('titulo').notNull(),
+  valor: numeric('valor', { precision: 12, scale: 2 }), // NUNCA float para dinheiro
+  tipoReceita: text('tipo_receita').default('mensalidade'), // 'mensalidade' | 'projeto'
+  status: text('status').notNull().default('aberta'), // 'aberta' | 'ganha' | 'perdida'
+  motivoPerda: text('motivo_perda'),
+  ganhaEm: timestamp('ganha_em', { withTimezone: true }),
+  perdidaEm: timestamp('perdida_em', { withTimezone: true }),
+  donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
+  origem: text('origem'),
+  servicosInteresse: jsonb('servicos_interesse'), // string[]
+  dataPrevistaFechamento: date('data_prevista_fechamento'),
+  ordemNaEtapa: integer('ordem_na_etapa').notNull().default(0),
+  // Preenchido quando a oportunidade GANHA vira cliente da agência.
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pipelineEtapaStatusIdx: index('crm_oportunidades_pipeline_etapa_status_idx').on(table.pipelineId, table.etapaId, table.status),
+  workspaceStatusIdx: index('crm_oportunidades_workspace_status_idx').on(table.workspaceId, table.status),
+}))
+
+// Tarefas COMERCIAIS (ligação, follow-up, reunião de venda) — nada a ver com o
+// módulo Tarefas operacional (`tarefas`).
+export const crmTarefas = pgTable('crm_tarefas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  oportunidadeId: uuid('oportunidade_id').references(() => crmOportunidades.id, { onDelete: 'cascade' }),
+  contatoId: uuid('contato_id').references(() => crmContatos.id, { onDelete: 'set null' }),
+  // 'ligacao' | 'whatsapp' | 'email' | 'reuniao' | 'followup' | 'outro'
+  tipo: text('tipo').notNull().default('followup'),
+  titulo: text('titulo').notNull(),
+  notas: text('notas'),
+  dataVencimento: timestamp('data_vencimento', { withTimezone: true }).notNull(),
+  concluida: boolean('concluida').notNull().default(false),
+  concluidaEm: timestamp('concluida_em', { withTimezone: true }),
+  donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  oportunidadeConcluidaIdx: index('crm_tarefas_oportunidade_concluida_idx').on(table.oportunidadeId, table.concluida),
+  donoVenctoIdx: index('crm_tarefas_dono_vencto_idx').on(table.donoId, table.dataVencimento),
+}))
+
+// Histórico/timeline do CRM. `autor_nome` denormalizado ('Sistema' para
+// automações); `autor_id` SEM FK — segue o precedente de `acompanhamentos`.
+// tipos: 'criacao' | 'mudanca_etapa' | 'ganho' | 'perda' | 'reabertura' |
+// 'contato_criado' | 'tarefa_criada' | 'tarefa_concluida' | 'lead_recebido' | ...
+export const crmAtividades = pgTable('crm_atividades', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  oportunidadeId: uuid('oportunidade_id').references(() => crmOportunidades.id, { onDelete: 'cascade' }),
+  contatoId: uuid('contato_id').references(() => crmContatos.id, { onDelete: 'set null' }),
+  empresaId: uuid('empresa_id').references(() => crmEmpresas.id, { onDelete: 'set null' }),
+  tipo: text('tipo').notNull(),
+  autorId: uuid('autor_id'),
+  autorNome: text('autor_nome').notNull(),
+  campo: text('campo'),
+  de: text('de'),
+  para: text('para'),
+  detalhe: text('detalhe'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  oportunidadeCreatedIdx: index('crm_atividades_oportunidade_created_idx').on(table.oportunidadeId, table.createdAt),
+}))
+
+// Inbox de leads da API pública (/api/crm/leads). O uniqueIndex em dedup_hash
+// é a trava de idempotência: o MESMO lead no MESMO dia não cria segunda linha.
+export const crmLeadInbox = pgTable('crm_lead_inbox', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  fonte: text('fonte').notNull(),
+  payload: jsonb('payload').notNull(),
+  status: text('status').notNull().default('pendente'), // 'pendente' | 'processado' | 'descartado' | 'erro'
+  erroDetalhe: text('erro_detalhe'),
+  contatoId: uuid('contato_id').references(() => crmContatos.id, { onDelete: 'set null' }),
+  oportunidadeId: uuid('oportunidade_id').references(() => crmOportunidades.id, { onDelete: 'set null' }),
+  dedupHash: text('dedup_hash').notNull(),
+  recebidoEm: timestamp('recebido_em', { withTimezone: true }).notNull().defaultNow(),
+  processadoEm: timestamp('processado_em', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  dedupHashIdx: uniqueIndex('crm_lead_inbox_dedup_hash_idx').on(table.dedupHash),
+}))
+
+export const workspacesRelations = relations(workspaces, ({ many }) => ({
+  membros: many(workspaceMembros),
+  empresas: many(crmEmpresas),
+  contatos: many(crmContatos),
+  pipelines: many(crmPipelines),
+  oportunidades: many(crmOportunidades),
+}))
+
+export const workspaceMembrosRelations = relations(workspaceMembros, ({ one }) => ({
+  workspace: one(workspaces, { fields: [workspaceMembros.workspaceId], references: [workspaces.id] }),
+  profile: one(profiles, { fields: [workspaceMembros.profileId], references: [profiles.id] }),
+}))
+
+export const crmEmpresasRelations = relations(crmEmpresas, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [crmEmpresas.workspaceId], references: [workspaces.id] }),
+  dono: one(profiles, { fields: [crmEmpresas.donoId], references: [profiles.id] }),
+  cliente: one(clientes, { fields: [crmEmpresas.clienteId], references: [clientes.id] }),
+  contatos: many(crmContatos),
+  oportunidades: many(crmOportunidades),
+}))
+
+export const crmContatosRelations = relations(crmContatos, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [crmContatos.workspaceId], references: [workspaces.id] }),
+  empresa: one(crmEmpresas, { fields: [crmContatos.empresaId], references: [crmEmpresas.id] }),
+  dono: one(profiles, { fields: [crmContatos.donoId], references: [profiles.id] }),
+  oportunidades: many(crmOportunidades),
+}))
+
+export const crmPipelinesRelations = relations(crmPipelines, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [crmPipelines.workspaceId], references: [workspaces.id] }),
+  etapas: many(crmEtapas),
+  oportunidades: many(crmOportunidades),
+}))
+
+export const crmEtapasRelations = relations(crmEtapas, ({ one, many }) => ({
+  pipeline: one(crmPipelines, { fields: [crmEtapas.pipelineId], references: [crmPipelines.id] }),
+  oportunidades: many(crmOportunidades),
+}))
+
+export const crmOportunidadesRelations = relations(crmOportunidades, ({ one, many }) => ({
+  workspace: one(workspaces, { fields: [crmOportunidades.workspaceId], references: [workspaces.id] }),
+  pipeline: one(crmPipelines, { fields: [crmOportunidades.pipelineId], references: [crmPipelines.id] }),
+  etapa: one(crmEtapas, { fields: [crmOportunidades.etapaId], references: [crmEtapas.id] }),
+  empresa: one(crmEmpresas, { fields: [crmOportunidades.empresaId], references: [crmEmpresas.id] }),
+  contato: one(crmContatos, { fields: [crmOportunidades.contatoId], references: [crmContatos.id] }),
+  dono: one(profiles, { fields: [crmOportunidades.donoId], references: [profiles.id] }),
+  cliente: one(clientes, { fields: [crmOportunidades.clienteId], references: [clientes.id] }),
+  tarefas: many(crmTarefas),
+  atividades: many(crmAtividades),
+}))
+
+export const crmTarefasRelations = relations(crmTarefas, ({ one }) => ({
+  workspace: one(workspaces, { fields: [crmTarefas.workspaceId], references: [workspaces.id] }),
+  oportunidade: one(crmOportunidades, { fields: [crmTarefas.oportunidadeId], references: [crmOportunidades.id] }),
+  contato: one(crmContatos, { fields: [crmTarefas.contatoId], references: [crmContatos.id] }),
+  dono: one(profiles, { fields: [crmTarefas.donoId], references: [profiles.id] }),
+}))
+
+export const crmAtividadesRelations = relations(crmAtividades, ({ one }) => ({
+  workspace: one(workspaces, { fields: [crmAtividades.workspaceId], references: [workspaces.id] }),
+  oportunidade: one(crmOportunidades, { fields: [crmAtividades.oportunidadeId], references: [crmOportunidades.id] }),
+  contato: one(crmContatos, { fields: [crmAtividades.contatoId], references: [crmContatos.id] }),
+  empresa: one(crmEmpresas, { fields: [crmAtividades.empresaId], references: [crmEmpresas.id] }),
+}))
+
+export const crmLeadInboxRelations = relations(crmLeadInbox, ({ one }) => ({
+  workspace: one(workspaces, { fields: [crmLeadInbox.workspaceId], references: [workspaces.id] }),
+  contato: one(crmContatos, { fields: [crmLeadInbox.contatoId], references: [crmContatos.id] }),
+  oportunidade: one(crmOportunidades, { fields: [crmLeadInbox.oportunidadeId], references: [crmOportunidades.id] }),
+}))
