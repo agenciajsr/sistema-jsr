@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, User } from 'lucide-react'
+import { AlertTriangle, Building2, Clock, User } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { moverOportunidade, ganharOportunidade, perderOportunidade } from '@/actions/crm'
@@ -15,6 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { corOrigem, rotuloOrigem } from '@/lib/crm/origem'
+import { tempoRelativoCurto } from '@/lib/crm/tempo'
 import type { EtapaKanban, OportunidadeCard } from '@/lib/crm/dados'
 
 const formatoBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -86,7 +89,7 @@ export function CardOportunidade({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-3 shadow-sm">
+    <div className="space-y-2 rounded-lg border bg-card p-3 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium leading-snug">{oportunidade.titulo}</p>
         {oportunidade.tipoReceita && (
@@ -95,6 +98,29 @@ export function CardOportunidade({
           </Badge>
         )}
       </div>
+
+      {/* Origem do lead + ha quanto tempo a oportunidade existe (mockup). */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+          <span className={cn('size-1.5 shrink-0 rounded-full', corOrigem(oportunidade.origem))} />
+          {rotuloOrigem(oportunidade.origem)}
+        </span>
+        <span
+          className="flex shrink-0 items-center gap-1 text-[10px] tabular-nums text-muted-foreground"
+          title="Tempo desde a criacao"
+        >
+          <Clock className="size-3" />
+          {tempoRelativoCurto(oportunidade.createdAt)}
+        </span>
+      </div>
+
+      {/* Aviso do mockup: aberta ha +7d sem nenhuma tarefa concluida. */}
+      {oportunidade.semContato && (
+        <p className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600">
+          <AlertTriangle className="size-3 shrink-0" />
+          Nao contatado
+        </p>
+      )}
 
       <div className="space-y-1 text-xs text-muted-foreground">
         {oportunidade.empresaNome && (
