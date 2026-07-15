@@ -144,7 +144,7 @@ export function TarefasQuadro({
         </div>
 
         <Button asChild>
-          <Link href={`/tarefas/nova?data=${dados.inicio}`}>
+          <Link href={`/tarefas/nova?data=${dados.hoje}`}>
             <Plus className="size-4" />
             Nova Tarefa
           </Link>
@@ -266,7 +266,7 @@ export function TarefasQuadro({
             Ajuste o intervalo de datas acima ou crie a primeira tarefa deste período.
           </p>
           <Button asChild>
-            <Link href={`/tarefas/nova?data=${dados.inicio}`}>
+            <Link href={`/tarefas/nova?data=${dados.hoje}`}>
               <Plus className="size-4" />
               Nova Tarefa
             </Link>
@@ -300,7 +300,7 @@ export function TarefasQuadro({
                   size="sm"
                   className="mt-2 w-full justify-start text-muted-foreground"
                 >
-                  <Link href={`/tarefas/nova?status=${s}&data=${dados.inicio}`}>
+                  <Link href={`/tarefas/nova?status=${s}&data=${dados.hoje}`}>
                     <Plus className="size-4" />
                     Adicionar tarefa
                   </Link>

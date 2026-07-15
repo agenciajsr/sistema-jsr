@@ -246,12 +246,12 @@ describe('filtrarTarefas', () => {
 })
 
 describe('intervaloPadrao', () => {
-  it('hoje .. hoje+6 (D-01, os numeros exatos do mockup)', () => {
-    expect(intervaloPadrao('2026-07-14')).toEqual({ inicio: '2026-07-14', fim: '2026-07-20' })
+  it('hoje-30 .. hoje (FIX-2: termina em HOJE, nunca futuro por padrao)', () => {
+    expect(intervaloPadrao('2026-07-14')).toEqual({ inicio: '2026-06-14', fim: '2026-07-14' })
   })
 
   it('atravessa a virada de mes sem quebrar', () => {
-    expect(intervaloPadrao('2026-07-28')).toEqual({ inicio: '2026-07-28', fim: '2026-08-03' })
+    expect(intervaloPadrao('2026-07-28')).toEqual({ inicio: '2026-06-28', fim: '2026-07-28' })
   })
 })
 

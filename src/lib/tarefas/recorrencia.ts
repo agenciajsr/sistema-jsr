@@ -226,7 +226,7 @@ export function ocorrenciasFaltantes({
 }
 
 /** Quantos dias para trás a materialização olha (varredura de atrasadas). */
-const JANELA_PASSADO_DIAS = 30
+export const JANELA_PASSADO_DIAS = 30
 /** TETO de dias para frente. Impede explosão de linhas se alguém navegar p/ 2030. */
 const JANELA_FUTURO_MAX_DIAS = 60
 

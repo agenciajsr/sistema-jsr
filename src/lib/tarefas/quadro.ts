@@ -12,6 +12,7 @@
 
 import {
   somaDias,
+  JANELA_PASSADO_DIAS,
   STATUS_LABEL,
   PRIORIDADE_LABEL,
   type TarefaStatus,
@@ -260,11 +261,13 @@ export function filtrarTarefas<T extends TarefaFiltravel>(tarefas: T[], filtro: 
 // --- Intervalo (D-01) ---
 
 /**
- * D-01: 7 dias começando em HOJE — NÃO é semana calendário.
- * O mockup mostra "14/07/2026 - 20/07/2026" e 14/07/2026 é uma terça.
+ * Intervalo PADRÃO do quadro: de hoje-30 (atrasadas) até HOJE — NUNCA futuro.
+ * FIX-2: terminar em HOJE impede que a série recorrente materialize ocorrências
+ * futuras só por abrir /tarefas. O futuro só aparece ao navegar explicitamente
+ * (params de/ate na URL). Ainda mostra as atrasadas dos últimos 30 dias.
  */
 export function intervaloPadrao(hoje: string): { inicio: string; fim: string } {
-  return { inicio: hoje, fim: somaDias(hoje, 6) }
+  return { inicio: somaDias(hoje, -JANELA_PASSADO_DIAS), fim: hoje }
 }
 
 /** 'YYYY-MM-DD' → 'dd/MM/yyyy', direto da string. Nunca via `new Date()`. */
