@@ -148,6 +148,7 @@ export function TarefaDetalhe({
   const [aba, setAba] = useState('detalhes')
 
   const [titulo, setTitulo] = useState(tarefa.titulo)
+  const [subtitulo, setSubtitulo] = useState(tarefa.subtitulo ?? '')
   const [descricao, setDescricao] = useState(tarefa.descricao ?? '')
   const [editandoDescricao, setEditandoDescricao] = useState(false)
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
@@ -650,8 +651,19 @@ export function TarefaDetalhe({
                     }
                     if (limpo !== tarefa.titulo) salvarCampo({ titulo: limpo })
                   }}
-                  className="h-auto border-0 px-0 text-[32px] leading-tight font-bold tracking-tight shadow-none focus-visible:ring-0"
+                  className="h-auto border-0 px-0 text-[36px] leading-tight font-bold tracking-tight shadow-none focus-visible:ring-0"
                   aria-label="Título da tarefa"
+                />
+                <Input
+                  value={subtitulo}
+                  onChange={(e) => setSubtitulo(e.target.value)}
+                  onBlur={() => {
+                    const limpo = subtitulo.trim()
+                    if (limpo !== (tarefa.subtitulo ?? '')) salvarCampo({ subtitulo: limpo })
+                  }}
+                  placeholder="Adicionar subtítulo..."
+                  aria-label="Subtítulo da tarefa"
+                  className="h-auto border-0 px-0 text-base text-muted-foreground shadow-none focus-visible:ring-0"
                 />
               </div>
 
@@ -771,7 +783,6 @@ export function TarefaDetalhe({
                 <div className="space-y-1.5 p-3">
                   <Label className="text-xs text-muted-foreground">Data de início</Label>
                   <div className="flex items-center gap-2">
-                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                     <Input
                       type="date"
                       defaultValue={tarefa.dataInicio ?? ''}
@@ -785,7 +796,6 @@ export function TarefaDetalhe({
                 <div className="space-y-1.5 p-3">
                   <Label className="text-xs text-muted-foreground">Prazo</Label>
                   <div className="flex items-center gap-2">
-                    <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                     <Input
                       type="date"
                       defaultValue={tarefa.data}
