@@ -12,7 +12,7 @@ export default function RelatoriosPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Relatórios</h1>
         <p className="text-sm text-muted-foreground">
-          Relatório semanal por cliente, pronto para copiar e enviar no WhatsApp.
+          Relatórios configuráveis (semanais ou mensais) por cliente, prontos para copiar e enviar no WhatsApp.
         </p>
       </div>
 
