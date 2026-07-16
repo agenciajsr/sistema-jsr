@@ -70,6 +70,17 @@ export const contratos = pgTable('contratos', {
   dataInicio: date('data_inicio').notNull(),
   dataVencimento: date('data_vencimento').notNull(),
   valorMensal: numeric('valor_mensal', { precision: 10, scale: 2 }).notNull(), // NUNCA float/real para dinheiro
+  // --- Fluxo de coleta de dados (Fase 4 Parte 1) — TUDO nullable: contratos
+  // antigos (cadastrados na mão) não têm token nem fluxo. status_fluxo é text
+  // (NÃO pgEnum) de propósito: a Parte 2 (PDF + Autentique) adiciona estados
+  // sem migration de enum. Valores: 'aguardando_dados' | 'dados_recebidos' |
+  // 'aguardando_assinatura' | 'assinado' (união TS em src/lib/contratos/fluxo.ts).
+  token: text('token').unique(), // link público /contrato/[token]
+  statusFluxo: text('status_fluxo'),
+  duracaoMeses: integer('duracao_meses'),
+  servico: text('servico'), // chave de SERVICOS_JSR (src/lib/crm/servicos.ts)
+  dadosContratante: jsonb('dados_contratante'), // PJ/PF preenchido pelo cliente
+  dadosRecebidosEm: timestamp('dados_recebidos_em', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   clienteIdx: index('contratos_cliente_id_idx').on(table.clienteId, table.dataInicio),

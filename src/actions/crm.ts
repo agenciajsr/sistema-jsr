@@ -1,11 +1,14 @@
 'use server'
 
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+
+import { z } from 'zod'
 
 import { db } from '@/lib/db'
 import {
   clientes,
+  contratos,
   crmEmpresas,
   crmContatos,
   crmPipelines,
@@ -17,6 +20,9 @@ import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
+import { montarDadosContrato, gerarToken } from '@/lib/contratos/fluxo'
+import { SERVICOS_KEYS } from '@/lib/crm/servicos'
+import { hojeBrasilia } from '@/lib/date-br'
 import {
   pipelineSchema,
   etapaSchema,
@@ -653,13 +659,34 @@ export async function ganharOportunidade(id: string, opts?: { criarCliente?: boo
  *  (b) contato.clienteId preenchido (o lead já converteu em outro negócio);
  *  (c) empresa.clienteId preenchido (a empresa já é cliente).
  * Em (b)/(c) só VINCULA o id existente onde faltar e retorna jaExistia: true.
+ *
+ * Fase 4 Parte 1: além do cliente, cria um CONTRATO 'aguardando_dados' com
+ * token único (link público /contrato/[token]) usando duração/serviço/
+ * mensalidade coletados no dialog. valorMensal alimenta o MRR existente do
+ * /financeiro. Degradação graciosa: se a migration 0029 não foi aplicada, a
+ * conversão SEGUE sem contrato (contratoToken ausente no retorno).
  */
-export async function converterOportunidadeEmCliente(oportunidadeId: string) {
+
+const dadosContratoSchema = z.object({
+  duracaoMeses: z.union([z.literal(3), z.literal(6)]),
+  servico: z.enum(SERVICOS_KEYS),
+  mensalidade: z.coerce.number().positive('Informe a mensalidade.'),
+})
+
+export type DadosContratoConversao = z.infer<typeof dadosContratoSchema>
+
+export async function converterOportunidadeEmCliente(
+  oportunidadeId: string,
+  dadosContrato: DadosContratoConversao
+) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
 
   const workspace = await getWorkspaceAtual()
   if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  const parsedContrato = dadosContratoSchema.safeParse(dadosContrato)
+  if (!parsedContrato.success) return { error: primeiroErro(parsedContrato.error) }
 
   try {
     const [oportunidade] = await db
@@ -685,7 +712,11 @@ export async function converterOportunidadeEmCliente(oportunidadeId: string) {
 
     // (a) a própria oportunidade já converteu.
     if (oportunidade.clienteId) {
-      return { data: { clienteId: oportunidade.clienteId, jaExistia: true } }
+      const contratoToken = await criarOuReaproveitarContrato(
+        oportunidade.clienteId,
+        parsedContrato.data
+      )
+      return { data: { clienteId: oportunidade.clienteId, jaExistia: true, contratoToken } }
     }
 
     // Queries SEQUENCIAIS de propósito (pool max=3) — nunca Promise.all.
@@ -741,9 +772,11 @@ export async function converterOportunidadeEmCliente(oportunidadeId: string) {
         oportunidadeId: oportunidade.id,
         detalhe: 'Vinculado a cliente existente da carteira',
       })
+      const contratoToken = await criarOuReaproveitarContrato(existente, parsedContrato.data)
       revalidatePath('/crm')
       revalidatePath('/clientes')
-      return { data: { clienteId: existente, jaExistia: true } }
+      revalidatePath('/contratos')
+      return { data: { clienteId: existente, jaExistia: true, contratoToken } }
     }
 
     // Caso novo: cria o cliente com os dados do lead.
@@ -760,12 +793,66 @@ export async function converterOportunidadeEmCliente(oportunidadeId: string) {
       detalhe: 'Convertido em cliente da carteira',
     })
 
+    const contratoToken = await criarOuReaproveitarContrato(clienteNovo.id, parsedContrato.data)
+
     revalidatePath('/crm')
     revalidatePath('/clientes')
-    return { data: { clienteId: clienteNovo.id, jaExistia: false } }
+    revalidatePath('/contratos')
+    return { data: { clienteId: clienteNovo.id, jaExistia: false, contratoToken } }
   } catch (e) {
     console.error('[converterOportunidadeEmCliente]', e)
     return { error: 'Nao foi possivel converter o negocio em cliente.' }
+  }
+}
+
+/**
+ * Cria o contrato 'aguardando_dados' da conversão — ou REAPROVEITA o token se
+ * o cliente já tem contrato do fluxo (idempotência: reconverter nunca duplica
+ * contrato). Queries SEQUENCIAIS. Degradação graciosa: se as colunas da
+ * migration 0029 não existirem ainda, loga console.warn e retorna null — a
+ * conversão segue sem contrato (padrão da Fase 3). NÃO exportada.
+ */
+async function criarOuReaproveitarContrato(
+  clienteId: string,
+  dados: DadosContratoConversao
+): Promise<string | null> {
+  try {
+    const [existente] = await db
+      .select({ token: contratos.token })
+      .from(contratos)
+      .where(
+        and(
+          eq(contratos.clienteId, clienteId),
+          isNotNull(contratos.token),
+          isNotNull(contratos.statusFluxo)
+        )
+      )
+      .orderBy(desc(contratos.createdAt))
+      .limit(1)
+    if (existente?.token) return existente.token
+
+    const { dataInicio, dataVencimento, valorMensal } = montarDadosContrato({
+      duracaoMeses: dados.duracaoMeses,
+      mensalidade: dados.mensalidade,
+      hoje: hojeBrasilia(),
+    })
+    const token = gerarToken()
+    await db.insert(contratos).values({
+      clienteId,
+      dataInicio,
+      dataVencimento,
+      valorMensal,
+      token,
+      statusFluxo: 'aguardando_dados',
+      duracaoMeses: dados.duracaoMeses,
+      servico: dados.servico,
+    })
+    return token
+  } catch (e) {
+    // Migration 0029 pendente (colunas token/status_fluxo ausentes): a
+    // conversão funciona sem contrato; o fluxo chega quando ela for aplicada.
+    console.warn('[criarOuReaproveitarContrato] falha ao criar contrato (migration 0029 pendente?)', e)
+    return null
   }
 }
 
