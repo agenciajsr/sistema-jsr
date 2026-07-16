@@ -81,6 +81,11 @@ export const contratos = pgTable('contratos', {
   servico: text('servico'), // chave de SERVICOS_JSR (src/lib/crm/servicos.ts)
   dadosContratante: jsonb('dados_contratante'), // PJ/PF preenchido pelo cliente
   dadosRecebidosEm: timestamp('dados_recebidos_em', { withTimezone: true }),
+  // --- Assinatura eletrônica (Fase 4 Parte 2) — TUDO nullable (migration 0030).
+  tipoDocumento: text('tipo_documento'), // nulo exibe "Contrato" na UI
+  autentiqueDocumentoId: text('autentique_documento_id'),
+  enviadoParaAssinaturaEm: timestamp('enviado_para_assinatura_em', { withTimezone: true }),
+  assinadoEm: timestamp('assinado_em', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   clienteIdx: index('contratos_cliente_id_idx').on(table.clienteId, table.dataInicio),

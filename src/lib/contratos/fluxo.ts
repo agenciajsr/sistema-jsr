@@ -50,6 +50,14 @@ export function badgeStatusFluxo(status: string | null | undefined): string {
   return STATUS_FLUXO[status as StatusFluxo]?.badge ?? BADGE_LEGADO
 }
 
+/** Rótulo do tipo de documento; nulo → 'Contrato'; desconhecido → capitalizado. */
+export function rotuloTipoDocumento(tipo: string | null | undefined): string {
+  if (!tipo) return 'Contrato'
+  if (tipo === 'aditivo') return 'Aditivo'
+  if (tipo === 'contrato') return 'Contrato'
+  return tipo.charAt(0).toUpperCase() + tipo.slice(1)
+}
+
 /** Formata uma Date local como 'YYYY-MM-DD' sem passar por UTC. */
 function formatarIsoLocal(data: Date): string {
   const ano = data.getFullYear()
