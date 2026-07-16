@@ -29,18 +29,33 @@ const MUTATION_CRIAR = `
   }
 `
 
+/** Posição do carimbo de assinatura (API v2: x/y em % da página como String, z = página 1-based). */
+export type PosicaoAssinatura = {
+  x: string
+  y: string
+  z: number
+  element: 'SIGNATURE'
+}
+
+export type SignatarioInput = {
+  email: string
+  nome: string
+  positions?: PosicaoAssinatura[]
+}
+
 /**
- * Cria um documento na Autentique com o PDF anexado e um signatário (o
- * contratante). A Autentique envia o e-mail de assinatura automaticamente.
+ * Cria um documento na Autentique com o PDF anexado e N signatários (todos com
+ * action SIGN). A Autentique envia os e-mails de assinatura automaticamente.
+ * `positions` (opcional) posiciona o carimbo de cada signatário na página.
  */
 export async function criarDocumento({
   nome,
   pdf,
-  signatario,
+  signatarios,
 }: {
   nome: string
   pdf: Buffer
-  signatario: { email: string; nome: string }
+  signatarios: SignatarioInput[]
 }): Promise<{ id: string }> {
   const token = obterToken()
 
@@ -48,7 +63,12 @@ export async function criarDocumento({
     query: MUTATION_CRIAR,
     variables: {
       document: { name: nome },
-      signers: [{ email: signatario.email, action: 'SIGN', name: signatario.nome }],
+      signers: signatarios.map((s) => ({
+        email: s.email,
+        action: 'SIGN',
+        name: s.nome,
+        ...(s.positions ? { positions: s.positions } : {}),
+      })),
       file: null,
     },
   })

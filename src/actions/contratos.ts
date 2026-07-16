@@ -14,7 +14,7 @@ import {
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { selecionarContratoAtual, type ContratoRow } from '@/lib/contratos/current'
 import { montarVariaveisContrato } from '@/lib/contratos/variaveis'
-import { gerarPdfContrato } from '@/lib/contratos/pdf'
+import { gerarPdfContrato, contarPaginasPdf, POSICAO_ASSINATURA } from '@/lib/contratos/pdf'
 import { confirmarAssinatura } from '@/lib/contratos/assinatura'
 import {
   criarDocumento,
@@ -24,6 +24,12 @@ import {
 import { requireAdmin, getCurrentUser } from '@/lib/auth/session'
 
 const ERRO_TOKEN_AUTENTIQUE = 'Configure o token da Autentique (AUTENTIQUE_API_KEY na Vercel).'
+
+// Conta do dono na Autentique — segundo signatário de TODO contrato. O
+// documento só vira "assinado" (e o cliente só ativa) quando AMBOS assinarem
+// (consultarDocumento exige todas as entradas action SIGN assinadas).
+const DONO_EMAIL = 'jacsonribeiiro@gmail.com'
+const DONO_NOME = 'Jacson Silva Ribeiro'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
 
@@ -175,10 +181,23 @@ export async function enviarParaAssinatura(contratoId: string) {
     if ('error' in vars) return { error: vars.error }
 
     const pdf = await gerarPdfContrato(vars.data)
+    // A página de assinaturas é sempre a ÚLTIMA do PDF gerado.
+    const ultimaPagina = contarPaginasPdf(pdf)
     const documento = await criarDocumento({
       nome: `Contrato JSR — ${row.clienteNome}`,
       pdf,
-      signatario: { email: vars.data.emailSignatario, nome: vars.data.nomeSignatario },
+      signatarios: [
+        {
+          email: vars.data.emailSignatario,
+          nome: vars.data.nomeSignatario,
+          positions: [{ ...POSICAO_ASSINATURA.contratante, z: ultimaPagina, element: 'SIGNATURE' }],
+        },
+        {
+          email: DONO_EMAIL,
+          nome: DONO_NOME,
+          positions: [{ ...POSICAO_ASSINATURA.contratado, z: ultimaPagina, element: 'SIGNATURE' }],
+        },
+      ],
     })
 
     await db
