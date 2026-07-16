@@ -2,13 +2,17 @@
 // o formato do leadEntradaSchema. Módulo PURO (sem db/rede) e testável.
 //
 // Motivação: o formulário do Elementor (WordPress) NÃO manda JSON — manda
-// form-data com nomes de campo próprios (e, com "Advanced Data" ligado, uma
-// estrutura aninhada com título + valor de cada campo). Este módulo aceita:
-//   - JSON já no nosso formato ({ fonte, nome, telefone, ... })
-//   - Elementor "Advanced Data OFF": form_fields[<id>] / fields[<id>]
-//   - Elementor "Advanced Data ON": fields[<id>][title] + fields[<id>][value]
-// e sempre preserva TUDO em `extra.respostas` (pergunta→resposta) + `extra.raw`,
-// pra nada se perder (respostas qualificadoras aparecem no card depois).
+// form-data. Com "Advanced Data" ligado, cada campo vem como um grupo aninhado:
+//   fields[<id>][title] = "Seu Nome"     (rótulo/pergunta)
+//   fields[<id>][value] = "João"         (resposta)
+//   fields[<id>][type]  = "text|tel|email|select|step|hidden"
+// Além dos campos, o Elementor manda metadados (form[...], meta[...]) e campos
+// ocultos de UTM (utm_source/medium/campaign/content/term). Este módulo:
+//   - mapeia nome/telefone/email por heurística de rótulo;
+//   - separa UTM em extra.utm (para a aba de Rastreamento);
+//   - guarda as demais perguntas em extra.respostas (pergunta→resposta) para o card;
+//   - preserva o payload cru em extra.raw.
+// Aceita também JSON já no nosso formato ({ fonte, nome, telefone, ... }).
 
 import { FONTES_LEAD } from '@/lib/validations/crm'
 
@@ -20,17 +24,27 @@ export type EntradaNormalizada = {
   email?: string
   telefone?: string
   empresa?: string
-  extra: { respostas: ParPergunta[]; raw: Record<string, string> }
+  extra: {
+    respostas: ParPergunta[]
+    utm: Record<string, string>
+    raw: Record<string, string>
+  }
 }
 
-// Chaves de metadados do Elementor/webhook que NÃO são respostas do lead.
-const RUIDO = /^(form_id|form_name|form|page_url|page_title|remote_ip|user_agent|date|referrer|queried_id|meta|token|fonte|_.*)$|url$|_id$|_ip$|agent$/i
+type Campo = { id: string; label: string; value: string; type?: string }
 
-// Heurísticas de mapeamento por rótulo/chave do campo.
-const RE_NOME = /(^|[^a-z])(nome|name)([^a-z]|$)/i
-const RE_TELEFONE = /(whats|telefone|phone|celular|fone|tel)/i
-const RE_EMAIL = /(mail)/i
-const RE_EMPRESA = /(empresa|clinica|clínica|negocio|negócio|company)/i
+const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']
+
+// Metadados de webhook que NÃO são resposta do lead (para chaves escalares/JSON).
+const RUIDO = /^(token|fonte|form_id|form_name|page_url|page_title|remote_ip|user_agent|date|referrer|queried_id)$/i
+
+// Heurísticas de mapeamento por rótulo do campo.
+const RE_NOME = /(^|[^a-zà-ú])(nome|name)([^a-zà-ú]|$)/i
+const RE_TELEFONE = /(whats|telefone|phone|celular|fone|\btel\b)/i
+const RE_EMAIL = /mail/i
+// Empresa: conservador de propósito — NÃO casar "clínica" (aparece em várias
+// perguntas qualificadoras: "faturamento da sua clínica", "agenda da clínica"...).
+const RE_EMPRESA = /(nome da empresa|raz[aã]o social|\bempresa\b|company)/i
 const RE_EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function ehFonteValida(v: unknown): v is (typeof FONTES_LEAD)[number] {
@@ -38,53 +52,69 @@ function ehFonteValida(v: unknown): v is (typeof FONTES_LEAD)[number] {
 }
 
 /**
- * Extrai pares pergunta→resposta de um mapa cru de chaves/valores, entendendo as
- * três formas (JSON simples, Elementor flat e Elementor aninhado com título).
+ * Extrai os CAMPOS reais do formulário (ignorando estrutura form[...]/meta[...] e
+ * separadores de passo) e coleta os UTM à parte. Entende tanto o Elementor
+ * aninhado (fields[id][title|value|type]) quanto o flat (form_fields[id]/fields[id])
+ * e chaves escalares de JSON.
  */
-function extrairPares(raw: Record<string, string>): ParPergunta[] {
-  const grupos = new Map<string, { title?: string; value?: string }>()
-  const pares: ParPergunta[] = []
+function coletarCampos(raw: Record<string, string>): { campos: Campo[]; utm: Record<string, string> } {
+  const grupos = new Map<string, { title?: string; value?: string; rawValue?: string; type?: string }>()
+  const flat: Campo[] = []
+  const utm: Record<string, string> = {}
+
+  const registrarUtmOuFlat = (id: string, valor: string) => {
+    if (UTM_KEYS.includes(id)) {
+      if (valor.trim() !== '') utm[id] = valor
+    } else {
+      flat.push({ id, label: id, value: valor })
+    }
+  }
 
   for (const [chave, valor] of Object.entries(raw)) {
-    // Elementor "Advanced Data": <prefixo>[title] / <prefixo>[value] / <prefixo>[raw_value]
-    const m = chave.match(/^(.*)\[(title|value|raw_value)\]$/)
+    // Estrutura/metadados do Elementor — descarta.
+    if (chave.startsWith('form[') || chave.startsWith('meta[')) continue
+
+    // Aninhado: fields[<id>][leaf]
+    const m = chave.match(/^fields\[([^\]]+)\]\[(title|value|raw_value|type|id|required)\]$/)
     if (m) {
-      const [, prefixo, leaf] = m
-      const g = grupos.get(prefixo) ?? {}
+      const [, id, leaf] = m
+      const g = grupos.get(id) ?? {}
       if (leaf === 'title') g.title = valor
-      else if (g.value === undefined) g.value = valor // value tem prioridade sobre raw_value
-      grupos.set(prefixo, g)
+      else if (leaf === 'value') g.value = valor
+      else if (leaf === 'raw_value') g.rawValue = valor
+      else if (leaf === 'type') g.type = valor
+      grupos.set(id, g)
       continue
     }
 
-    // Elementor flat: form_fields[<id>] / fields[<id>]  -> rótulo = id
+    // Flat: form_fields[<id>] ou fields[<id>]
     const f = chave.match(/^(?:form_fields|fields)\[([^\]]+)\]$/)
     if (f) {
-      pares.push({ pergunta: f[1], resposta: valor })
+      registrarUtmOuFlat(f[1], valor)
       continue
     }
 
-    // JSON simples / chave escalar comum (ignora metadados de webhook).
-    if (!RUIDO.test(chave)) {
-      pares.push({ pergunta: chave, resposta: valor })
+    // JSON/escalar simples (ignora metadados conhecidos).
+    if (!RUIDO.test(chave)) registrarUtmOuFlat(chave, valor)
+  }
+
+  const campos: Campo[] = [...flat]
+  for (const [id, g] of grupos) {
+    if (g.type === 'step') continue // separador de multi-step — não é campo
+    const value = g.value ?? g.rawValue ?? ''
+    if (UTM_KEYS.includes(id)) {
+      if (value.trim() !== '') utm[id] = value
+      continue
     }
+    campos.push({ id, label: (g.title || '').trim() || id, value, type: g.type })
   }
 
-  for (const [prefixo, g] of grupos) {
-    // rótulo legível: título do campo (Advanced Data) ou o id extraído do prefixo.
-    const idBracket = prefixo.match(/\[([^\]]+)\]\s*$/)?.[1]
-    const rotulo = g.title || idBracket || prefixo
-    if (RUIDO.test(rotulo)) continue
-    pares.push({ pergunta: rotulo, resposta: g.value ?? '' })
-  }
-
-  return pares
+  return { campos, utm }
 }
 
-/** Acha o primeiro par cujo rótulo casa a heurística; remove-o dos "restantes". */
-function acharPorRotulo(pares: ParPergunta[], re: RegExp): string | undefined {
-  const p = pares.find((x) => re.test(x.pergunta) && x.resposta.trim() !== '')
-  return p?.resposta.trim() || undefined
+/** Acha o 1º campo cujo rótulo casa a heurística e tem valor; devolve o Campo. */
+function acharCampo(campos: Campo[], re: RegExp): Campo | undefined {
+  return campos.find((c) => re.test(c.label) && c.value.trim() !== '')
 }
 
 /**
@@ -93,30 +123,38 @@ function acharPorRotulo(pares: ParPergunta[], re: RegExp): string | undefined {
  * (nome cai em telefone/email/"Lead sem nome" quando não há campo de nome).
  */
 export function normalizarLeadEntrada(raw: Record<string, unknown>): EntradaNormalizada {
-  // Achata tudo para string (form-data já é string; JSON pode ter números/bools).
   const plano: Record<string, string> = {}
   for (const [k, v] of Object.entries(raw)) {
     if (v === null || v === undefined) continue
     plano[k] = typeof v === 'string' ? v : String(v)
   }
 
-  const pares = extrairPares(plano)
+  const { campos, utm } = coletarCampos(plano)
 
-  const nome = acharPorRotulo(pares, RE_NOME)
-  const telefone = acharPorRotulo(pares, RE_TELEFONE)
-  const emailBruto = acharPorRotulo(pares, RE_EMAIL)
+  const campoNome = acharCampo(campos, RE_NOME)
+  const campoTelefone = acharCampo(campos, RE_TELEFONE)
+  const campoEmail = acharCampo(campos, RE_EMAIL)
+  const campoEmpresa = acharCampo(campos, RE_EMPRESA)
+
+  const emailBruto = campoEmail?.value.trim()
   const email = emailBruto && RE_EMAIL_VALIDO.test(emailBruto) ? emailBruto : undefined
-  const empresa = acharPorRotulo(pares, RE_EMPRESA)
+  const telefone = campoTelefone?.value.trim() || undefined
+  const empresa = campoEmpresa?.value.trim() || undefined
 
-  // fonte: respeita a explícita (se válida), senão assume landing_page (é uma landing).
+  // Campos já usados como básicos não repetem nas "respostas".
+  const usados = new Set([campoNome, campoTelefone, campoEmail, campoEmpresa].filter(Boolean))
+  const respostas: ParPergunta[] = campos
+    .filter((c) => !usados.has(c) && c.value.trim() !== '' && c.label.trim() !== '')
+    .map((c) => ({ pergunta: c.label, resposta: c.value }))
+
   const fonte = ehFonteValida(raw.fonte) ? raw.fonte : 'landing_page'
 
   return {
     fonte,
-    nome: nome || telefone || email || 'Lead sem nome',
+    nome: campoNome?.value.trim() || telefone || email || 'Lead sem nome',
     email,
     telefone,
     empresa,
-    extra: { respostas: pares, raw: plano },
+    extra: { respostas, utm, raw: plano },
   }
 }
