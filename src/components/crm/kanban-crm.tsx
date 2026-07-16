@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { CardOportunidade } from '@/components/crm/card-oportunidade'
 import { ConverterClienteDialog } from '@/components/crm/converter-cliente-dialog'
 import { FichaLead } from '@/components/crm/ficha-lead'
+import { MotivoPerdaDialog } from '@/components/crm/motivo-perda-dialog'
 import type { ColunaFechada, ColunaKanban, OportunidadeCard } from '@/lib/crm/dados'
 
 // Board do CRM (D-04/D-05/D-07): as 6 etapas do banco + Ganho e Perdido como
@@ -136,6 +137,11 @@ export function KanbanCrm({
   // Card recém-GANHO aguardando a oferta "Converter em cliente?" (Fase 3 do
   // funil). null = dialog fechado. Cancelar NÃO desfaz o ganho.
   const [conversaoPendente, setConversaoPendente] = useState<OportunidadeCard | null>(null)
+  // Card arrastado para Perdido aguardando o motivo no MotivoPerdaDialog
+  // (quick 260716-khp). Nada é movido/persistido antes da confirmação —
+  // cancelar deixa o card exatamente onde estava (mesmo contrato do antigo
+  // prompt nativo que este dialog substituiu).
+  const [pendentePerda, setPendentePerda] = useState<{ id: string; nome: string } | null>(null)
 
   // RESSINCRONIZACAO com o servidor: o movimento otimista pinta o quadro na
   // hora e o router.refresh() traz a verdade depois — sem isto o board ficaria
@@ -183,27 +189,23 @@ export function KanbanCrm({
     const origem = achado.colunaId
     if (origem === destino) return // no-op: soltou na propria coluna
 
-    // Perder EXIGE motivo. Perguntamos ANTES de mexer no quadro: cancelar aqui
-    // nao pode deixar o card movido na tela nem chamar action nenhuma.
-    let motivo: string | null = null
+    // Perder EXIGE motivo padronizado. NADA acontece antes da confirmação no
+    // MotivoPerdaDialog — nem update otimista, nem action. Cancelar o dialog
+    // deixa o card exatamente onde estava.
     if (destino === PERDIDO) {
-      motivo = window.prompt('Qual o motivo da perda?')
-      if (motivo === null || !motivo.trim()) {
-        if (motivo !== null) toast.error('Informe o motivo da perda.')
-        return
-      }
+      setPendentePerda({ id, nome: achado.card.titulo })
+      return
     }
 
     // (1) guarda o estado anterior (rollback) e move na hora.
     const anterior = quadro
-    const status: OportunidadeCard['status'] =
-      destino === GANHO ? 'ganha' : destino === PERDIDO ? 'perdida' : 'aberta'
+    const status: OportunidadeCard['status'] = destino === GANHO ? 'ganha' : 'aberta'
     const cardMovido: OportunidadeCard = {
       ...achado.card,
       status,
       // etapaId so muda quando o destino e uma etapa DE VERDADE.
-      etapaId: destino === GANHO || destino === PERDIDO ? achado.card.etapaId : destino,
-      motivoPerda: destino === PERDIDO ? motivo : null,
+      etapaId: destino === GANHO ? achado.card.etapaId : destino,
+      motivoPerda: null,
     }
     setQuadro({
       ...quadro,
@@ -217,8 +219,6 @@ export function KanbanCrm({
 
     if (destino === GANHO) {
       result = await moverParaGanho(id)
-    } else if (destino === PERDIDO) {
-      result = await moverParaPerdido(id, motivo as string)
     } else if (eraFechado) {
       // Voltar de Ganho/Perdido para uma etapa = REABRIR e so entao mover.
       // Sequencial de proposito (pool max=3): nunca Promise.all.
@@ -236,13 +236,7 @@ export function KanbanCrm({
     }
 
     toast.success(
-      destino === GANHO
-        ? 'Negocio ganho.'
-        : destino === PERDIDO
-          ? 'Negocio marcado como perdido.'
-          : eraFechado
-            ? 'Negocio reaberto.'
-            : 'Negocio movido.',
+      destino === GANHO ? 'Negocio ganho.' : eraFechado ? 'Negocio reaberto.' : 'Negocio movido.',
     )
 
     // Ganho confirmado no servidor → oferece a conversão em cliente. Só quando
@@ -251,6 +245,39 @@ export function KanbanCrm({
     if (destino === GANHO && !cardMovido.clienteId) {
       setConversaoPendente(cardMovido)
     }
+    router.refresh()
+  }
+
+  // Efetiva a perda DEPOIS do motivo confirmado no dialog: mesmo fluxo
+  // otimista dos outros destinos (guardar anterior → mover → action →
+  // rollback em erro). Re-localiza o card no momento da confirmação — o
+  // quadro pode ter mudado enquanto o dialog estava aberto.
+  async function confirmarPerda(motivo: string) {
+    if (!pendentePerda) return
+    const { id } = pendentePerda
+    const achado = acharCard(id)
+    if (!achado) return // card sumiu do quadro — nada a fazer
+
+    const anterior = quadro
+    const cardMovido: OportunidadeCard = {
+      ...achado.card,
+      status: 'perdida',
+      motivoPerda: motivo,
+    }
+    setQuadro({
+      ...quadro,
+      [achado.colunaId]: (quadro[achado.colunaId] ?? []).filter((c) => c.id !== id),
+      [PERDIDO]: [cardMovido, ...(quadro[PERDIDO] ?? [])],
+    })
+
+    const result = await moverParaPerdido(id, motivo)
+    if ('error' in result && result.error) {
+      setQuadro(anterior)
+      toast.error(result.error)
+      return
+    }
+
+    toast.success('Negocio marcado como perdido.')
     router.refresh()
   }
 
@@ -417,6 +444,17 @@ export function KanbanCrm({
         contatoId={contatoAberto}
         onOpenChange={(aberta) => {
           if (!aberta) setContatoAberto(null)
+        }}
+      />
+
+      {/* Motivo padronizado ao arrastar para Perdido (quick 260716-khp). */}
+      <MotivoPerdaDialog
+        open={!!pendentePerda}
+        nomeNegocio={pendentePerda?.nome}
+        onCancel={() => setPendentePerda(null)}
+        onConfirm={(motivo) => {
+          void confirmarPerda(motivo)
+          setPendentePerda(null)
         }}
       />
 
