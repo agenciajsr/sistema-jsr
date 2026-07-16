@@ -26,8 +26,9 @@
 | Captação (webhook) | ✅ Existe | `POST /api/crm/leads` (token `x-crm-token` = `CRM_LEADS_TOKEN`), valida com Zod (`leadEntradaSchema`), processa via `processarLead` (ingest). |
 | Guardar payload do lead | ✅ Existe | O ingest grava o lead inteiro (incl. campo livre `extra`) em `crm_contatos.origem_detalhe` (jsonb). **UTM e respostas de form já podem ser recebidas e persistidas hoje.** |
 | Origem do lead (cadastro manual) | ✅ Existe | Seletor no "Novo Lead", default `manual`. Opções: manual, whatsapp, landing_page, meta_lead_ad, indicacao, outro. |
-| Rastreamento UTM no card | ❌ Falta UI | Dado pode chegar; falta a ABA "Rastreamento" no card + estrutura clara (campanha/conjunto/anúncio). |
-| Respostas do form no card | ❌ Falta UI | Idem — falta exibir as respostas qualificadoras no card. |
+| Rastreamento UTM no card | ✅ Feito | Seção "Rastreamento" no card lê `origem_detalhe.extra.utm` (utm_source/medium/campaign/content/term). O form da landing já manda os UTM como campos ocultos. |
+| Respostas do form no card | ✅ Feito | Seção "Respostas do formulário" no card lê `origem_detalhe.extra.respostas` (pergunta→resposta das qualificadoras). |
+| Landing (Elementor) → CRM | ✅ Ligado e testado | Webhook direto (sem Make): `/api/crm/leads?token=...`; endpoint entende form-data do Elementor e mapeia nome/whats/email + guarda respostas e UTM. |
 | CRM (etapas, proposta, ganho) | ✅ Existe | Pipeline, etapas, Ganho/Perdido. |
 | Agendamento → Google Agenda | 🟡 Construído, não ligado | OAuth 2-vias + migration 0011 prontos; falta criar credenciais no Google Cloud + deploy (ver memória `google-calendar-pendente-setup`). |
 | Ganho → virar Cliente | ❌ Falta | Sem automação lead ganho → ficha de cliente. |
@@ -103,3 +104,5 @@ O que varia é o **lado de quem ENVIA**:
 
 ## Log de decisões
 - 2026-07-16: criado o planejamento; **Fase 1 (Entrada do Lead) priorizada**. Confirmado que webhook de captação + persistência em `origem_detalhe` já existem — Fase 1 foca em EXIBIR (rastreamento + respostas no card), padronizar payload, expandir origens e conectar fontes.
+- 2026-07-16: **coração da Fase 1 ENTREGUE e testado em produção.** Landing (Elementor) ligada direto no `/api/crm/leads?token=` (sem Make); endpoint aceita token na URL + entende form-data do Elementor (Advanced Data ON); mapeia nome/whats/email, separa UTM e guarda as respostas qualificadoras; card do lead exibe "Respostas do formulário" + "Rastreamento". Lead de teste chegou completo (nome/whats/email + 7 respostas). Commits: 6369527, 5c12158, 7d49ffc.
+  - **Falta na Fase 1:** expandir taxonomia de origens (Prospecção fria, Instagram, Evento, Parceria); conectar Meta Lead Ads (nativo via token Meta OU Make) e a extensão de WhatsApp (aguardando payload do usuário).
