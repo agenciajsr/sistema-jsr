@@ -155,6 +155,11 @@ export default async function CampanhasPage({
           </div>
 
           <GradeKpis
+            // key = cliente: força remontar ao trocar de cliente. Sem isto o React
+            // reaproveita a instância, o useState inicial NÃO relê `preferencias` e a
+            // grade mostra as métricas do cliente anterior — e o salvamento otimista
+            // grava essa lista errada por cima do cliente atual (bug real, 15/jul/2026).
+            key={cliente}
             totaisAtual={painel.totaisAtual}
             totaisAnterior={painel.totaisAnterior}
             preferencias={preferencias?.kpis ?? null}
@@ -172,6 +177,9 @@ export default async function CampanhasPage({
 
           {painel.campanhas.length > 0 && (
             <FunilConversao
+              // key = cliente: mesmo motivo da GradeKpis (etapas/campanhas do funil
+              // nascem de useState e vazariam do cliente anterior).
+              key={cliente}
               campanhas={painel.campanhas}
               funilSalvo={preferencias?.funil ?? null}
               clienteId={cliente}
