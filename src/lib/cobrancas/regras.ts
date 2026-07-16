@@ -2,6 +2,18 @@
 // tudo recebe e devolve strings 'YYYY-MM-DD' / 'YYYY-MM' (fuso BR resolvido
 // pelo chamador via hojeBrasilia()). Testado em regras.test.ts.
 
+/** Modo de cobrança por cliente (0033). */
+export type ModoCobranca = 'automatico_asaas' | 'manual_pix'
+
+/**
+ * true SOMENTE se o cliente está explicitamente em modo automático via Asaas.
+ * Qualquer outro valor (manual_pix, nulo, legado desconhecido) → false:
+ * nunca cobrar taxa do Asaas por engano.
+ */
+export function deveUsarAsaas(cliente: { modoCobranca: string | null }): boolean {
+  return cliente.modoCobranca === 'automatico_asaas'
+}
+
 /** Extrai a competência 'YYYY-MM' de uma data 'YYYY-MM-DD'. */
 export function competenciaDe(dataIso: string): string {
   return dataIso.slice(0, 7)

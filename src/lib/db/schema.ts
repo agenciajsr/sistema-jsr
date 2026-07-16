@@ -27,7 +27,10 @@ export const clientes = pgTable('clientes', {
   contatoTelefone: text('contato_telefone'),
   contatoEmail: text('contato_email'),
   notas: text('notas'),
+  /** DEPRECIADA (0033) — substituída por modoCobranca. Mantida só para não quebrar código antigo. */
   usaAsaas: boolean('usa_asaas').notNull().default(false),
+  /** 'automatico_asaas' | 'manual_pix' — cliente manual NUNCA gera chamada ao Asaas. */
+  modoCobranca: text('modo_cobranca').notNull().default('manual_pix'),
   // Dados fiscais / pessoa
   tipoPessoa: tipoPessoaEnum('tipo_pessoa').default('juridica'),
   documento: text('documento'),

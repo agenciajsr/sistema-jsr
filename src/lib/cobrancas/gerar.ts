@@ -10,7 +10,12 @@ import { db } from '@/lib/db'
 import { clientes, cobrancas, contratos } from '@/lib/db/schema'
 import { asaasDisponivel, criarCliente, criarCobranca } from '@/lib/asaas/client'
 import { hojeBrasilia } from '@/lib/date-br'
-import { competenciasPendentes, contratoElegivel, dataVencimento } from '@/lib/cobrancas/regras'
+import {
+  competenciasPendentes,
+  contratoElegivel,
+  dataVencimento,
+  deveUsarAsaas,
+} from '@/lib/cobrancas/regras'
 
 /** Só dígitos — o Asaas espera cpfCnpj sem máscara. */
 function somenteDigitos(valor: string): string {
@@ -97,7 +102,7 @@ export async function gerarCobrancaDoMes(
 
   const cliente = await db.query.clientes.findFirst({
     where: eq(clientes.id, contrato.clienteId),
-    columns: { diaPagamento: true, nome: true },
+    columns: { diaPagamento: true, nome: true, modoCobranca: true },
   })
   if (!cliente) throw new Error('Cliente não encontrado.')
 
@@ -123,7 +128,9 @@ export async function gerarCobrancaDoMes(
     return { criada: false }
   }
 
-  if (!asaasDisponivel()) {
+  // Cliente em modo manual_pix NUNCA toca o Asaas: a fatura local nasce
+  // pendente sem invoiceUrl e é quitada pelo botão "Confirmar recebimento".
+  if (!asaasDisponivel() || !deveUsarAsaas(cliente)) {
     return { criada: true, cobrancaId: linha.id, invoiceUrl: null }
   }
 
@@ -148,6 +155,49 @@ export async function gerarCobrancaDoMes(
     )
     return { criada: true, cobrancaId: linha.id, invoiceUrl: null, avisoAsaas: mensagem }
   }
+}
+
+/**
+ * Backfill do Asaas em uma fatura JÁ existente (pendente/vencida, sem
+ * asaasPaymentId) de cliente automático: cria o payment lá e grava
+ * asaasPaymentId/invoiceUrl na MESMA linha — nunca duplica a fatura local.
+ * Lança erro pt-BR legível em qualquer impedimento.
+ */
+export async function retentarAsaasNaFatura(cobrancaId: string): Promise<string | null> {
+  const cobranca = await db.query.cobrancas.findFirst({ where: eq(cobrancas.id, cobrancaId) })
+  if (!cobranca) throw new Error('Fatura não encontrada.')
+  if (cobranca.asaasPaymentId) return cobranca.invoiceUrl
+  if (cobranca.status !== 'pendente' && cobranca.status !== 'vencida') {
+    throw new Error('Só é possível gerar link do Asaas para fatura pendente ou vencida.')
+  }
+  if (!asaasDisponivel()) {
+    throw new Error('Asaas não configurado — defina as variáveis de ambiente do Asaas.')
+  }
+
+  const cliente = await db.query.clientes.findFirst({
+    where: eq(clientes.id, cobranca.clienteId),
+    columns: { nome: true, modoCobranca: true },
+  })
+  if (!cliente) throw new Error('Cliente não encontrado.')
+  if (!deveUsarAsaas(cliente)) {
+    throw new Error(
+      'Este cliente está em cobrança manual (PIX direto) — não geramos cobrança no Asaas. Use "Confirmar recebimento" na ficha.',
+    )
+  }
+
+  const customerId = await garantirClienteAsaas(cobranca.clienteId)
+  const pagamento = await criarCobranca({
+    customer: customerId,
+    value: Number(cobranca.valor),
+    dueDate: cobranca.vencimento,
+    description: `Mensalidade ${cobranca.competencia} — ${cliente.nome}`,
+    externalReference: cobranca.id,
+  })
+  await db
+    .update(cobrancas)
+    .set({ asaasPaymentId: pagamento.id, invoiceUrl: pagamento.invoiceUrl, updatedAt: new Date() })
+    .where(eq(cobrancas.id, cobranca.id))
+  return pagamento.invoiceUrl
 }
 
 /**
