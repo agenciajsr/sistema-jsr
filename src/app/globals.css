@@ -129,6 +129,35 @@
 }
 
 .dark {
+  /* Cores CENTRAIS do tema escuro (faltavam — por isso só o menu escurecia e o
+     resto ficava claro/feio). Paleta neutra levemente azulada, estilo Linear/
+     Stripe, mantendo o azul da marca com brilho ajustado p/ contraste no escuro. */
+  --background: hsl(240 6% 8%);
+  --foreground: hsl(240 6% 90%);
+  --card: hsl(240 5% 12%);
+  --card-foreground: hsl(240 6% 90%);
+  --popover: hsl(240 5% 12%);
+  --popover-foreground: hsl(240 6% 90%);
+  --primary: #3d8ddb;
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(240 4% 16%);
+  --secondary-foreground: hsl(240 6% 90%);
+  --muted: hsl(240 4% 16%);
+  --muted-foreground: hsl(240 5% 65%);
+  --accent: hsl(240 4% 17%);
+  --accent-foreground: hsl(240 6% 95%);
+  --destructive: #ef4444;
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(240 4% 17%);
+  --input: hsl(240 4% 20%);
+  --ring: #3d8ddb;
+
+  /* Indicadores semânticos — variação mais clara p/ ler bem no fundo escuro */
+  --chart-success: #22c55e;
+  --chart-warning: #f59e0b;
+  --chart-danger: #ef4444;
+  --chart-info: #5aa3e0;
+
   --sidebar: hsl(240 5.9% 10%);
   --sidebar-foreground: hsl(240 4.8% 95.9%);
   --sidebar-primary: hsl(224.3 76.3% 48%);

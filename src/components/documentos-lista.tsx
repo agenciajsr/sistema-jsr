@@ -53,12 +53,12 @@ const CATEGORIA_LABEL: Record<string, string> = {
 }
 
 const CATEGORIA_COLOR: Record<string, string> = {
-  contrato: 'bg-blue-100 text-blue-700',
-  comprovante: 'bg-green-100 text-green-700',
-  briefing: 'bg-purple-100 text-purple-700',
-  criativo: 'bg-pink-100 text-pink-700',
-  relatorio: 'bg-amber-100 text-amber-700',
-  outro: 'bg-gray-100 text-gray-700',
+  contrato: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  comprovante: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  briefing: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+  criativo: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300',
+  relatorio: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  outro: 'bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-zinc-300',
 }
 
 export type DocumentoItem = {

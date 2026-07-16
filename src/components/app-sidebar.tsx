@@ -28,6 +28,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -46,24 +47,57 @@ type NavItem = {
   badge?: string
 }
 
-// Nav da referência, na mesma ordem da imagem aprovada.
-const nav: NavItem[] = [
-  { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
-  { title: 'Clientes', url: '/clientes', icon: Users },
-  { title: 'CRM', url: '/crm', icon: Target },
-  { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
-  { title: 'Verbas', url: '/verbas', icon: Banknote },
-  { title: 'Relatórios', url: '/relatorios', icon: FileText },
-  { title: 'Financeiro', url: '/financeiro', icon: Wallet, submenu: true },
-  { title: 'Contratos', url: '/contratos', icon: FileSignature },
-  { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
-  { title: 'Agenda', url: '/agenda', icon: CalendarDays },
-  // "Checklists" saiu do menu: o checklist agora vive DENTRO da tarefa (/tarefas).
-  { title: 'Documentos', url: '/documentos', icon: Folder },
-  { title: 'Equipe', url: '/equipe', icon: Users2 },
-  { title: 'Ferramentas', url: '/ferramentas', icon: Wrench },
-  { title: 'Integrações', url: '/integracoes', icon: Plug },
-  { title: 'Chat com IA', url: '/chat-ia', icon: Bot, badge: 'Beta' },
+type NavSecao = {
+  /** Título da seção (não é botão — só rótulo). Some no modo ícone. */
+  label: string
+  itens: NavItem[]
+}
+
+// Nav dividido por setor. Os títulos de seção são apenas rótulos (SidebarGroupLabel),
+// não navegam. Ordem/agrupamento aprovados com o usuário (15/jul/2026).
+const secoes: NavSecao[] = [
+  {
+    label: 'Principal',
+    itens: [{ title: 'Visão Geral', url: '/painel', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Comercial',
+    itens: [
+      { title: 'CRM', url: '/crm', icon: Target },
+      { title: 'Clientes', url: '/clientes', icon: Users },
+      { title: 'Contratos', url: '/contratos', icon: FileSignature },
+    ],
+  },
+  {
+    label: 'Tráfego & Performance',
+    itens: [
+      { title: 'Campanhas', url: '/campanhas', icon: Megaphone },
+      { title: 'Verbas', url: '/verbas', icon: Banknote },
+      { title: 'Relatórios', url: '/relatorios', icon: FileText },
+    ],
+  },
+  {
+    label: 'Financeiro',
+    itens: [{ title: 'Financeiro', url: '/financeiro', icon: Wallet, submenu: true }],
+  },
+  {
+    label: 'Operação',
+    itens: [
+      { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
+      { title: 'Agenda', url: '/agenda', icon: CalendarDays },
+      // "Checklists" saiu do menu: o checklist agora vive DENTRO da tarefa (/tarefas).
+      { title: 'Documentos', url: '/documentos', icon: Folder },
+    ],
+  },
+  {
+    label: 'Sistema',
+    itens: [
+      { title: 'Equipe', url: '/equipe', icon: Users2 },
+      { title: 'Integrações', url: '/integracoes', icon: Plug },
+      { title: 'Ferramentas', url: '/ferramentas', icon: Wrench },
+      { title: 'Chat com IA', url: '/chat-ia', icon: Bot, badge: 'Beta' },
+    ],
+  },
 ]
 
 export function AppSidebar({
@@ -96,35 +130,41 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {nav.map((item) => {
-                const active =
-                  pathname === item.url || pathname.startsWith(`${item.url}/`)
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
-                      <Link href={item.url}>
-                        <item.icon className="size-4" />
-                        <span>{item.title}</span>
-                        {item.submenu && (
-                          <ChevronDown className="ml-auto size-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                    {item.badge && (
-                      <SidebarMenuBadge className="bg-primary/10 text-primary">
-                        {item.badge}
-                      </SidebarMenuBadge>
-                    )}
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      {/* gap-0 + py-1 por grupo: seções compactas, sem barra de rolagem. */}
+      <SidebarContent className="gap-0">
+        {secoes.map((secao) => (
+          <SidebarGroup key={secao.label} className="py-1">
+            <SidebarGroupLabel className="h-6 text-[11px] uppercase tracking-wide">
+              {secao.label}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {secao.itens.map((item) => {
+                  const active =
+                    pathname === item.url || pathname.startsWith(`${item.url}/`)
+                  return (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
+                        <Link href={item.url}>
+                          <item.icon className="size-4" />
+                          <span>{item.title}</span>
+                          {item.submenu && (
+                            <ChevronDown className="ml-auto size-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                      {item.badge && (
+                        <SidebarMenuBadge className="bg-primary/10 text-primary">
+                          {item.badge}
+                        </SidebarMenuBadge>
+                      )}
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="gap-3">

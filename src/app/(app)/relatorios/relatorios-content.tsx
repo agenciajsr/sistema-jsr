@@ -253,7 +253,7 @@ export function RelatoriosContent() {
                             <span className="text-sm font-medium">{config.nome}</span>
                             <Badge
                               variant={config.ativo ? 'secondary' : 'outline'}
-                              className={config.ativo ? 'bg-green-100 text-green-800' : ''}
+                              className={config.ativo ? 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300' : ''}
                             >
                               {config.ativo ? 'Ativo' : 'Pausado'}
                             </Badge>

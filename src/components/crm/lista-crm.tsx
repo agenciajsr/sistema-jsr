@@ -48,10 +48,10 @@ export function ListaCrm({
 
   function etiquetaEtapa(o: OportunidadeCard) {
     if (o.status === 'ganha') {
-      return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Ganho</Badge>
+      return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/15">Ganho</Badge>
     }
     if (o.status === 'perdida') {
-      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Perdido</Badge>
+      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/15">Perdido</Badge>
     }
     const etapa = etapaPorId.get(o.etapaId)
     return <Badge variant="outline">{etapa?.nome ?? '—'}</Badge>
