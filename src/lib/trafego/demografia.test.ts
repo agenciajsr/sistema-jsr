@@ -4,6 +4,7 @@ import {
   deduplicarJanelaMaisRecente,
   agregarDemografia,
   rankingDeRegioes,
+  campanhasComRegiao,
   LIMIAR_COBERTURA_REGIAO,
   objetivoDaCampanha,
   type LinhaDemografiaBruta,
@@ -257,6 +258,38 @@ describe('rankingDeRegioes', () => {
     expect(ranking.linhas).toEqual([])
     expect(ranking.metrica).toBe('heroi')
     expect(ranking.motivo).toBe('heroi')
+  })
+
+  it('denominador deve cobrir SÓ as campanhas do breakdown: campanha ausente do breakdown não pode disparar fallback falso', () => {
+    // c1 veio no breakdown de região com cobertura total (10 de 10 leads).
+    // c2 NÃO veio no breakdown e carrega o grosso dos resultados (90 leads).
+    // Denominador da conta inteira (100) -> cobertura 10% -> 'sem-cobertura' (FALSO).
+    // Denominador só das campanhas do breakdown (10) -> cobertura 100% -> 'heroi' (correto).
+    const rows = [
+      linhaRegiao({ campaignId: 'c1', region: 'Sao Paulo', spend: '20.00', actions: [{ action_type: 'lead', value: '10' }] }),
+    ]
+
+    const comDenominadorDaContaInteira = rankingDeRegioes(rows, 'leads', 100)
+    expect(comDenominadorDaContaInteira.motivo).toBe('sem-cobertura')
+
+    const comDenominadorFiltrado = rankingDeRegioes(rows, 'leads', 10)
+    expect(comDenominadorFiltrado.metrica).toBe('heroi')
+    expect(comDenominadorFiltrado.motivo).toBe('heroi')
+  })
+})
+
+describe('campanhasComRegiao', () => {
+  it('devolve os campaignId únicos do breakdown — é o filtro do denominador da cobertura', () => {
+    const ids = campanhasComRegiao([
+      linhaRegiao({ campaignId: 'c1', region: 'Sao Paulo' }),
+      linhaRegiao({ campaignId: 'c1', region: 'Bahia' }),
+      linhaRegiao({ campaignId: 'c2', region: 'Sao Paulo' }),
+    ])
+    expect(ids.sort()).toEqual(['c1', 'c2'])
+  })
+
+  it('lista vazia -> [] (o painel nem chega a rodar a query de referência)', () => {
+    expect(campanhasComRegiao([])).toEqual([])
   })
 })
 
