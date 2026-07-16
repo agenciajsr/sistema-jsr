@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluido quick 260715-pmm (redesign /campanhas: KPIs configuraveis, Comparar, Performance, tabela por nivel, funil); migration 0024 NAO aplicada"
-last_updated: "2026-07-15T21:52:13.400Z"
-last_activity: "2026-07-15 - Completed quick task 260715-la8: Relatórios configuráveis (blocos por conta, cron diário único, dialog Novo Relatório)"
+stopped_at: "Concluido quick 260715-tud (Etapa 2 /campanhas: demografia idade×gênero, regiões, objective oficial; migration 0025 APLICADA)"
+last_updated: "2026-07-16T00:55:00.000Z"
+last_activity: "2026-07-15 - Completed quick task 260715-tud: Etapa 2 de /campanhas (demografia, regiões, objetivo oficial)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -156,10 +156,11 @@ None yet.
 | 260715-oz9 | Corrigir cascata de travamento — retry na sessão (getCurrentUser 5s→8s), error boundary de raiz em português (src/app/error.tsx), pool max 3→5 + delayMs 3s no withRetry do /financeiro; max_pipeline=1 intocado, sem migration | 2026-07-15 | 4c3ee4a | [260715-oz9-corrigir-cascata-de-travamento-retry-na-](./quick/260715-oz9-corrigir-cascata-de-travamento-retry-na-/) |
 | 260715-pmm | Redesign da /campanhas no padrão do dashboard Meta Ads de referência — grade de 24 KPIs configurável (Organizar drag+switch persistido POR CLIENTE, toggle Comparar vs. período anterior c/ cor semântica), gráfico Performance multi-métrica (legenda clicável, eixos duplos, filtro por campanha), tabela campanhas/conjuntos/anúncios (busca, status badge, thumbnails, totais), Funil de Conversão 2-6 etapas; getPainelCampanhas (~3 queries sequenciais); catálogo puro c/ 14 testes; tabela preferencias_campanhas + migration 0024 GERADA e NÃO aplicada (rodar scripts/aplicar-migration-0024.ts) | 2026-07-15 | 0bddf26 | [260715-pmm-redesign-da-pagina-campanhas-kpis-config](./quick/260715-pmm-redesign-da-pagina-campanhas-kpis-config/) |
 | fast-260715 | Correção pós-deploy do painel /campanhas: --chart-1..5 no CSS (gráfico Performance invisível), anúncios/criativos pela janela mais recente do ad_insights (janela ~30d, não diária), conjuntos derivados dos anúncios (adset_insights vazia), aviso na tabela de níveis | 2026-07-15 | 47cd411 | — |
+| 260715-tud | Etapa 2 de /campanhas — sync com breakdowns idade×gênero e região + objective oficial (tabelas demografia_insights/regiao_insights, migration 0025 APLICADA via script manual); seção Dados Demográficos (barras empilhadas, Ocultar Gênero, seletor de campanha/métrica), ranking de Regiões pela chave-herói e chips de filtro por objetivo na tabela (objective Meta c/ classificarObjetivo como fallback); módulo puro demografia.ts sob TDD (10 testes, 1487 total); sync validado ponta a ponta em conta real (172 linhas demografia, 250 regiões) | 2026-07-15 | 2c28ee4 | [260715-tud-etapa-2-campanhas-demografia-idade-gener](./quick/260715-tud-etapa-2-campanhas-demografia-idade-gener/) |
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 
 ## Session Continuity
 
-Last session: 2026-07-15T21:52:13.396Z
-Stopped at: Concluido quick 260715-pmm (redesign /campanhas: KPIs configuraveis, Comparar, Performance, tabela por nivel, funil); migration 0024 NAO aplicada
+Last session: 2026-07-16T00:55:00.000Z
+Stopped at: Concluido quick 260715-tud (Etapa 2 /campanhas: demografia, regiões, objective oficial; migration 0025 APLICADA)
 Resume file: None
