@@ -155,12 +155,62 @@ function acharCampo(campos: Campo[], re: RegExp): Campo | undefined {
   return campos.find((c) => re.test(c.label) && c.value.trim() !== '')
 }
 
+// --- Extensão de WhatsApp (prospecção ativa) ---
+// Payload próprio do CRM-extensão do WhatsApp Web (fluxo antigo do Make):
+// { eventDetails: {name, id}, name, number, perfilContato: {email}, lastMessage: {text} }
+
+type PayloadExtensaoWhats = {
+  eventDetails?: { name?: unknown; id?: unknown }
+  name?: unknown
+  number?: unknown
+  perfilContato?: { email?: unknown }
+  lastMessage?: { text?: unknown }
+}
+
+/** Detecta o payload da extensão de WhatsApp. */
+export function ehPayloadExtensaoWhats(raw: Record<string, unknown>): boolean {
+  return typeof raw.eventDetails === 'object' && raw.eventDetails !== null && ('number' in raw || 'name' in raw)
+}
+
+/**
+ * Filtro replicado do cenário do Make: só ingerir contatos na etapa
+ * "Primeiro Contato Frio" — sem isto a extensão manda TODOS os contatos.
+ */
+export function eventoAceitoExtensaoWhats(raw: Record<string, unknown>): boolean {
+  const nome = (raw as PayloadExtensaoWhats).eventDetails?.name
+  return typeof nome === 'string' && nome.toLowerCase().includes('primeiro contato frio')
+}
+
+function normalizarExtensaoWhats(raw: Record<string, unknown>): EntradaNormalizada {
+  const p = raw as PayloadExtensaoWhats
+  const nome = typeof p.name === 'string' ? p.name.trim() : ''
+  const telefone = typeof p.number === 'string' || typeof p.number === 'number' ? String(p.number).trim() : ''
+  const emailBruto = typeof p.perfilContato?.email === 'string' ? p.perfilContato.email.trim() : ''
+  const email = emailBruto && RE_EMAIL_VALIDO.test(emailBruto) ? emailBruto : undefined
+  const etapa = typeof p.eventDetails?.name === 'string' ? p.eventDetails.name : ''
+  const ultimaMsg = typeof p.lastMessage?.text === 'string' ? p.lastMessage.text : ''
+
+  const respostas: ParPergunta[] = []
+  if (etapa) respostas.push({ pergunta: 'Etapa na extensão', resposta: etapa })
+  if (ultimaMsg) respostas.push({ pergunta: 'Última mensagem', resposta: ultimaMsg })
+
+  return {
+    fonte: 'prospeccao_fria',
+    nome: nome || telefone || email || 'Lead sem nome',
+    email,
+    telefone: telefone || undefined,
+    extra: { respostas, utm: {}, raw: { payload: JSON.stringify(raw) } },
+  }
+}
+
 /**
  * Normaliza o corpo cru (JSON já parseado OU form-data achatado) para o formato
  * de entrada do leadEntradaSchema. Nunca lança: sempre devolve algo ingerível
  * (nome cai em telefone/email/"Lead sem nome" quando não há campo de nome).
  */
 export function normalizarLeadEntrada(raw: Record<string, unknown>): EntradaNormalizada {
+  if (ehPayloadExtensaoWhats(raw)) return normalizarExtensaoWhats(raw)
+
   const plano: Record<string, string> = {}
   for (const [k, v] of Object.entries(raw)) {
     if (v === null || v === undefined) continue

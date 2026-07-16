@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { processarLead } from '@/lib/crm/ingest'
-import { normalizarLeadEntrada } from '@/lib/crm/normalizar-entrada'
+import {
+  ehPayloadExtensaoWhats,
+  eventoAceitoExtensaoWhats,
+  normalizarLeadEntrada,
+} from '@/lib/crm/normalizar-entrada'
 import { leadEntradaSchema } from '@/lib/validations/crm'
 
 // API pública de captação de leads (landing pages, automações externas).
@@ -49,6 +53,13 @@ export async function POST(request: Request) {
     bruto = await lerCorpoCru(request)
   } catch {
     return NextResponse.json({ error: 'Corpo da requisicao invalido.' }, { status: 400 })
+  }
+
+  // Extensão de WhatsApp (prospecção ativa): a extensão dispara para TODOS os
+  // contatos — só ingerimos quem está na etapa "Primeiro Contato Frio" (mesmo
+  // filtro do antigo cenário do Make). O resto é ignorado com 200 (não é erro).
+  if (ehPayloadExtensaoWhats(bruto) && !eventoAceitoExtensaoWhats(bruto)) {
+    return NextResponse.json({ ignorado: true })
   }
 
   const parsed = leadEntradaSchema.safeParse(normalizarLeadEntrada(bruto))

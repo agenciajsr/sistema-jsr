@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 
-import { normalizarLeadEntrada, extrairDetalheLead } from './normalizar-entrada'
+import {
+  normalizarLeadEntrada,
+  extrairDetalheLead,
+  ehPayloadExtensaoWhats,
+  eventoAceitoExtensaoWhats,
+} from './normalizar-entrada'
 
 describe('normalizarLeadEntrada', () => {
   it('JSON simples no nosso formato passa direto', () => {
@@ -132,6 +137,41 @@ describe('normalizarLeadEntrada', () => {
     const r = normalizarLeadEntrada(elementorReal)
     expect(r.extra.raw['form[name]']).toBe('Dados de Contato')
     expect(r.extra.raw['fields[name][value]']).toBe('Jack teste')
+  })
+})
+
+describe('extensão de WhatsApp (prospecção ativa)', () => {
+  const payload = {
+    eventDetails: { name: 'Primeiro Contato Frio', id: 'ev123' },
+    name: 'Clínica Bella',
+    number: '5571999998888',
+    perfilContato: { email: 'contato@bella.com' },
+    lastMessage: { text: 'Olá, tudo bem?' },
+  }
+
+  it('detecta o payload e aceita a etapa Primeiro Contato Frio', () => {
+    expect(ehPayloadExtensaoWhats(payload)).toBe(true)
+    expect(eventoAceitoExtensaoWhats(payload)).toBe(true)
+  })
+
+  it('rejeita outras etapas (filtro do Make replicado)', () => {
+    expect(eventoAceitoExtensaoWhats({ ...payload, eventDetails: { name: 'Follow-up' } })).toBe(false)
+  })
+
+  it('normaliza como prospeccao_fria com etapa e última mensagem nas respostas', () => {
+    const r = normalizarLeadEntrada(payload)
+    expect(r.fonte).toBe('prospeccao_fria')
+    expect(r.nome).toBe('Clínica Bella')
+    expect(r.telefone).toBe('5571999998888')
+    expect(r.email).toBe('contato@bella.com')
+    const perguntas = r.extra.respostas.map((p) => p.pergunta)
+    expect(perguntas).toContain('Etapa na extensão')
+    expect(perguntas).toContain('Última mensagem')
+  })
+
+  it('payload comum (Elementor/JSON) não é detectado como extensão', () => {
+    expect(ehPayloadExtensaoWhats({ 'fields[name][value]': 'X' })).toBe(false)
+    expect(ehPayloadExtensaoWhats({ nome: 'X', fonte: 'manual' })).toBe(false)
   })
 })
 
