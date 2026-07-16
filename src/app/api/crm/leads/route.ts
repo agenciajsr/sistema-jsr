@@ -36,6 +36,12 @@ async function lerCorpoCru(request: Request): Promise<Record<string, unknown>> {
   return raw
 }
 
+// Validação de URL: algumas ferramentas (extensões, automações) fazem um GET
+// na URL antes de aceitar o webhook. Responde 200 sem expor nada.
+export async function GET() {
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(request: Request) {
   // (a) token: sem CRM_LEADS_TOKEN configurado, a rota recusa tudo.
   const token = process.env.CRM_LEADS_TOKEN
