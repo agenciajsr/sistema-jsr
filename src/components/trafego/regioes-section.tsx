@@ -1,11 +1,16 @@
 'use client'
 
-// Card "Regiões" — ranking top ~10 regiões por resultado da chave-herói:
-// barra proporcional, resultados, investimento e custo por resultado.
+// Card "Regiões" — ranking top ~10 regiões com MÉTRICA ADAPTATIVA:
+// - ranking.metrica === 'heroi': ranqueia pela chave-herói do cliente (vendas/leads/
+//   conversas), com custo por resultado — comportamento padrão.
+// - ranking.metrica === 'linkClicks': o Meta não entregou a chave-herói por região
+//   (não entrega conversão de pixel por região — limitação de privacidade), então o
+//   ranking usa cliques no link, o título vira "Regiões com mais tráfego" e o card
+//   exibe uma nota explicando a limitação. Melhor que mostrar zeros sem explicação.
 // Dados refletem a janela ~30d do sync (mesma limitação dos anúncios).
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { LinhaRegiao } from '@/lib/trafego/painel'
+import type { RankingRegioes } from '@/lib/trafego/painel'
 import type { ChaveHeroi } from '@/lib/trafego/aggregate'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -18,19 +23,26 @@ const TITULO_POR_HEROI: Record<ChaveHeroi, string> = {
 }
 
 type RegioesSectionProps = {
-  regioes: LinhaRegiao[]
+  ranking: RankingRegioes
   heroiChave: ChaveHeroi
   labelHeroi: string
 }
 
-export function RegioesSection({ regioes, heroiChave, labelHeroi }: RegioesSectionProps) {
-  const top = regioes.slice(0, 10)
-  const maxResultados = Math.max(...top.map((r) => r.resultados), 1)
+export function RegioesSection({ ranking, heroiChave, labelHeroi }: RegioesSectionProps) {
+  const top = ranking.linhas.slice(0, 10)
+  const modoHeroi = ranking.metrica === 'heroi'
+
+  const valorDaLinha = (r: RankingRegioes['linhas'][number]) => (modoHeroi ? r.resultados : r.linkClicks)
+  const maxValor = Math.max(...top.map(valorDaLinha), 1)
+
+  const titulo = modoHeroi ? TITULO_POR_HEROI[heroiChave] : 'Regiões com mais tráfego'
+  const unidade = modoHeroi ? labelHeroi.toLowerCase() : 'cliques no link'
+  const sufixoCusto = modoHeroi ? '/result.' : '/clique no link'
 
   return (
     <Card className="border-none shadow-[var(--shadow-sm)]">
       <CardHeader>
-        <CardTitle className="text-base">{TITULO_POR_HEROI[heroiChave]}</CardTitle>
+        <CardTitle className="text-base">{titulo}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {top.length === 0 ? (
@@ -53,11 +65,15 @@ export function RegioesSection({ regioes, heroiChave, labelHeroi }: RegioesSecti
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground tabular-nums">
-                        {formatadorNumero.format(r.resultados)}
+                        {formatadorNumero.format(valorDaLinha(r))}
                       </span>{' '}
-                      {labelHeroi.toLowerCase()} · {formatadorMoeda.format(r.spend)}
+                      {unidade} · {formatadorMoeda.format(r.spend)}
                       {r.custoPorResultado !== null && (
-                        <> · {formatadorMoeda.format(r.custoPorResultado)}/result.</>
+                        <>
+                          {' '}
+                          · {formatadorMoeda.format(r.custoPorResultado)}
+                          {sufixoCusto}
+                        </>
                       )}
                     </span>
                   </div>
@@ -65,7 +81,7 @@ export function RegioesSection({ regioes, heroiChave, labelHeroi }: RegioesSecti
                     <div
                       className="h-full rounded-full"
                       style={{
-                        width: `${Math.max((r.resultados / maxResultados) * 100, 2)}%`,
+                        width: `${Math.max((valorDaLinha(r) / maxValor) * 100, 2)}%`,
                         backgroundColor: 'var(--chart-1)',
                       }}
                     />
@@ -73,6 +89,12 @@ export function RegioesSection({ regioes, heroiChave, labelHeroi }: RegioesSecti
                 </div>
               ))}
             </div>
+            {!modoHeroi && (
+              <p className="rounded-md bg-muted/50 px-2 py-1.5 text-center text-xs text-muted-foreground">
+                O Meta não entrega compras e leads de pixel separados por região (limitação de
+                privacidade da plataforma). Por isso este ranking usa cliques no link.
+              </p>
+            )}
             <p className="rounded-md bg-muted/50 py-1.5 text-center text-xs text-muted-foreground">
               Regiões refletem os últimos ~30 dias da sincronização com o Meta, independente do
               período selecionado.

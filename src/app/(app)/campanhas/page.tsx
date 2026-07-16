@@ -182,7 +182,7 @@ export default async function CampanhasPage({
           <DemografiaSection demografia={painel.demografia} />
 
           <RegioesSection
-            regioes={painel.regioes}
+            ranking={painel.regioes}
             heroiChave={painel.heroi.chave}
             labelHeroi={painel.heroi.label}
           />
