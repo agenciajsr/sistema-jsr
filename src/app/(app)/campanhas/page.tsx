@@ -1,4 +1,4 @@
-import { Radio, Target, TrendingUp } from 'lucide-react'
+import { Radio, TrendingUp } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
@@ -9,6 +9,7 @@ import { ContasNaoVinculadas } from '@/components/trafego/contas-nao-vinculadas'
 import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
 import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
 import { GradeKpis } from '@/components/trafego/grade-kpis'
+import { LandingClientes } from '@/components/trafego/landing-clientes'
 import { GraficoPerformance } from '@/components/trafego/grafico-performance'
 import { TabelaNiveis } from '@/components/trafego/tabela-niveis'
 import { FunilConversao } from '@/components/trafego/funil-conversao'
@@ -20,7 +21,13 @@ import {
   getUltimaSync,
   listarClientes,
 } from '@/actions/trafego'
-import { listarClientesComContas, type CriativoRanking, type Periodo } from '@/lib/trafego/aggregate'
+import {
+  classificarObjetivo,
+  getInvestido30dPorCliente,
+  listarClientesComContas,
+  type CriativoRanking,
+  type Periodo,
+} from '@/lib/trafego/aggregate'
 import { getPainelCampanhas } from '@/lib/trafego/painel'
 import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
 
@@ -55,6 +62,10 @@ export default async function CampanhasPage({
   const painel = cliente ? await getPainelCampanhas(cliente, periodo) : null
   const preferencias = cliente ? await getPreferenciasCampanhas(cliente) : null
   const saude = cliente && painel?.temDados ? await getSaudeDoCliente(cliente) : null
+
+  // Tela inicial (sem cliente): UMA query agregada leve p/ os cards — nunca rodar
+  // getResumoCliente/getSaude por cliente aqui (pesadas, pool max=5).
+  const investido30d = !cliente ? await getInvestido30dPorCliente() : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
@@ -115,17 +126,18 @@ export default async function CampanhasPage({
         </Card>
       )}
 
-      {/* Ha clientes com contas, mas nenhum selecionado */}
+      {/* Ha clientes com contas, mas nenhum selecionado: tela inicial com cards */}
       {!semNada && !cliente && clientesComContas.length > 0 && (
-        <Card className="border-none p-12 text-center shadow-[var(--shadow-sm)]">
-          <div className="mx-auto max-w-md space-y-2">
-            <Target className="mx-auto size-12 text-muted-foreground/50" />
-            <h2 className="text-lg font-medium">Selecione um cliente</h2>
-            <p className="text-sm text-muted-foreground">
-              Escolha um cliente acima para ver a performance unificada de todas as contas dele.
-            </p>
-          </div>
-        </Card>
+        <LandingClientes
+          clientes={clientesComContas.map((c) => ({
+            id: c.id,
+            nome: c.nome,
+            nicho: c.nicho,
+            objetivoPrincipal: c.objetivoPrincipal,
+          }))}
+          investido30d={investido30d ?? new Map()}
+          periodo={periodo}
+        />
       )}
 
       {/* Cliente selecionado, sem dados no periodo */}
@@ -164,6 +176,8 @@ export default async function CampanhasPage({
             totaisAnterior={painel.totaisAnterior}
             preferencias={preferencias?.kpis ?? null}
             clienteId={cliente}
+            clienteNome={clienteSelecionado?.nome ?? 'este cliente'}
+            classe={classificarObjetivo(clienteSelecionado?.objetivoPrincipal ?? null)}
           />
 
           <GraficoPerformance serie={painel.seriePorDia} heroiChave={painel.heroi.chave} />

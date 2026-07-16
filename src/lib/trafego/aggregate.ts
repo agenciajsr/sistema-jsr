@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, inArray } from 'drizzle-orm'
+import { eq, and, gte, lte, inArray, sql } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/schema'
@@ -84,6 +84,41 @@ export function heroiDoObjetivo(objetivoPrincipal: string | null, nicho: Nicho):
   }
   // engajamento/trafego/null não são chaves-herói de conversão → usa o nicho.
   return metricaHeroi(nicho)
+}
+
+/**
+ * Investimento (spend) dos últimos 30 dias por cliente, em UMA query agregada
+ * (join adAccounts + campaignInsights, GROUP BY cliente). Leve de propósito: a
+ * tela inicial de /campanhas mostra cards de todos os clientes e NÃO pode rodar
+ * getResumoCliente/getSaudeDoCliente por cliente (pesadas, pool max=5). Retorna um
+ * mapa clienteId -> investido30d; ausência de linha = sem gasto no período.
+ */
+export async function getInvestido30dPorCliente(): Promise<Map<string, number>> {
+  const user = await getCurrentUser()
+  if (!user) return new Map()
+
+  const dataMinima = dataMenosDias(30, hojeBrasilia())
+  const rows = await db
+    .select({
+      clienteId: adAccounts.clienteId,
+      investido: sql<string>`coalesce(sum(${campaignInsights.spend}), 0)`,
+    })
+    .from(campaignInsights)
+    .innerJoin(adAccounts, eq(campaignInsights.adAccountId, adAccounts.id))
+    .where(
+      and(
+        eq(adAccounts.plataforma, 'meta'),
+        eq(adAccounts.ativo, true),
+        gte(campaignInsights.date, dataMinima),
+      ),
+    )
+    .groupBy(adAccounts.clienteId)
+
+  const mapa = new Map<string, number>()
+  for (const r of rows) {
+    if (r.clienteId) mapa.set(r.clienteId, Number(r.investido) || 0)
+  }
+  return mapa
 }
 
 export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetivoPrincipal: string | null; metaCpa: string | null; metaRoas: string | null }

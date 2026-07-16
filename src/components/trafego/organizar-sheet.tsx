@@ -25,9 +25,16 @@ type OrganizarSheetProps = {
   onAbertoChange: (aberto: boolean) => void
   prefs: PreferenciaKpi[]
   onPrefsChange: (novas: PreferenciaKpi[]) => void
+  clienteNome: string
 }
 
-export function OrganizarSheet({ aberto, onAbertoChange, prefs, onPrefsChange }: OrganizarSheetProps) {
+export function OrganizarSheet({
+  aberto,
+  onAbertoChange,
+  prefs,
+  onPrefsChange,
+  clienteNome,
+}: OrganizarSheetProps) {
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [sobre, setSobre] = useState<string | null>(null)
 
@@ -59,6 +66,7 @@ export function OrganizarSheet({ aberto, onAbertoChange, prefs, onPrefsChange }:
           <SheetTitle>Organizar</SheetTitle>
           <SheetDescription>
             Arraste para reordenar e use o interruptor para mostrar ou esconder cada métrica.
+            Estas métricas ficam salvas para <span className="font-medium text-foreground">{clienteNome}</span>.
           </SheetDescription>
         </SheetHeader>
 

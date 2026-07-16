@@ -18,8 +18,10 @@ import {
   MessageCircle,
   MousePointerClick,
   Receipt,
+  RotateCcw,
   Settings2,
   ShoppingCart,
+  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -43,6 +45,8 @@ import {
   salvarPreferenciasCampanhas,
   type PreferenciaKpi,
 } from '@/actions/trafego'
+import type { ClasseObjetivo } from '@/lib/trafego/aggregate'
+import { presetsKpis, resolverPreferencias } from '@/lib/trafego/presets-kpis'
 import { OrganizarSheet } from './organizar-sheet'
 
 const ICONE_POR_METRICA: Partial<Record<MetricaId, LucideIcon>> = {
@@ -95,33 +99,36 @@ function formatarValor(valor: number | null, formato: FormatoMetrica): string {
   }
 }
 
-/**
- * Resolve a ordem/visibilidade final: preferências salvas mandam; métricas novas
- * (fora da preferência salva) entram no fim, ligadas. Sem preferências, usa a
- * ordem padrão do catálogo com tudo ligado.
- */
-export function resolverPreferencias(salvas: PreferenciaKpi[] | null): PreferenciaKpi[] {
-  const idsValidos = new Set(CATALOGO_METRICAS.map((m) => m.id as string))
-  const base = (salvas ?? []).filter((p) => idsValidos.has(p.id))
-  const presentes = new Set(base.map((p) => p.id))
-  for (const m of CATALOGO_METRICAS) {
-    if (!presentes.has(m.id)) base.push({ id: m.id, ativo: true })
-  }
-  return base
-}
-
 type GradeKpisProps = {
   totaisAtual: TotaisPeriodo
   totaisAnterior: TotaisPeriodo
   preferencias: PreferenciaKpi[] | null
   clienteId: string
+  clienteNome: string
+  // Classe do objetivo do cliente — dirige o preset inicial da grade (Etapa 3).
+  classe: ClasseObjetivo | null
 }
 
-export function GradeKpis({ totaisAtual, totaisAnterior, preferencias, clienteId }: GradeKpisProps) {
-  const [prefs, setPrefs] = useState<PreferenciaKpi[]>(() => resolverPreferencias(preferencias))
+export function GradeKpis({
+  totaisAtual,
+  totaisAnterior,
+  preferencias,
+  clienteId,
+  clienteNome,
+  classe,
+}: GradeKpisProps) {
+  const [prefs, setPrefs] = useState<PreferenciaKpi[]>(() =>
+    resolverPreferencias(preferencias, classe),
+  )
   const [comparando, setComparando] = useState(false)
   const [organizarAberto, setOrganizarAberto] = useState(false)
   const [, startTransition] = useTransition()
+
+  // Sem preferência salva (nem nada ativo) a grade nasce do preset do objetivo:
+  // sinaliza de leve que é sugestão e oferece "Restaurar padrão do objetivo".
+  const semPreferenciaSalva =
+    !preferencias || preferencias.length === 0 || !preferencias.some((p) => p.ativo)
+  const naSugestao = semPreferenciaSalva && classe !== null
 
   const metricasAtual = useMemo(() => calcularMetricas(totaisAtual), [totaisAtual])
   const metricasAnterior = useMemo(() => calcularMetricas(totaisAnterior), [totaisAnterior])
@@ -132,12 +139,23 @@ export function GradeKpis({ totaisAtual, totaisAnterior, preferencias, clienteId
   )
 
   // Estado otimista: atualiza a grade na hora e persiste em background.
+  // Toast discreto de sucesso para o usuário ver que ficou salvo PARA ESTE cliente
+  // (antes o salvamento era invisível — só havia toast no caminho de erro).
   function aplicarPrefs(novas: PreferenciaKpi[]) {
     setPrefs(novas)
     startTransition(async () => {
       const res = await salvarPreferenciasCampanhas(clienteId, { kpis: novas })
-      if (res?.error) toast.error(res.error)
+      if (res?.error) {
+        toast.error(res.error)
+      } else {
+        toast.success(`Métricas salvas para ${clienteNome}`)
+      }
     })
+  }
+
+  // Volta a grade ao preset do objetivo (depois de bagunçar) e persiste.
+  function restaurarPadraoObjetivo() {
+    aplicarPrefs(presetsKpis(classe))
   }
 
   const ativas = prefs.filter((p) => p.ativo)
@@ -147,6 +165,17 @@ export function GradeKpis({ totaisAtual, totaisAnterior, preferencias, clienteId
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold">Visão geral</h2>
         <div className="flex items-center gap-2">
+          {classe !== null && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={restaurarPadraoObjetivo}
+              title="Volta a grade às métricas sugeridas para o objetivo deste cliente"
+            >
+              <RotateCcw className="size-4" />
+              Restaurar padrão do objetivo
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -167,10 +196,36 @@ export function GradeKpis({ totaisAtual, totaisAnterior, preferencias, clienteId
         </div>
       </div>
 
+      {naSugestao && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Sparkles className="size-3.5 text-primary" />
+          Sugestão pelo objetivo do cliente. Ajuste no “Organizar” — fica salvo para {clienteNome}.
+        </p>
+      )}
+
       {comparando && (
         <p className="text-xs text-muted-foreground">
           Variação vs. período anterior equivalente.
         </p>
+      )}
+
+      {ativas.length === 0 && (
+        <Card className="border-none p-8 text-center shadow-[var(--shadow-sm)]">
+          <p className="text-sm text-muted-foreground">
+            Nenhuma métrica selecionada.{' '}
+            {classe !== null ? (
+              <button
+                type="button"
+                onClick={restaurarPadraoObjetivo}
+                className="font-medium text-primary underline-offset-2 hover:underline"
+              >
+                Restaurar padrão do objetivo
+              </button>
+            ) : (
+              'Abra o “Organizar” para escolher o que mostrar.'
+            )}
+          </p>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -232,6 +287,7 @@ export function GradeKpis({ totaisAtual, totaisAnterior, preferencias, clienteId
         onAbertoChange={setOrganizarAberto}
         prefs={prefs}
         onPrefsChange={aplicarPrefs}
+        clienteNome={clienteNome}
       />
     </div>
   )
