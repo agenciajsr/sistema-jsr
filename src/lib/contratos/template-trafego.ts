@@ -8,6 +8,7 @@
 // robusta para serverless (Vercel Hobby).
 
 import type { VariaveisContrato } from './variaveis'
+import { descricaoObjetoServicos, rotuloPlataformas, rotuloServicoUi } from './servicos-contratados'
 
 /** Trecho de parágrafo com marcação de negrito (espelha o DOCX de referência). */
 export type TrechoContrato = { texto: string; negrito?: boolean }
@@ -40,6 +41,18 @@ const DADOS_CONTRATADO_RESTO =
   'nº 069.345.675-28, residente na R. Manoel dos Santos Filho.'
 
 export const TITULO_CONTRATO = 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO'
+
+const TITULO_CONTRATO_MULTI = 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL'
+
+/**
+ * Título dinâmico (quick-260716-ky2): legado ou só-tráfego mantém o título
+ * original; contrato com outros serviços vira "marketing digital".
+ */
+export function tituloContrato(vars: VariaveisContrato): string {
+  if (!vars.servicos) return TITULO_CONTRATO
+  const soTrafego = vars.servicos.length === 1 && vars.servicos[0].servico === 'trafego_pago'
+  return soTrafego ? TITULO_CONTRATO : TITULO_CONTRATO_MULTI
+}
 
 /** Bloco de assinaturas (linhas na última página do PDF + fecho do preview). */
 export type BlocoAssinaturas = {
@@ -76,6 +89,71 @@ function paragrafoContratante(qualificacao: string): TrechoContrato[] {
   ]
 }
 
+// Itens específicos da operação de tráfego pago (textos do DOCX, sem os
+// números — a numeração é montada dinamicamente na cláusula do objeto).
+const ITENS_OBJETO_TRAFEGO = [
+  'Criação e configuração inicial da conta de anúncios do CONTRATANTE na plataforma, com auxílio do CONTRATADO, caso o CONTRATANTE assim deseje;',
+  'Configuração do faturamento da conta, emissão de boletos para investir o crédito nas plataformas ou cadastramento do cartão de crédito do CONTRATANTE, com auxílio do CONTRATADO, caso o CONTRATANTE assim deseje;',
+  'Criação das campanhas, de acordo com a estratégia planejada em conjunto com o CONTRATANTE.',
+  'Gerenciamento de anúncios e otimização periódica desses anúncios, com base na coleta e análise de dados resultantes dos anúncios.',
+  'Prestação de contas dos serviços prestados.',
+] as const
+
+const PARAGRAFO_1_2 =
+  '1.2 O CONTRATADO não desenvolve e não publica criativos. O CONTRATANTE deverá produzir esses materiais e repassar para o CONTRATADO, para que o CONTRATADO seja o responsável pela criação das campanhas de anúncio e efetivamente consiga anunciar.'
+const PARAGRAFO_1_3 =
+  '1.3 Os primeiros 7 (sete) dias úteis de contrato serão destinados para o trabalho de configuração inicial do CONTRATANTE, criação das campanhas de teste e planejamento dos anúncios.'
+
+/**
+ * Cláusula 1ª (objeto) — dinâmica quando há serviços estruturados
+ * (quick-260716-ky2); com vars.servicos === null o texto é EXATAMENTE o
+ * legado (nenhuma regressão nos contratos já enviados).
+ */
+function clausulaObjeto(vars: VariaveisContrato): SecaoContrato {
+  if (!vars.servicos) {
+    return {
+      titulo: 'CLÁUSULA 1ª - DO OBJETO DO CONTRATO',
+      paragrafos: [
+        '1.1 O presente documento estabelece uma relação de prestação de serviços especificamente descritos a seguir:',
+        ...ITENS_OBJETO_TRAFEGO.map((texto, i) => `1.1.${i + 1} ${texto}`),
+        '1.1.6 O presente contrato tem por objeto a prestação de serviços de geração de tráfego pago a partir das plataformas de anúncios, sem exclusividade e sem subordinação, visando a promoção do site e/ou das mídias sociais do(a) CONTRATANTE.',
+        PARAGRAFO_1_2,
+        PARAGRAFO_1_3,
+      ],
+    }
+  }
+
+  const itens = vars.servicos
+  const temTrafego = itens.some((s) => s.servico === 'trafego_pago')
+  const paragrafos: ParagrafoContrato[] = [
+    '1.1 O presente documento estabelece uma relação de prestação de serviços especificamente descritos a seguir:',
+  ]
+  let n = 0
+  for (const descricao of descricaoObjetoServicos(itens)) {
+    paragrafos.push(`1.1.${++n} ${descricao}`)
+  }
+  if (temTrafego) {
+    for (const texto of ITENS_OBJETO_TRAFEGO) {
+      paragrafos.push(`1.1.${++n} ${texto}`)
+    }
+  }
+  // Parágrafo-objeto final: cita os serviços contratados e as plataformas.
+  const listaServicos = itens
+    .map((s) => {
+      const plataformas = s.plataformas?.length ? ` (${rotuloPlataformas(s.plataformas)})` : ''
+      return `${rotuloServicoUi(s.servico)}${plataformas}`
+    })
+    .join(', ')
+  paragrafos.push(
+    `1.1.${++n} O presente contrato tem por objeto a prestação dos serviços de ${listaServicos}, ` +
+      'sem exclusividade e sem subordinação, visando a promoção do negócio, do site e/ou das mídias sociais do(a) CONTRATANTE.'
+  )
+  if (temTrafego) {
+    paragrafos.push(PARAGRAFO_1_2, PARAGRAFO_1_3)
+  }
+  return { titulo: 'CLÁUSULA 1ª - DO OBJETO DO CONTRATO', paragrafos }
+}
+
 /** Monta as seções do contrato já com as variáveis interpoladas (texto puro). */
 export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
   const meses = `${vars.duracaoMeses} meses`
@@ -89,7 +167,7 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
         ],
         [
           { texto: 'Pelo presente instrumento particular de ' },
-          { texto: 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO', negrito: true },
+          { texto: tituloContrato(vars), negrito: true },
           { texto: ' aqui denominado(a) ' },
           { texto: 'CONTRATANTE', negrito: true },
           { texto: ', contrata os serviços da aqui denominada ' },
@@ -111,20 +189,7 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
         'CRIATIVO: Material contendo vídeo, texto ou imagem, que servirá como anúncio para ser publicado, pelo CONTRATADO, em campanhas de anúncios pela conta de anúncios do CONTRATANTE.',
       ],
     },
-    {
-      titulo: 'CLÁUSULA 1ª - DO OBJETO DO CONTRATO',
-      paragrafos: [
-        '1.1 O presente documento estabelece uma relação de prestação de serviços especificamente descritos a seguir:',
-        '1.1.1 Criação e configuração inicial da conta de anúncios do CONTRATANTE na plataforma, com auxílio do CONTRATADO, caso o CONTRATANTE assim deseje;',
-        '1.1.2 Configuração do faturamento da conta, emissão de boletos para investir o crédito nas plataformas ou cadastramento do cartão de crédito do CONTRATANTE, com auxílio do CONTRATADO, caso o CONTRATANTE assim deseje;',
-        '1.1.3 Criação das campanhas, de acordo com a estratégia planejada em conjunto com o CONTRATANTE.',
-        '1.1.4 Gerenciamento de anúncios e otimização periódica desses anúncios, com base na coleta e análise de dados resultantes dos anúncios.',
-        '1.1.5 Prestação de contas dos serviços prestados.',
-        '1.1.6 O presente contrato tem por objeto a prestação de serviços de geração de tráfego pago a partir das plataformas de anúncios, sem exclusividade e sem subordinação, visando a promoção do site e/ou das mídias sociais do(a) CONTRATANTE.',
-        '1.2 O CONTRATADO não desenvolve e não publica criativos. O CONTRATANTE deverá produzir esses materiais e repassar para o CONTRATADO, para que o CONTRATADO seja o responsável pela criação das campanhas de anúncio e efetivamente consiga anunciar.',
-        '1.3 Os primeiros 7 (sete) dias úteis de contrato serão destinados para o trabalho de configuração inicial do CONTRATANTE, criação das campanhas de teste e planejamento dos anúncios.',
-      ],
-    },
+    clausulaObjeto(vars),
     {
       titulo: 'CLÁUSULA 2ª - DO VALOR E FORMA DE PAGAMENTO',
       paragrafos: [
@@ -138,6 +203,13 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
               ', devendo ser pago através de transferência ou até mesmo, PIX, na conta corrente nº 5679908-0, agência nº 0001, banco nº 336 - Banco [C6 S.A.] PIX: jacsonribeiiro@icloud.com, em nome do CONTRATADO, para a primeira mensalidade, ficando o dia 30 como data base para o pagamento das demais.',
           },
         ],
+        // Composição do valor por serviço (só com 2+ serviços estruturados —
+        // preenche o "2.2" que o DOCX original pula).
+        ...(vars.servicos && vars.servicos.length >= 2
+          ? [
+              `2.2 O valor mensal é composto pelos seguintes serviços: ${vars.linhasValorPorServico.join('; ')}.`,
+            ]
+          : []),
         '2.3 Em caso de atraso no pagamento por 5 dias ou mais, os serviços contratados serão suspensos até que haja a devida regularização por parte do CONTRATANTE.',
         '2.4 Fica vedado o CONTRATANTE negociar abatimentos, descontos ou dilações de prazo para o pagamento ou execução dos serviços sem o prévio conhecimento e autorização do CONTRATADO.',
       ],
@@ -321,5 +393,5 @@ export function montarContratoHtml(vars: VariaveisContrato): string {
         `<p>${escaparHtml(parte.documento)}</p>`
     )
     .join('\n')
-  return `<h1>${escaparHtml(TITULO_CONTRATO)}</h1>\n${corpo}\n${assinaturas}`
+  return `<h1>${escaparHtml(tituloContrato(vars))}</h1>\n${corpo}\n${assinaturas}`
 }

@@ -9,7 +9,7 @@ import {
   montarSecoesContrato,
   montarBlocoAssinaturas,
   trechosDoParagrafo,
-  TITULO_CONTRATO,
+  tituloContrato,
 } from '@/lib/contratos/template-trafego'
 import { CopiarLinkBotao } from '@/components/contratos/copiar-link-botao'
 import { BotaoImprimir } from './botao-imprimir'
@@ -49,24 +49,37 @@ export default async function PreviewContratoPage({
         duracaoMeses: number | null
         dadosContratante: unknown
         token: string | null
+        servicos: unknown
       }
     | undefined
+  const camposPreview = {
+    id: contratos.id,
+    clienteNome: clientes.nome,
+    dataInicio: contratos.dataInicio,
+    dataVencimento: contratos.dataVencimento,
+    valorMensal: contratos.valorMensal,
+    duracaoMeses: contratos.duracaoMeses,
+    dadosContratante: contratos.dadosContratante,
+    token: contratos.token,
+  }
   try {
-    const [row] = await db
-      .select({
-        id: contratos.id,
-        clienteNome: clientes.nome,
-        dataInicio: contratos.dataInicio,
-        dataVencimento: contratos.dataVencimento,
-        valorMensal: contratos.valorMensal,
-        duracaoMeses: contratos.duracaoMeses,
-        dadosContratante: contratos.dadosContratante,
-        token: contratos.token,
-      })
-      .from(contratos)
-      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
-      .where(eq(contratos.id, id))
-    contrato = row
+    try {
+      const [row] = await db
+        .select({ ...camposPreview, servicos: contratos.servicos })
+        .from(contratos)
+        .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+        .where(eq(contratos.id, id))
+      contrato = row
+    } catch (e0031) {
+      // Migration 0031 pendente: preview segue como legado (servicos null).
+      console.warn('[preview contrato] coluna servicos ausente (migration 0031 pendente?)', e0031)
+      const [row] = await db
+        .select(camposPreview)
+        .from(contratos)
+        .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+        .where(eq(contratos.id, id))
+      contrato = row ? { ...row, servicos: null } : undefined
+    }
   } catch (e) {
     // Degradação graciosa: colunas do fluxo ausentes (0029/0030 pendentes).
     console.warn('[preview contrato] colunas do fluxo ausentes?', e)
@@ -104,6 +117,7 @@ export default async function PreviewContratoPage({
       dataVencimento: contrato.dataVencimento,
       valorMensal: contrato.valorMensal,
       duracaoMeses: contrato.duracaoMeses,
+      servicos: contrato.servicos,
     },
     dadosContratante: contrato.dadosContratante,
   })
@@ -128,7 +142,7 @@ export default async function PreviewContratoPage({
       </div>
 
       <article className="rounded-xl border bg-white p-8 font-serif text-[15px] leading-7 text-neutral-900 shadow-sm sm:p-12 print:border-none print:p-0 print:shadow-none dark:border-neutral-700">
-        <h1 className="mb-8 text-center text-lg font-bold">{TITULO_CONTRATO}</h1>
+        <h1 className="mb-8 text-center text-lg font-bold">{tituloContrato(vars.data)}</h1>
         {secoes.map((secao, i) => (
           <section key={i} className="mb-4">
             {secao.titulo ? <h2 className="mb-2 mt-6 font-bold">{secao.titulo}</h2> : null}

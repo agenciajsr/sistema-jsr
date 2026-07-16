@@ -14,7 +14,7 @@ import {
   montarBlocoAssinaturas,
   trechosDoParagrafo,
   RODAPE_CONTRATO,
-  TITULO_CONTRATO,
+  tituloContrato,
   type ParagrafoContrato,
 } from './template-trafego'
 import type { VariaveisContrato } from './variaveis'
@@ -143,9 +143,9 @@ function ContratoPdf({ vars }: { vars: VariaveisContrato }) {
   const secoes = montarSecoesContrato(vars)
   const assinaturas = montarBlocoAssinaturas(vars)
   return (
-    <Document title={TITULO_CONTRATO} language="pt-BR">
+    <Document title={tituloContrato(vars)} language="pt-BR">
       <Page size="A4" style={estilos.pagina}>
-        <Text style={estilos.titulo}>{TITULO_CONTRATO}</Text>
+        <Text style={estilos.titulo}>{tituloContrato(vars)}</Text>
         {secoes.map((secao, i) => (
           <View key={i}>
             {secao.titulo ? <Text style={estilos.secaoTitulo}>{secao.titulo}</Text> : null}

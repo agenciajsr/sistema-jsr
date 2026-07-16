@@ -6,6 +6,12 @@
 // SEM valor por extenso — o texto dos DOCX de referência também não usa.
 
 import { contratanteSchema, type ContratanteInput } from '@/lib/validations/contratante'
+import {
+  servicosContratadosSchema,
+  rotuloPlataformas,
+  rotuloServicoUi,
+  type ServicoContratado,
+} from './servicos-contratados'
 
 export type VariaveisContrato = {
   /** Parágrafo de qualificação completa do CONTRATANTE (PJ ou PF). */
@@ -18,6 +24,10 @@ export type VariaveisContrato = {
   duracaoMeses: 3 | 6
   dataInicioFormatada: string
   dataVencimentoFormatada: string
+  /** Serviços estruturados (quick-260716-ky2); null = contrato legado. */
+  servicos: ServicoContratado[] | null
+  /** Ex.: "Tráfego Pago (Meta Ads e Google Ads): R$ 1.500,00" — p/ cláusula de valor. */
+  linhasValorPorServico: string[]
 }
 
 export type ResultadoVariaveis = { data: VariaveisContrato } | { error: string }
@@ -76,6 +86,8 @@ export function montarVariaveisContrato({
     dataVencimento: string
     valorMensal: string
     duracaoMeses: number | null
+    /** jsonb cru de contratos.servicos; inválido/ausente → contrato legado. */
+    servicos?: unknown
   }
   dadosContratante: unknown
 }): ResultadoVariaveis {
@@ -100,6 +112,15 @@ export function montarVariaveisContrato({
     return { error: 'Valor mensal do contrato inválido.' }
   }
 
+  // Serviços estruturados: parse defensivo — jsonb inválido/ausente vira null
+  // (contrato legado, texto exatamente como antes).
+  const servicosParsed = servicosContratadosSchema.safeParse(contrato.servicos)
+  const servicos = servicosParsed.success ? servicosParsed.data : null
+  const linhasValorPorServico = (servicos ?? []).map((s) => {
+    const plataformas = s.plataformas?.length ? ` (${rotuloPlataformas(s.plataformas)})` : ''
+    return `${rotuloServicoUi(s.servico)}${plataformas}: ${formatarBrl(s.valor)}`
+  })
+
   const dados = parsed.data
   return {
     data: {
@@ -111,6 +132,8 @@ export function montarVariaveisContrato({
       duracaoMeses: contrato.duracaoMeses,
       dataInicioFormatada: formatarDataBr(contrato.dataInicio),
       dataVencimentoFormatada: formatarDataBr(contrato.dataVencimento),
+      servicos,
+      linhasValorPorServico,
     },
   }
 }

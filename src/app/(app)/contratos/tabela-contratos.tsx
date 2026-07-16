@@ -27,14 +27,21 @@ import {
   badgeStatusFluxo,
   rotuloTipoDocumento,
 } from '@/lib/contratos/fluxo'
+import { rotuloServico } from '@/lib/crm/servicos'
+import {
+  servicosContratadosSchema,
+  rotuloPlataformas,
+  rotuloServicoUi,
+} from '@/lib/contratos/servicos-contratados'
 import { CopiarLinkBotao } from '@/components/contratos/copiar-link-botao'
 import { VerificarDadosDialog } from '@/components/contratos/verificar-dados-dialog'
 import { EditarContratoDialog } from '@/components/contratos/editar-contrato-dialog'
 import { ExcluirContratoAlert } from '@/components/contratos/excluir-contrato-alert'
 
-// Tabela de /contratos — 12 colunas na ordem EXATA (decisão LOCKED):
-// Cliente | Tipo | Valor | Status | Início | Fim | Verificar | Enviar/Reenviar
-// | Preview | Editar | Excluir | Selecionar.
+// Tabela de /contratos — colunas na ordem EXATA (decisão LOCKED da Fase 4 +
+// coluna Serviços do quick-260716-ky2):
+// Cliente | Tipo | Serviços | Valor | Status | Início | Fim | Verificar |
+// Enviar/Reenviar | Preview | Editar | Excluir | Selecionar.
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -45,6 +52,34 @@ const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
 function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.split('-')
   return `${dia}/${mes}/${ano}`
+}
+
+// Badges compactas dos serviços contratados (quick-260716-ky2). Estruturado →
+// 1 badge por serviço (tráfego pago com as plataformas no title); legado →
+// fallback para o servico único (rotuloServico).
+function ServicosBadges({ contrato }: { contrato: ContratoConsolidado }) {
+  const parsed = servicosContratadosSchema.safeParse(contrato.servicos)
+  if (!parsed.success) {
+    return <span className="text-sm text-muted-foreground">{rotuloServico(contrato.servico)}</span>
+  }
+  return (
+    <div className="flex max-w-56 flex-wrap gap-1">
+      {parsed.data.map((s) => (
+        <Badge
+          key={s.servico}
+          variant="secondary"
+          className="bg-muted text-foreground dark:bg-muted/60"
+          title={
+            s.servico === 'trafego_pago'
+              ? `${rotuloServicoUi(s.servico)} — ${rotuloPlataformas(s.plataformas)}`
+              : rotuloServicoUi(s.servico)
+          }
+        >
+          {rotuloServicoUi(s.servico)}
+        </Badge>
+      ))}
+    </div>
+  )
 }
 
 function BotaoIcone({
@@ -154,6 +189,7 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
             <TableRow>
               <TableHead>Cliente</TableHead>
               <TableHead>Tipo</TableHead>
+              <TableHead>Serviços</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Início</TableHead>
@@ -190,6 +226,9 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
                     )}
                   </TableCell>
                   <TableCell>{rotuloTipoDocumento(contrato.tipoDocumento)}</TableCell>
+                  <TableCell>
+                    <ServicosBadges contrato={contrato} />
+                  </TableCell>
                   <TableCell>{formatadorMoeda.format(Number(contrato.valorMensal))}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

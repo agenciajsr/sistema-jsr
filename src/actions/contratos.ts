@@ -158,34 +158,61 @@ export async function enviarParaAssinatura(contratoId: string) {
   if (!user) return { error: 'Sessão expirada — faça login novamente.' }
 
   try {
-    const [row] = await db
-      .select({
-        id: contratos.id,
-        clienteId: contratos.clienteId,
-        clienteNome: clientes.nome,
-        dataInicio: contratos.dataInicio,
-        dataVencimento: contratos.dataVencimento,
-        valorMensal: contratos.valorMensal,
-        duracaoMeses: contratos.duracaoMeses,
-        dadosContratante: contratos.dadosContratante,
-      })
-      .from(contratos)
-      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
-      .where(eq(contratos.id, contratoId))
+    const camposEnvio = {
+      id: contratos.id,
+      clienteId: contratos.clienteId,
+      clienteNome: clientes.nome,
+      dataInicio: contratos.dataInicio,
+      dataVencimento: contratos.dataVencimento,
+      valorMensal: contratos.valorMensal,
+      duracaoMeses: contratos.duracaoMeses,
+      dadosContratante: contratos.dadosContratante,
+    }
+    let registro:
+      | {
+          id: string
+          clienteId: string
+          clienteNome: string
+          dataInicio: string
+          dataVencimento: string
+          valorMensal: string
+          duracaoMeses: number | null
+          dadosContratante: unknown
+          servicos: unknown
+        }
+      | undefined
+    try {
+      const [r] = await db
+        .select({ ...camposEnvio, servicos: contratos.servicos })
+        .from(contratos)
+        .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+        .where(eq(contratos.id, contratoId))
+      registro = r
+    } catch (e0031) {
+      // Migration 0031 pendente: envia como legado (servicos null).
+      console.warn('[enviarParaAssinatura] coluna servicos ausente (migration 0031 pendente?)', e0031)
+      const [r] = await db
+        .select(camposEnvio)
+        .from(contratos)
+        .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+        .where(eq(contratos.id, contratoId))
+      registro = r ? { ...r, servicos: null } : undefined
+    }
 
-    if (!row) return { error: 'Contrato não encontrado.' }
-    if (!row.dadosContratante) {
+    if (!registro) return { error: 'Contrato não encontrado.' }
+    if (!registro.dadosContratante) {
       return { error: 'O contratante ainda não preencheu os dados.' }
     }
 
     const vars = montarVariaveisContrato({
       contrato: {
-        dataInicio: row.dataInicio,
-        dataVencimento: row.dataVencimento,
-        valorMensal: row.valorMensal,
-        duracaoMeses: row.duracaoMeses,
+        dataInicio: registro.dataInicio,
+        dataVencimento: registro.dataVencimento,
+        valorMensal: registro.valorMensal,
+        duracaoMeses: registro.duracaoMeses,
+        servicos: registro.servicos,
       },
-      dadosContratante: row.dadosContratante,
+      dadosContratante: registro.dadosContratante,
     })
     if ('error' in vars) return { error: vars.error }
 
@@ -193,7 +220,7 @@ export async function enviarParaAssinatura(contratoId: string) {
     // A página de assinaturas é sempre a ÚLTIMA do PDF gerado.
     const ultimaPagina = contarPaginasPdf(pdf)
     const documento = await criarDocumento({
-      nome: `Contrato JSR — ${row.clienteNome}`,
+      nome: `Contrato JSR — ${registro.clienteNome}`,
       pdf,
       signatarios: [
         {
@@ -219,7 +246,7 @@ export async function enviarParaAssinatura(contratoId: string) {
       .where(eq(contratos.id, contratoId))
 
     revalidatePath('/contratos')
-    revalidatePath(`/clientes/${row.clienteId}`)
+    revalidatePath(`/clientes/${registro.clienteId}`)
     return { data: { documentoId: documento.id } }
   } catch (e) {
     if (e instanceof AutentiqueTokenAusenteError) {

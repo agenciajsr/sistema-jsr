@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { montarVariaveisContrato } from './variaveis'
+import { montarSecoesContrato, tituloContrato, trechosDoParagrafo } from './template-trafego'
 
 const dadosPj = {
   tipo: 'pj' as const,
@@ -114,5 +115,105 @@ describe('montarVariaveisContrato', () => {
       dadosContratante: { ...dadosPf, nomeCompleto: '' },
     })
     expect(incompleto).toHaveProperty('error')
+  })
+})
+
+// quick-260716-ky2 — serviços contratados estruturados nas variáveis/template.
+const servicosMulti = [
+  { servico: 'trafego_pago', valor: 1500, plataformas: ['meta_ads', 'google_ads'] },
+  { servico: 'crm_automacao', valor: 800 },
+]
+
+function textoDasSecoes(secoes: ReturnType<typeof montarSecoesContrato>): string {
+  return secoes
+    .map((s) =>
+      [s.titulo ?? '', ...s.paragrafos.map((p) => trechosDoParagrafo(p).map((t) => t.texto).join(''))].join('\n')
+    )
+    .join('\n')
+}
+
+describe('serviços contratados nas variáveis do contrato', () => {
+  it('parseia servicos e monta as linhas de valor por serviço', () => {
+    const r = montarVariaveisContrato({
+      contrato: { ...contratoBase, servicos: servicosMulti },
+      dadosContratante: dadosPf,
+    })
+    if ('error' in r) throw new Error(r.error)
+    expect(r.data.servicos).toHaveLength(2)
+    expect(r.data.linhasValorPorServico).toEqual([
+      'Tráfego Pago (Meta Ads e Google Ads): R$ 1.500,00',
+      'CRM e Automação: R$ 800,00',
+    ])
+  })
+
+  it('servicos ausente/inválido → null (contrato legado)', () => {
+    const semServicos = montarVariaveisContrato({
+      contrato: contratoBase,
+      dadosContratante: dadosPf,
+    })
+    if ('error' in semServicos) throw new Error(semServicos.error)
+    expect(semServicos.data.servicos).toBeNull()
+    expect(semServicos.data.linhasValorPorServico).toEqual([])
+
+    const invalido = montarVariaveisContrato({
+      contrato: { ...contratoBase, servicos: [{ servico: 'trafego_pago' }] },
+      dadosContratante: dadosPf,
+    })
+    if ('error' in invalido) throw new Error(invalido.error)
+    expect(invalido.data.servicos).toBeNull()
+  })
+})
+
+describe('template do contrato com serviços estruturados', () => {
+  function varsCom(servicos: unknown) {
+    const r = montarVariaveisContrato({
+      contrato: { ...contratoBase, servicos },
+      dadosContratante: dadosPf,
+    })
+    if ('error' in r) throw new Error(r.error)
+    return r.data
+  }
+
+  it('multi-serviço: objeto cita os serviços e as plataformas; 2.2 traz a composição', () => {
+    const texto = textoDasSecoes(montarSecoesContrato(varsCom(servicosMulti)))
+    expect(texto).toContain('Meta Ads e Google Ads')
+    expect(texto).toContain('CRM e Automação')
+    expect(texto).toContain('Tráfego Pago (Meta Ads e Google Ads)')
+    expect(texto).toContain('2.2 O valor mensal é composto pelos seguintes serviços:')
+  })
+
+  it('multi-serviço: título vira marketing digital; só-tráfego mantém o título original', () => {
+    expect(tituloContrato(varsCom(servicosMulti))).toBe(
+      'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL'
+    )
+    expect(
+      tituloContrato(
+        varsCom([{ servico: 'trafego_pago', valor: 1500, plataformas: ['meta_ads'] }])
+      )
+    ).toBe('CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO')
+    expect(tituloContrato(varsCom(undefined))).toBe(
+      'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO'
+    )
+  })
+
+  it('sem tráfego pago entre os serviços, os itens operacionais de tráfego saem do objeto', () => {
+    const texto = textoDasSecoes(
+      montarSecoesContrato(varsCom([{ servico: 'crm_automacao', valor: 800 }]))
+    )
+    expect(texto).not.toContain('Criação e configuração inicial da conta de anúncios')
+    expect(texto).not.toContain('1.3 Os primeiros 7 (sete) dias úteis')
+    expect(texto).toContain('CRM e automações de atendimento')
+  })
+
+  it('legado (servicos null): texto idêntico ao atual — snapshot preservado', () => {
+    const secoes = montarSecoesContrato(varsCom(undefined))
+    const texto = textoDasSecoes(secoes)
+    expect(texto).toContain(
+      '1.1.6 O presente contrato tem por objeto a prestação de serviços de geração de tráfego pago a partir das plataformas de anúncios, sem exclusividade e sem subordinação, visando a promoção do site e/ou das mídias sociais do(a) CONTRATANTE.'
+    )
+    expect(texto).toContain('1.1.1 Criação e configuração inicial da conta de anúncios')
+    expect(texto).toContain('1.1.5 Prestação de contas dos serviços prestados.')
+    expect(texto).not.toContain('2.2 O valor mensal é composto')
+    expect(texto).toContain('CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO')
   })
 })
