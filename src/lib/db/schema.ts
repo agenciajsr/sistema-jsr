@@ -44,6 +44,8 @@ export const clientes = pgTable('clientes', {
   // Pagamento
   formaPagamento: formaPagamentoEnum('forma_pagamento'),
   diaPagamento: integer('dia_pagamento'),
+  // Id do customer no Asaas (nulo = ainda não cadastrado lá). Migration 0032.
+  asaasCustomerId: text('asaas_customer_id'),
   // Serviços
   servicosContratados: jsonb('servicos_contratados'),
   // Operação
@@ -93,6 +95,39 @@ export const contratos = pgTable('contratos', {
 }, (table) => ({
   clienteIdx: index('contratos_cliente_id_idx').on(table.clienteId, table.dataInicio),
 }))
+
+// Cobranças/faturas da mensalidade (Fase 5 Parte 1 — migration 0032, quick-260716-qzu).
+// NOSSA tabela é a fonte da verdade (D-04); o Asaas é um meio de quitação.
+// Tabela NOVA de propósito — NÃO reusa `transacoes` (livro-caixa do financeiro,
+// com recorrência/centro de custo próprios). Integração cobrancas → transacoes
+// fica para uma parte futura da Fase 5.
+// status: 'pendente' | 'paga' | 'vencida' | 'cancelada' (text, não enum).
+// forma_quitacao: 'asaas' | 'pix_manual' | null. criado_via: 'automatico' | 'manual'.
+export const cobrancas = pgTable('cobrancas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  contratoId: uuid('contrato_id').references(() => contratos.id, { onDelete: 'set null' }),
+  competencia: text('competencia').notNull(), // 'YYYY-MM'
+  valor: numeric('valor', { precision: 10, scale: 2 }).notNull(),
+  status: text('status').notNull().default('pendente'),
+  vencimento: date('vencimento').notNull(),
+  asaasPaymentId: text('asaas_payment_id').unique(),
+  invoiceUrl: text('invoice_url'),
+  formaQuitacao: text('forma_quitacao'),
+  pagoEm: timestamp('pago_em', { withTimezone: true }),
+  criadoVia: text('criado_via').notNull().default('automatico'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  // Índice único PARCIAL (WHERE criado_via='automatico'): o fluxo automático
+  // nunca duplica o mês; cobranças manuais extras continuam livres.
+  contratoCompetenciaUniq: uniqueIndex('cobrancas_contrato_competencia_uniq')
+    .on(table.contratoId, table.competencia)
+    .where(sql`${table.criadoVia} = 'automatico'`),
+}))
+
+export type Cobranca = typeof cobrancas.$inferSelect
+export type NovaCobranca = typeof cobrancas.$inferInsert
 
 export const tipoTransacaoEnum = pgEnum('tipo_transacao', ['receita', 'despesa'])
 export const categoriaTransacaoEnum = pgEnum('categoria_transacao', ['mensalidade', 'projeto', 'outro', 'ferramenta', 'ads_agencia', 'salario'])
@@ -389,6 +424,10 @@ export const acompanhamentosRelations = relations(acompanhamentos, ({ one }) => 
 }))
 export const contratosRelations = relations(contratos, ({ one }) => ({
   cliente: one(clientes, { fields: [contratos.clienteId], references: [clientes.id] }),
+}))
+export const cobrancasRelations = relations(cobrancas, ({ one }) => ({
+  cliente: one(clientes, { fields: [cobrancas.clienteId], references: [clientes.id] }),
+  contrato: one(contratos, { fields: [cobrancas.contratoId], references: [contratos.id] }),
 }))
 export const transacoesRelations = relations(transacoes, ({ one }) => ({
   cliente: one(clientes, { fields: [transacoes.clienteId], references: [clientes.id] }),
