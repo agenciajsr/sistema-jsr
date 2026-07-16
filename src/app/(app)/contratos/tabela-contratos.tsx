@@ -164,17 +164,23 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
     startTransition(async () => {
       const resultado = await gerarCobrancaManual(contrato.id)
       setEnviandoId(null)
+      // TODO desfecho vira toast pt-BR — nada silencioso (quick-260716-sr5).
       if (!resultado.ok) {
         toast.error(resultado.erro)
         return
       }
       if (resultado.aviso) {
-        toast.warning(resultado.aviso)
+        // Aviso COM link (fatura reaproveitada/backfill) ainda é um desfecho útil.
+        if (resultado.invoiceUrl) {
+          toast.info(`${resultado.aviso} Link: ${resultado.invoiceUrl}`)
+        } else {
+          toast.warning(resultado.aviso)
+        }
         return
       }
       toast.success(
         resultado.invoiceUrl
-          ? `Cobrança gerada — ${resultado.invoiceUrl}`
+          ? `Cobrança gerada no Asaas — link da fatura: ${resultado.invoiceUrl}`
           : 'Cobrança gerada.'
       )
     })

@@ -16,6 +16,8 @@ import {
   getVisaoAnalitica,
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
+import { getVisaoCobrancas } from '@/lib/cobrancas/dados'
+import { asaasDisponivel } from '@/lib/asaas/client'
 import { getCurrentUser } from '@/lib/auth/session'
 import { withRetry } from '@/lib/utils/with-retry'
 import { hojeBrasilia } from '@/lib/date-br'
@@ -26,6 +28,7 @@ import { TransacoesTable } from './transacoes-table'
 import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
 import { VisaoAnalitica } from './visao-analitica'
+import { CobrancasTab } from './cobrancas-tab'
 import { MonthSelector } from './month-selector'
 
 // Cinto de segurança: teto de execução da função serverless (rede de proteção
@@ -82,6 +85,9 @@ export default async function FinanceiroPage({
       getProfiles(),
       getVisaoAnalitica(mes, ano),
     ])
+    // Fetch SEQUENCIAL depois do lote 2 (não engordar os Promise.all): visão
+    // consolidada da aba Cobranças (quick-260716-sr5).
+    const visaoCobrancas = await getVisaoCobrancas()
     return [
       resumo,
       mrr,
@@ -92,6 +98,7 @@ export default async function FinanceiroPage({
       previsao,
       profilesList,
       visaoAnalitica,
+      visaoCobrancas,
     ] as const
   }
 
@@ -133,7 +140,14 @@ export default async function FinanceiroPage({
     previsao,
     profilesList,
     visaoAnalitica,
+    visaoCobrancas,
   ] = dados
+
+  // Contagem do badge da aba: clientes que precisam de atenção este mês
+  // (fatura pendente/vencida ou ainda sem fatura gerada).
+  const cobrancasAtencao = visaoCobrancas.filter(
+    (l) => !l.fatura || l.fatura.status === 'pendente' || l.fatura.status === 'vencida',
+  ).length
 
   // Chip de progresso só faz sentido no mês corrente (em Brasília).
   const hoje = hojeBrasilia()
@@ -245,6 +259,7 @@ export default async function FinanceiroPage({
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="geral">Visao Geral</TabsTrigger>
           <TabsTrigger value="receber">A Receber ({contasReceber.length})</TabsTrigger>
+          <TabsTrigger value="cobrancas">Cobranças ({cobrancasAtencao})</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar ({contasPagar.length})</TabsTrigger>
           <TabsTrigger value="previsao">Previsao</TabsTrigger>
           <TabsTrigger value="analitica">Visao Analitica</TabsTrigger>
@@ -272,6 +287,17 @@ export default async function FinanceiroPage({
             </CardHeader>
             <CardContent>
               <ContasTable contas={contasReceber} tipo="receita" />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cobrancas">
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Cobranças do Mês por Cliente</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CobrancasTab linhas={visaoCobrancas} asaasConfigurado={asaasDisponivel()} />
             </CardContent>
           </Card>
         </TabsContent>
