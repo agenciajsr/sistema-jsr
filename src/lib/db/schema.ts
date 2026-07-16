@@ -81,6 +81,9 @@ export const contratos = pgTable('contratos', {
   servico: text('servico'), // chave de SERVICOS_JSR (src/lib/crm/servicos.ts)
   dadosContratante: jsonb('dados_contratante'), // PJ/PF preenchido pelo cliente
   dadosRecebidosEm: timestamp('dados_recebidos_em', { withTimezone: true }),
+  // [{servico, valor, plataformas?}] — ver src/lib/contratos/servicos-contratados.ts;
+  // null = contrato legado (usa servico/valorMensal). Migration 0031 (nullable).
+  servicos: jsonb('servicos'),
   // --- Assinatura eletrônica (Fase 4 Parte 2) — TUDO nullable (migration 0030).
   tipoDocumento: text('tipo_documento'), // nulo exibe "Contrato" na UI
   autentiqueDocumentoId: text('autentique_documento_id'),
