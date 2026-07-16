@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 
+import { db } from '@/lib/db'
+import { crmLeadInbox } from '@/lib/db/schema'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { processarLead } from '@/lib/crm/ingest'
 import {
@@ -27,13 +30,39 @@ async function lerCorpoCru(request: Request): Promise<Record<string, unknown>> {
   if (contentType.includes('application/json')) {
     return (await request.json()) as Record<string, unknown>
   }
-  // form-urlencoded ou multipart (Elementor, formulários HTML nativos)
-  const fd = await request.formData()
-  const raw: Record<string, unknown> = {}
-  for (const [k, v] of fd.entries()) {
-    raw[k] = typeof v === 'string' ? v : '' // ignora arquivos
+  if (contentType.includes('multipart/form-data') || contentType.includes('x-www-form-urlencoded')) {
+    const fd = await request.formData()
+    const raw: Record<string, unknown> = {}
+    for (const [k, v] of fd.entries()) {
+      raw[k] = typeof v === 'string' ? v : '' // ignora arquivos
+    }
+    return raw
   }
-  return raw
+  // Content-type ausente/estranho (text/plain etc.): tenta JSON no texto cru.
+  const texto = await request.text()
+  return JSON.parse(texto) as Record<string, unknown>
+}
+
+/**
+ * Rede de segurança de depuração: grava no inbox (status 'erro') o corpo CRU e
+ * o motivo, para dar para inspecionar o que uma ferramenta externa mandou
+ * quando algo falha. Nunca lança (é o último recurso).
+ */
+async function registrarErroInbox(corpo: string, contentType: string, motivo: string) {
+  try {
+    const workspace = await getWorkspaceAtual()
+    if (!workspace) return
+    await db.insert(crmLeadInbox).values({
+      workspaceId: workspace.id,
+      fonte: 'erro_webhook',
+      payload: { corpo: corpo.slice(0, 20000), contentType, motivo },
+      status: 'erro',
+      erroDetalhe: motivo.slice(0, 1000),
+      dedupHash: `erro-${randomUUID()}`,
+    })
+  } catch (e) {
+    console.error('[registrarErroInbox]', e)
+  }
 }
 
 // Validação de URL: algumas ferramentas (extensões, automações) fazem um GET
@@ -51,37 +80,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 })
   }
 
-  // (b) corpo cru (JSON ou form-data) -> normaliza p/ o formato do lead ->
-  //     valida com Zod ANTES de tocar o banco. A normalização entende o
-  //     formato do Elementor e preserva todas as respostas em extra.
-  let bruto: Record<string, unknown>
+  // Corpo em TEXTO primeiro (via clone) — se qualquer etapa falhar, gravamos o
+  // corpo cru no inbox (status 'erro') para inspecionar o que a ferramenta mandou.
+  const contentType = request.headers.get('content-type') ?? ''
+  let corpoTexto = ''
   try {
-    bruto = await lerCorpoCru(request)
+    corpoTexto = await request.clone().text()
   } catch {
-    return NextResponse.json({ error: 'Corpo da requisicao invalido.' }, { status: 400 })
+    /* segue sem o texto */
   }
 
-  // Extensão de WhatsApp (prospecção ativa): a extensão dispara para TODOS os
-  // contatos — só ingerimos quem está na etapa "Primeiro Contato Frio" (mesmo
-  // filtro do antigo cenário do Make). O resto é ignorado com 200 (não é erro).
-  if (ehPayloadExtensaoWhats(bruto) && !eventoAceitoExtensaoWhats(bruto)) {
-    return NextResponse.json({ ignorado: true })
-  }
-
-  const parsed = leadEntradaSchema.safeParse(normalizarLeadEntrada(bruto))
-  if (!parsed.success) {
-    const mensagem = parsed.error.issues[0]?.message ?? 'Dados invalidos.'
-    return NextResponse.json({ error: mensagem }, { status: 400 })
-  }
-
-  // (c) workspace (v1 single-tenant, seed da migration 0019).
-  const workspace = await getWorkspaceAtual()
-  if (!workspace) {
-    return NextResponse.json({ error: 'Workspace nao configurado.' }, { status: 503 })
-  }
-
-  // (d) ingestão compartilhada com dedup idempotente por dia.
   try {
+    // (b) corpo cru (JSON ou form-data) -> normaliza p/ o formato do lead ->
+    //     valida com Zod ANTES de tocar o banco.
+    let bruto: Record<string, unknown>
+    try {
+      bruto = await lerCorpoCru(request)
+    } catch {
+      await registrarErroInbox(corpoTexto, contentType, 'Corpo nao e JSON nem form-data valido.')
+      return NextResponse.json({ error: 'Corpo da requisicao invalido.' }, { status: 400 })
+    }
+
+    // Extensão de WhatsApp (prospecção ativa): a extensão dispara para TODOS os
+    // contatos — só ingerimos quem está na etapa "Primeiro Contato Frio" (mesmo
+    // filtro do antigo cenário do Make). O resto é ignorado com 200 (não é erro).
+    if (ehPayloadExtensaoWhats(bruto) && !eventoAceitoExtensaoWhats(bruto)) {
+      return NextResponse.json({ ignorado: true })
+    }
+
+    const parsed = leadEntradaSchema.safeParse(normalizarLeadEntrada(bruto))
+    if (!parsed.success) {
+      const mensagem = parsed.error.issues[0]?.message ?? 'Dados invalidos.'
+      await registrarErroInbox(corpoTexto, contentType, `Validacao: ${mensagem}`)
+      return NextResponse.json({ error: mensagem }, { status: 400 })
+    }
+
+    // (c) workspace (v1 single-tenant, seed da migration 0019).
+    const workspace = await getWorkspaceAtual()
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace nao configurado.' }, { status: 503 })
+    }
+
+    // (d) ingestão compartilhada com dedup idempotente por dia.
     const resultado = await processarLead(parsed.data, workspace.id)
 
     if ('duplicado' in resultado && resultado.duplicado) {
@@ -94,8 +134,8 @@ export async function POST(request: Request) {
       oportunidadeId: resultado.oportunidadeId,
     })
   } catch (erro) {
-    // Já registrado no inbox com status 'erro' pelo processarLead.
     console.error('[api/crm/leads]', erro)
+    await registrarErroInbox(corpoTexto, contentType, `Excecao: ${erro instanceof Error ? erro.message : String(erro)}`)
     return NextResponse.json({ error: 'Erro ao processar o lead.' }, { status: 500 })
   }
 }
