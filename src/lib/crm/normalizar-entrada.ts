@@ -184,7 +184,11 @@ export function eventoAceitoExtensaoWhats(raw: Record<string, unknown>): boolean
 function normalizarExtensaoWhats(raw: Record<string, unknown>): EntradaNormalizada {
   const p = raw as PayloadExtensaoWhats
   const nome = typeof p.name === 'string' ? p.name.trim() : ''
-  const telefone = typeof p.number === 'string' || typeof p.number === 'number' ? String(p.number).trim() : ''
+  // number vem como JID do WhatsApp ("5571...@c.us") — fica só o número.
+  const telefone =
+    typeof p.number === 'string' || typeof p.number === 'number'
+      ? String(p.number).trim().replace(/@.*$/, '')
+      : ''
   const emailBruto = typeof p.perfilContato?.email === 'string' ? p.perfilContato.email.trim() : ''
   const email = emailBruto && RE_EMAIL_VALIDO.test(emailBruto) ? emailBruto : undefined
   const etapa = typeof p.eventDetails?.name === 'string' ? p.eventDetails.name : ''

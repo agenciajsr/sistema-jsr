@@ -158,6 +158,11 @@ describe('extensão de WhatsApp (prospecção ativa)', () => {
     expect(eventoAceitoExtensaoWhats({ ...payload, eventDetails: { name: 'Follow-up' } })).toBe(false)
   })
 
+  it('limpa o sufixo @c.us do número (JID do WhatsApp)', () => {
+    const r = normalizarLeadEntrada({ ...payload, number: '557197371160@c.us' })
+    expect(r.telefone).toBe('557197371160')
+  })
+
   it('normaliza como prospeccao_fria com etapa e última mensagem nas respostas', () => {
     const r = normalizarLeadEntrada(payload)
     expect(r.fonte).toBe('prospeccao_fria')
