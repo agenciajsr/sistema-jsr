@@ -466,7 +466,7 @@ export default async function ClienteDetalhePage({
 
           <section className="space-y-4">
             <h2 className="text-[20px] leading-tight font-semibold">💳 Cobrança</h2>
-            <CobrancaCliente clienteId={id} usaAsaas={cliente.usaAsaas} cobrancas={cobrancas} />
+            <CobrancaCliente clienteId={id} modoCobranca={cliente.modoCobranca} cobrancas={cobrancas} />
           </section>
         </TabsContent>
 
@@ -474,7 +474,12 @@ export default async function ClienteDetalhePage({
         <TabsContent value="faturas" className="space-y-4">
           <section className="space-y-4">
             <h2 className="text-[20px] leading-tight font-semibold">Faturas</h2>
-            <FaturasCliente faturas={faturas} asaasConfigurado={asaasConfigurado} />
+            <FaturasCliente
+              clienteId={id}
+              modoCobranca={cliente.modoCobranca}
+              faturas={faturas}
+              asaasConfigurado={asaasConfigurado}
+            />
           </section>
         </TabsContent>
 

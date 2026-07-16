@@ -5,15 +5,10 @@ import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
-import {
-  createCobranca,
-  setUsaAsaas,
-  updateTransacaoStatus,
-} from '@/actions/financeiro'
+import { createCobranca, updateTransacaoStatus } from '@/actions/financeiro'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -50,11 +45,11 @@ const hoje = () => new Date().toISOString().slice(0, 10)
 
 export function CobrancaCliente({
   clienteId,
-  usaAsaas,
+  modoCobranca,
   cobrancas,
 }: {
   clienteId: string
-  usaAsaas: boolean
+  modoCobranca: string
   cobrancas: Cobranca[]
 }) {
   const router = useRouter()
@@ -72,18 +67,6 @@ export function CobrancaCliente({
         toast.error(result.error)
         return
       }
-      router.refresh()
-    })
-  }
-
-  function handleAsaas(valor: boolean) {
-    startTransition(async () => {
-      const result = await setUsaAsaas(clienteId, valor)
-      if (result && 'error' in result) {
-        toast.error(result.error)
-        return
-      }
-      toast.success('Preferência de cobrança atualizada.')
       router.refresh()
     })
   }
@@ -122,16 +105,21 @@ export function CobrancaCliente({
   return (
     <div className="space-y-4">
       <Card className="border-none shadow-sm">
-        <CardContent className="flex items-center gap-3 pt-6">
-          <Checkbox
-            id="usa-asaas"
-            checked={usaAsaas}
-            disabled={isPending}
-            onCheckedChange={(v) => handleAsaas(v === true)}
-          />
-          <Label htmlFor="usa-asaas" className="cursor-pointer text-sm font-medium">
-            Cobrança via Asaas
-          </Label>
+        <CardContent className="flex flex-wrap items-center gap-3 pt-6">
+          <span className="text-sm font-medium">Modo de cobrança:</span>
+          <Badge
+            variant="secondary"
+            className={
+              modoCobranca === 'automatico_asaas'
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400'
+                : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400'
+            }
+          >
+            {modoCobranca === 'automatico_asaas' ? 'Asaas' : 'Manual PIX'}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            Para alterar, use a aba Faturas.
+          </span>
         </CardContent>
       </Card>
 

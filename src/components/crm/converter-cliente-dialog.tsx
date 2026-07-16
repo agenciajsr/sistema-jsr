@@ -41,7 +41,15 @@ import type { OportunidadeCard } from '@/lib/crm/dados'
 
 const conversaoSchema = z.object({
   duracaoMeses: z.union([z.literal(3), z.literal(6)]),
+  // quick-260716-sr5: modo de cobrança do cliente. Default seguro manual_pix
+  // (manual nunca gera taxa no Asaas).
+  modoCobranca: z.enum(['automatico_asaas', 'manual_pix']),
 })
+
+const MODOS_COBRANCA = [
+  { valor: 'automatico_asaas', rotulo: 'Automático via Asaas (boleto/link)' },
+  { valor: 'manual_pix', rotulo: 'Manual via PIX (direto na chave)' },
+] as const
 
 type ConversaoForm = z.infer<typeof conversaoSchema>
 
@@ -72,9 +80,10 @@ export function ConverterClienteDialog({
 
   const form = useForm<ConversaoForm>({
     resolver: zodResolver(conversaoSchema),
-    defaultValues: { duracaoMeses: 3 },
+    defaultValues: { duracaoMeses: 3, modoCobranca: 'manual_pix' },
   })
   const duracao = form.watch('duracaoMeses')
+  const modoCobranca = form.watch('modoCobranca')
 
   function fechar(aberta: boolean) {
     if (!aberta) {
@@ -96,6 +105,7 @@ export function ConverterClienteDialog({
       const result = await converterOportunidadeEmCliente(oportunidade.id, {
         duracaoMeses: valores.duracaoMeses,
         servicos: paraServicosContratados(itens),
+        modoCobranca: valores.modoCobranca,
       })
       if ('error' in result && result.error) {
         toast.error(result.error)
@@ -230,6 +240,28 @@ export function ConverterClienteDialog({
                     </Button>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Modo de cobrança</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {MODOS_COBRANCA.map((modo) => (
+                    <Button
+                      key={modo.valor}
+                      type="button"
+                      variant={modoCobranca === modo.valor ? 'default' : 'outline'}
+                      className="justify-start"
+                      onClick={() =>
+                        form.setValue('modoCobranca', modo.valor, { shouldValidate: true })
+                      }
+                    >
+                      {modo.rotulo}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  No modo manual, a fatura mensal é registrada só internamente — nada é enviado ao Asaas.
+                </p>
               </div>
 
               <ServicosChecklist

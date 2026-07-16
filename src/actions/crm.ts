@@ -673,6 +673,9 @@ export async function ganharOportunidade(id: string, opts?: { criarCliente?: boo
 const dadosContratoSchema = z.object({
   duracaoMeses: z.union([z.literal(3), z.literal(6)]),
   servicos: servicosContratadosSchema,
+  // quick-260716-sr5: modo de cobrança escolhido na conversão. Default seguro
+  // manual_pix — cliente manual NUNCA gera chamada (nem taxa) no Asaas.
+  modoCobranca: z.enum(['automatico_asaas', 'manual_pix']).default('manual_pix'),
 })
 
 export type DadosContratoConversao = z.infer<typeof dadosContratoSchema>
@@ -785,7 +788,15 @@ export async function converterOportunidadeEmCliente(
     const payload = dadosClienteDe({ contato, empresa })
     if (!payload) return { error: 'Negocio sem contato e sem empresa — nada para converter.' }
 
-    const [clienteNovo] = await db.insert(clientes).values(payload).returning({ id: clientes.id })
+    const [clienteNovo] = await db
+      .insert(clientes)
+      .values({
+        ...payload,
+        modoCobranca: parsedContrato.data.modoCobranca,
+        // Espelho da flag antiga para não dessincronizar telas legadas.
+        usaAsaas: parsedContrato.data.modoCobranca === 'automatico_asaas',
+      })
+      .returning({ id: clientes.id })
 
     await vincularClienteNoFunil(clienteNovo.id, oportunidade.id, contato, empresa)
 

@@ -17,8 +17,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { confirmarRecebimentoManual } from '@/actions/cobrancas'
+import { confirmarRecebimentoManual, setModoCobranca } from '@/actions/cobrancas'
 import type { FaturaCliente } from '@/lib/cobrancas/dados'
+
+const MODO_BADGE: Record<string, { label: string; classe: string }> = {
+  automatico_asaas: {
+    label: 'Asaas',
+    classe: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400',
+  },
+  manual_pix: {
+    label: 'Manual PIX',
+    classe: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400',
+  },
+}
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -62,13 +73,29 @@ const QUITACAO_LABEL: Record<string, string> = {
 }
 
 export function FaturasCliente({
+  clienteId,
+  modoCobranca,
   faturas,
   asaasConfigurado,
 }: {
+  clienteId: string
+  modoCobranca: string
   faturas: FaturaCliente[]
   asaasConfigurado: boolean
 }) {
   const [pendente, startTransition] = useTransition()
+
+  function alterarModo(novoModo: 'automatico_asaas' | 'manual_pix') {
+    if (novoModo === modoCobranca) return
+    startTransition(async () => {
+      const resultado = await setModoCobranca(clienteId, novoModo)
+      if (!resultado.ok) {
+        toast.error(resultado.erro)
+        return
+      }
+      toast.success(resultado.aviso ?? 'Modo de cobrança atualizado.')
+    })
+  }
 
   function confirmarRecebimento(fatura: FaturaCliente) {
     const confirmou = window.confirm(
@@ -89,8 +116,27 @@ export function FaturasCliente({
     })
   }
 
+  const badgeModo = MODO_BADGE[modoCobranca] ?? MODO_BADGE.manual_pix
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+        <span className="text-sm font-medium">Modo de cobrança:</span>
+        <Badge variant="secondary" className={badgeModo.classe}>
+          {badgeModo.label}
+        </Badge>
+        <select
+          value={modoCobranca === 'automatico_asaas' ? 'automatico_asaas' : 'manual_pix'}
+          disabled={pendente}
+          onChange={(e) => alterarModo(e.target.value as 'automatico_asaas' | 'manual_pix')}
+          className="ml-auto flex h-8 rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Alterar modo de cobrança"
+        >
+          <option value="manual_pix">Manual via PIX (direto na chave)</option>
+          <option value="automatico_asaas">Automático via Asaas (boleto/link)</option>
+        </select>
+      </div>
+
       {!asaasConfigurado && (
         <p className="rounded-lg border border-dashed bg-secondary/40 p-3 text-sm text-muted-foreground">
           Asaas não configurado — faturas são registradas apenas internamente.
