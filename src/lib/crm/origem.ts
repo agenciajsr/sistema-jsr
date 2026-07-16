@@ -11,6 +11,10 @@ export const ORIGEM_META: Record<string, OrigemMeta> = {
   landing_page: { rotulo: 'VIA LANDING', nome: 'Landing page', cor: 'bg-sky-500' },
   meta_lead_ad: { rotulo: 'VIA META', nome: 'Meta Ads', cor: 'bg-blue-600' },
   indicacao: { rotulo: 'VIA INDICACAO', nome: 'Indicacao', cor: 'bg-amber-500' },
+  prospeccao_fria: { rotulo: 'VIA PROSPECCAO', nome: 'Prospeccao fria', cor: 'bg-cyan-600' },
+  instagram: { rotulo: 'VIA INSTAGRAM', nome: 'Instagram', cor: 'bg-pink-500' },
+  evento: { rotulo: 'VIA EVENTO', nome: 'Evento/Network', cor: 'bg-violet-500' },
+  parceria: { rotulo: 'VIA PARCERIA', nome: 'Parceria', cor: 'bg-teal-500' },
   outro: { rotulo: 'VIA OUTRO', nome: 'Outro', cor: 'bg-zinc-400' },
 }
 

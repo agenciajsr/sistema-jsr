@@ -52,18 +52,33 @@ const opcionalTexto = z
 
 export const TIPOS_RECEITA = ['mensalidade', 'projeto'] as const
 export const TIPOS_TAREFA_CRM = ['ligacao', 'whatsapp', 'email', 'reuniao', 'followup', 'outro'] as const
-export const FONTES_LEAD = ['landing_page', 'meta_lead_ad', 'whatsapp', 'manual', 'outro'] as const
+export const FONTES_LEAD = [
+  'landing_page',
+  'meta_lead_ad',
+  'whatsapp',
+  'manual',
+  'prospeccao_fria',
+  'instagram',
+  'evento',
+  'parceria',
+  'indicacao',
+  'outro',
+] as const
 
-// Origens do LEAD no cadastro manual (/crm → Novo Lead). São EXATAMENTE as 6
+// Origens do LEAD no cadastro manual (/crm → Novo Lead). São EXATAMENTE as
 // chaves de ORIGEM_META (src/lib/crm/origem.ts): o badge de origem do card lê
 // esse mesmo valor, então divergir aqui faria todo card cair no fallback
-// 'outro'. Difere de FONTES_LEAD (API pública), que não tem 'indicacao'.
+// 'outro'. Manter em sincronia com FONTES_LEAD (API pública).
 export const ORIGENS_LEAD = [
   'manual',
   'whatsapp',
   'landing_page',
   'meta_lead_ad',
   'indicacao',
+  'prospeccao_fria',
+  'instagram',
+  'evento',
+  'parceria',
   'outro',
 ] as const
 
