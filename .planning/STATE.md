@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluido quick 260715-v6c (card de Regioes com metrica adaptativa por COBERTURA; limitacao da Graph API por regiao documentada)"
+stopped_at: "Fast: corrigido vazamento de preferencias entre clientes em /campanhas (key ausente). Etapa 3 planejada em .planning/ETAPA-3-CAMPANHAS.md, aguardando nova conversa"
 last_updated: "2026-07-16T01:45:00.000Z"
-last_activity: "2026-07-15 - Completed quick task 260715-v6c: card de Regiões com métrica adaptativa (cobertura)"
+last_activity: "2026-07-15 - Fast: preferências de KPI/funil vazavam entre clientes (key={cliente} ausente); Etapa 3 de /campanhas planejada"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -160,6 +160,7 @@ None yet.
 | fast-260715 | Correção pós-deploy do painel /campanhas: --chart-1..5 no CSS (gráfico Performance invisível), anúncios/criativos pela janela mais recente do ad_insights (janela ~30d, não diária), conjuntos derivados dos anúncios (adset_insights vazia), aviso na tabela de níveis | 2026-07-15 | 47cd411 | — |
 | 260715-tud | Etapa 2 de /campanhas — sync com breakdowns idade×gênero e região + objective oficial (tabelas demografia_insights/regiao_insights, migration 0025 APLICADA via script manual); seção Dados Demográficos (barras empilhadas, Ocultar Gênero, seletor de campanha/métrica), ranking de Regiões pela chave-herói e chips de filtro por objetivo na tabela (objective Meta c/ classificarObjetivo como fallback); módulo puro demografia.ts sob TDD (10 testes, 1487 total); sync validado ponta a ponta em conta real (172 linhas demografia, 250 regiões) | 2026-07-15 | 2c28ee4 | [260715-tud-etapa-2-campanhas-demografia-idade-gener](./quick/260715-tud-etapa-2-campanhas-demografia-idade-gener/) |
 | 260715-v6c | Card de Regiões de /campanhas com métrica adaptativa — ranking escolhe a métrica pela COBERTURA do dado (soma por região / total da mesma janela 30d e mesmas campanhas), não por presença: 1 compra onsite de 412 (0,2%) mantinha o card zerado em "Regiões que mais vendem"; agora cai para cliques no link com título "Regiões com mais tráfego" e nota citando a limitação de privacidade do Meta (motivo 'sem-cobertura'), ou nota neutra quando o cliente não teve resultado no período ('sem-resultados', não culpa o Meta); limiar 0.5 exportado e comentado com a medição; rankingDeRegioes/campanhasComRegiao puros sob TDD (19 testes, 1496 total) com regressão nomeada do caso real; validado read-only na conta Melzinho (vendas 0,2%→fallback, leads 100% e conversas 108,9%→herói); sem sync/migration | 2026-07-15 | 71bf75c | [260715-v6c-card-de-regioes-metrica-adaptativa-quand](./quick/260715-v6c-card-de-regioes-metrica-adaptativa-quand/) |
+| fast-260715 | **Bug**: preferências de KPI/funil vazavam entre clientes em /campanhas — GradeKpis e FunilConversao nascem de useState a partir das props e, sem `key={cliente}`, o React reaproveitava a instância ao trocar de cliente: a grade seguia com as métricas do cliente anterior e o salvamento otimista gravava essa lista errada por cima da linha do cliente atual (o banco sempre teve 1 linha por cliente — o vazamento era de estado no React). Corrigido com key={cliente} nos dois. Preferências gravadas antes da correção estão contaminadas (Ramon com 0 KPIs ativos) — tratamento planejado na Etapa 3 | 2026-07-15 | 79b09db | [ETAPA-3-CAMPANHAS.md](./ETAPA-3-CAMPANHAS.md) |
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 
 ## Session Continuity

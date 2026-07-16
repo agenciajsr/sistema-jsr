@@ -19,6 +19,24 @@ O usuário descreveu o pedido assim: *"eu vou clicar no cliente e as métricas q
 
 **NÃO replaneje persistência. NÃO crie tabela nova. NÃO mexa no backend disso** — como o próprio usuário disse, "não vai alterar nada da nossa lógica ali por trás do backend, tudo mais, porque já tá tudo alinhado".
 
+### Correção JÁ APLICADA (commit `79b09db`, 15/jul/2026) — não refazer
+
+O usuário relatou que as preferências "salvavam para todos os clientes": escolhia métricas de conversa no cliente de WhatsApp, ia para o cliente de leads e encontrava as métricas de conversa lá; mexia, voltava, e o cliente de WhatsApp estava com as de leads.
+
+Era **bug de estado no React, não de persistência**. `GradeKpis` e `FunilConversao` nascem de `useState(() => ...)` a partir das props. Sem `key={cliente}` em `page.tsx`, o React reaproveitava a instância ao trocar de cliente, o inicializador do `useState` não rodava de novo, e a grade seguia com as métricas do cliente anterior — pior: o salvamento otimista então gravava essa lista errada por cima da linha do cliente atual. O banco sempre teve 1 linha por cliente (gravação correta); o estado da tela é que vazava e contaminava os dados a cada troca.
+
+Corrigido com `key={cliente}` nos dois componentes (comentário explicativo no código). **Se o comportamento reaparecer, procure por componente com `useState` a partir de prop sem `key`** — não conclua que a persistência está quebrada.
+
+**Estrago residual a tratar na Etapa 3:** as preferências gravadas antes da correção estão contaminadas (inspeção em 16/jul/2026):
+
+| Cliente | Objetivo | KPIs ativos |
+|---|---|---|
+| Emilio Endler Neto | vendas (Melzinho) | 21 — inclui conversas e custo por conversa (não fazem sentido) |
+| Yury igor marcello | leads/WhatsApp | 19 — inclui leads, custo por lead, ticket médio |
+| Ramon Souza Speck | leads | **0 — grade vazia, visivelmente quebrada** |
+
+Decidir com o usuário: apagar as 3 linhas de `preferencias_campanhas` (voltam a nascer do preset novo do objetivo, que é o item 1 desta etapa) ou deixar ele reorganizar na mão. Recomendação: apagar — com os presets prontos, o resultado fica melhor que o estado atual e evita ele refazer 3 cadastros. O caso do Ramon (0 ativos) precisa de tratamento de qualquer forma; vale também um guard para que "tudo desligado" não gere uma grade vazia.
+
 ## O buraco real (é isto que a Etapa 3 resolve)
 
 O problema está no **estado inicial**, em `resolverPreferencias` (`grade-kpis.tsx:103`):
