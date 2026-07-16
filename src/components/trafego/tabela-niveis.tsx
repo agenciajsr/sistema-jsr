@@ -28,7 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import type { LinhaAnuncio, LinhaCampanha, LinhaConjunto } from '@/lib/trafego/painel'
+import type { LinhaAnuncio, LinhaCampanha, LinhaConjunto, ObjetivoChip } from '@/lib/trafego/painel'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
@@ -51,6 +51,7 @@ type LinhaNormalizada = {
   thumbnailUrl: string | null
   temStatus: boolean
   ativo: boolean | null // null = nível sem effectiveStatus
+  objetivo: ObjetivoChip | null // só campanhas têm chip de objetivo
   spend: number
   impressions: number
   clicks: number
@@ -74,6 +75,24 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
   const [nivel, setNivel] = useState<Nivel>('campanhas')
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
+  // Chips de objetivo ligados (vazio = sem filtro). Campanha SEM objetivo aparece sempre.
+  const [objetivosAtivos, setObjetivosAtivos] = useState<Set<ObjetivoChip>>(new Set())
+
+  // Um chip por objetivo distinto presente nas campanhas do cliente.
+  const objetivosDisponiveis = useMemo(() => {
+    const set = new Set<ObjetivoChip>()
+    for (const c of campanhas) if (c.objetivo) set.add(c.objetivo)
+    return Array.from(set).sort()
+  }, [campanhas])
+
+  function alternarObjetivo(obj: ObjetivoChip) {
+    setObjetivosAtivos((atual) => {
+      const novo = new Set(atual)
+      if (novo.has(obj)) novo.delete(obj)
+      else novo.add(obj)
+      return novo
+    })
+  }
 
   const linhas: LinhaNormalizada[] = useMemo(() => {
     if (nivel === 'campanhas') {
@@ -83,6 +102,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
         thumbnailUrl: null,
         temStatus: false,
         ativo: null,
+        objetivo: c.objetivo,
         spend: c.spend,
         impressions: c.impressions,
         clicks: c.clicks,
@@ -97,6 +117,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
         thumbnailUrl: null,
         temStatus: false,
         ativo: null,
+        objetivo: null,
         spend: c.spend,
         impressions: c.impressions,
         clicks: c.clicks,
@@ -110,6 +131,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
       thumbnailUrl: a.thumbnailUrl,
       temStatus: true,
       ativo: statusAtivo(a.effectiveStatus),
+      objetivo: null,
       spend: a.spend,
       impressions: a.impressions,
       clicks: a.clicks,
@@ -126,8 +148,14 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
         if (filtroStatus === 'todos' || l.ativo === null) return true
         return filtroStatus === 'ativos' ? l.ativo : !l.ativo
       })
+      .filter((l) => {
+        // Filtro por objetivo só faz sentido no nível campanhas;
+        // campanha SEM objetivo aparece sempre (nunca some por falta de dado).
+        if (nivel !== 'campanhas' || objetivosAtivos.size === 0 || l.objetivo === null) return true
+        return objetivosAtivos.has(l.objetivo)
+      })
       .sort((a, b) => b.spend - a.spend)
-  }, [linhas, busca, filtroStatus])
+  }, [linhas, busca, filtroStatus, nivel, objetivosAtivos])
 
   // Totais recalculados a partir das linhas FILTRADAS (soma + derivadas).
   const totais = useMemo(() => {
@@ -175,6 +203,31 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
             </TabsList>
           </Tabs>
         </div>
+        {/* Chips de filtro por objetivo (referência: imagem 4) — só no nível campanhas */}
+        {nivel === 'campanhas' && objetivosDisponiveis.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Filtrar por objetivo:</span>
+            {objetivosDisponiveis.map((obj) => {
+              const ligado = objetivosAtivos.has(obj)
+              return (
+                <button
+                  key={obj}
+                  type="button"
+                  onClick={() => alternarObjetivo(obj)}
+                  aria-pressed={ligado}
+                  className={cn(
+                    'rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide transition-colors',
+                    ligado
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {obj}
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 sm:max-w-xs">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -253,6 +306,14 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
                           <span className="max-w-[320px] truncate" title={l.nome}>
                             {l.nome}
                           </span>
+                          {l.objetivo && (
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 border-border bg-muted/50 px-1.5 py-0 text-[10px] font-semibold text-muted-foreground"
+                            >
+                              {l.objetivo}
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

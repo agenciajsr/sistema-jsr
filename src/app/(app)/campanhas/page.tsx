@@ -12,6 +12,8 @@ import { GradeKpis } from '@/components/trafego/grade-kpis'
 import { GraficoPerformance } from '@/components/trafego/grafico-performance'
 import { TabelaNiveis } from '@/components/trafego/tabela-niveis'
 import { FunilConversao } from '@/components/trafego/funil-conversao'
+import { DemografiaSection } from '@/components/trafego/demografia-section'
+import { RegioesSection } from '@/components/trafego/regioes-section'
 import {
   getContasNaoVinculadas,
   getPreferenciasCampanhas,
@@ -175,6 +177,15 @@ export default async function CampanhasPage({
               clienteId={cliente}
             />
           )}
+
+          {/* Etapa 2 — após o Funil de Conversão (ordem da referência) */}
+          <DemografiaSection demografia={painel.demografia} />
+
+          <RegioesSection
+            regioes={painel.regioes}
+            heroiChave={painel.heroi.chave}
+            labelHeroi={painel.heroi.label}
+          />
 
           <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
         </div>
