@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluido quick 260716-g4h (Fase 4 Parte 1 — Contratos: dialog + link publico); migration 0029 GERADA e NAO aplicada — checkpoint humano pendente (aplicar na mao + deploy)"
-last_updated: "2026-07-16T21:30:00.000Z"
-last_activity: "2026-07-16 - Completed quick task 260716-g4h: Fase 4 Parte 1 do funil — conversao gera contrato aguardando_dados com token, pagina publica /contrato/[token] PJ/PF sem login, /contratos com fluxo; migration 0029 aditiva GERADA, NAO aplicada"
+stopped_at: "Concluido quick 260716-gxq (Contratos Parte 2: tabela 12 colunas + Autentique); migrations 0029+0030 GERADAS e NAO aplicadas"
+last_updated: "2026-07-16T15:39:38.129Z"
+last_activity: "2026-07-15 - Completed quick task 260715-la8: Relatórios configuráveis (blocos por conta, cron diário único, dialog Novo Relatório)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -150,6 +150,7 @@ None yet.
 | 260714-ita | Financeiro — aba Visao Analitica (taxa de renovacao, MRR previsto, receita avulsa, lucro/cliente, despesas vs faturamento por faixa, dependencia de MRR Top5/Top10) + KPIs do Overview com "mes ant. R$X" e variacao %, chip "Dia X/Y (Z%)" no mes corrente; matematica isolada em modulo puro testado (30 testes); sem migration | 2026-07-14 | 13c66f3 | [260714-ita-financeiro-aba-visao-analitica-renovacao](./quick/260714-ita-financeiro-aba-visao-analitica-renovacao/) |
 | 260714-j92 | Clientes — /clientes vira lista compacta (1 linha/cliente) com busca por nome e abas por status (Ativos/Aguardando Inicio/Em Aviso/Pausados/Inativos/Todos); N+1 removido: getClientesLista() faz 6 queries AGREGADAS sequenciais + merge em modulo puro testado (14 testes); status novos aguardando_inicio/em_aviso + migration 0014 GERADA e NAO aplicada; cliente-card.tsx removido | 2026-07-14 | 773d120 | [260714-j92-clientes-lista-compacta-com-abas-por-sta](./quick/260714-j92-clientes-lista-compacta-com-abas-por-sta/) |
 | 260714-qsy | Modulo Tarefas estilo ClickUp — tabelas tarefas/tarefa_checklist_items (migration 0015 GERADA, NAO aplicada); modelo MOLDE + ocorrencias materializadas PREGUICOSAMENTE ao abrir /tarefas (sem cron novo: 2 slots do Hobby ocupados), idempotente por engine pura + indice unico (tarefa_mae_id, data) com onConflictDoNothing; engine de recorrencia PURA sob TDD (26 testes: dias uteis, dia sim/dia nao, mensal grampeando 31 jan->28 fev, anual 29/fev); getTarefasDoDia com 10 queries sequenciais agregadas; tela /tarefas (seletor de dia, blocos Atrasadas/Dia/Concluidas, sheet com checklist interno e recorrencia); D-03: ocorrencia atrasada vira nao_realizada e a do dia nasce pelo calendario; /checklist DELETADO do menu e das rotas (checklist da ficha do cliente intocado, V2) | 2026-07-14 | 88892a3 | [260714-qsy-modulo-tarefas-estilo-clickup-checklist-](./quick/260714-qsy-modulo-tarefas-estilo-clickup-checklist-/) |
+| 260716-gxq | Contratos Parte 2 — tabela /contratos com 12 colunas exatas + dialogs Verificar/Editar/Excluir + seleção; template do contrato de tráfego versionado dos DOCX (3/6 meses), preview interno imprimível, PDF via @react-pdf/renderer, envio/reenvio via Autentique (GraphQL multipart), webhook + botão Atualizar status → assinado ativa o cliente; migration 0030 GERADA e NÃO aplicada (0029 também pendente — aplicar em ordem) | 2026-07-16 | 11ba0fa | [260716-gxq-fase-4-parte-2-contratos-tabela-reformad](./quick/260716-gxq-fase-4-parte-2-contratos-tabela-reformad/) |
 | 260714-vy7 | Ajustes na Tarefa — FIX1: coluna subtitulo (text nullable) ponta a ponta (schema/validation/actions/dados) + migration 0018 GERADA e NAO aplicada, titulo 36px e Input de subtitulo no detalhe e na criacao (separado da descricao); FIX2: recorrencia so no dia — intervaloPadrao passa a [hoje-30, hoje] (nunca futuro por padrao), engine (ocorreEm/datasDaRegra/janelaMaterializacao) intacta, Nova Tarefa nasce em HOJE; FIX3: datas com um unico calendario nativo (CalendarDays redundante removido); 190 testes passando | 2026-07-14 | e3321d4 | [260714-vy7-ajustes-tarefa-1-titulo-maior-campo-subt](./quick/260714-vy7-ajustes-tarefa-1-titulo-maior-campo-subt/) |
 | 260715-0zf | Backend completo do CRM comercial — 10 tabelas (workspaces single-tenant + crm_empresas/contatos/pipelines/etapas/oportunidades/tarefas/atividades/lead_inbox), migration 0019 GERADA c/ seed idempotente e NAO aplicada; actions padrao Pipedrive (ganho/perdido = STATUS; mover/ganhar c/ conversao opcional em cliente aguardando_inicio/perder c/ motivo obrigatorio/reabrir — tudo em crm_atividades); POST /api/crm/leads (x-crm-token, dedup sha256 por dia, inbox c/ trilha de erro); /crm kanban real (mover via select, nova oportunidade), /funil vira redirect, item CRM na sidebar; pendente: env CRM_LEADS_TOKEN | 2026-07-15 | f66ed2b | [260715-0zf-backend-completo-do-crm-comercial-worksp](./quick/260715-0zf-backend-completo-do-crm-comercial-worksp/) |
 | 260715-gmf | Modal "Criar novo Lead" reformulado como Dialog central (imagens 07-11) — sistema de tags completo (crm_tags/crm_contato_tags, migration 0021 APLICADA, paleta CORES_TAG, criacao inline), 4 abas Contato/Dados Pessoais/Endereco/Anotacoes com forceMount (RHF preservado), leadSchema+criarLead persistindo perfil completo, dedup/aviso intactos; dialog.tsx entra no registry (substitui Card inline) | 2026-07-15 | c5b82f1 | [260715-gmf-reformular-modal-novo-lead-do-crm-dialog](./quick/260715-gmf-reformular-modal-novo-lead-do-crm-dialog/) |
@@ -167,6 +168,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-16T14:10:00.000Z
-Stopped at: Concluido quick 260716-g4h (Contratos Parte 1); migrations 0028/0029 GERADAS e NAO aplicadas — aplicar na mao + deploy
+Last session: 2026-07-16T15:39:38.124Z
+Stopped at: Concluido quick 260716-gxq (Contratos Parte 2: tabela 12 colunas + Autentique); migrations 0029+0030 GERADAS e NAO aplicadas
 Resume file: None
