@@ -21,6 +21,7 @@ import {
   moverParaPerdido,
   reabrirOportunidade,
 } from '@/actions/crm'
+import { criarReuniaoCrm } from '@/actions/crm-atividades'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -28,6 +29,8 @@ import { CardOportunidade } from '@/components/crm/card-oportunidade'
 import { ConverterClienteDialog } from '@/components/crm/converter-cliente-dialog'
 import { FichaLead } from '@/components/crm/ficha-lead'
 import { MotivoPerdaDialog } from '@/components/crm/motivo-perda-dialog'
+import { ReuniaoDialog, type ReuniaoValores } from '@/components/crm/reuniao-dialog'
+import { ehEtapaReuniaoAgendada } from '@/lib/crm/reuniao'
 import type { ColunaFechada, ColunaKanban, OportunidadeCard } from '@/lib/crm/dados'
 
 // Board do CRM (D-04/D-05/D-07): as 6 etapas do banco + Ganho e Perdido como
@@ -142,6 +145,21 @@ export function KanbanCrm({
   // cancelar deixa o card exatamente onde estava (mesmo contrato do antigo
   // prompt nativo que este dialog substituiu).
   const [pendentePerda, setPendentePerda] = useState<{ id: string; nome: string } | null>(null)
+  // Card arrastado para "Reunião agendada" aguardando data/hora no
+  // ReuniaoDialog (quick 260716-kq1). Mesmo contrato do pendentePerda:
+  // nada é movido antes da confirmação; cancelar deixa o card onde estava.
+  const [pendenteReuniao, setPendenteReuniao] = useState<{
+    id: string
+    nome: string
+    destino: string
+    origem: string
+  } | null>(null)
+
+  // Etapas cujo nome é "Reunião agendada" (tolerante a acento/caixa) — a
+  // detecção é por nome porque as etapas não têm chave semântica no banco.
+  const etapasReuniao = new Set(
+    colunas.filter((c) => ehEtapaReuniaoAgendada(c.etapa.nome)).map((c) => c.etapa.id),
+  )
 
   // RESSINCRONIZACAO com o servidor: o movimento otimista pinta o quadro na
   // hora e o router.refresh() traz a verdade depois — sem isto o board ficaria
@@ -194,6 +212,14 @@ export function KanbanCrm({
     // deixa o card exatamente onde estava.
     if (destino === PERDIDO) {
       setPendentePerda({ id, nome: achado.card.titulo })
+      return
+    }
+
+    // Mover para "Reunião agendada" EXIGE agendar a reunião (atividade +
+    // Google Calendar). NADA acontece antes da confirmação no ReuniaoDialog —
+    // cancelar deixa o card exatamente onde estava.
+    if (etapasReuniao.has(destino)) {
+      setPendenteReuniao({ id, nome: achado.card.titulo, destino, origem })
       return
     }
 
@@ -278,6 +304,62 @@ export function KanbanCrm({
     }
 
     toast.success('Negocio marcado como perdido.')
+    router.refresh()
+  }
+
+  // Efetiva o agendamento DEPOIS da confirmação no ReuniaoDialog: move o card
+  // (otimista, com reabrir quando vinha de Ganho/Perdido), então cria a
+  // reunião (atividade + evento no Google Calendar). Se a criação da reunião
+  // falhar, o movimento NÃO é revertido — a etapa mudou de verdade no banco.
+  async function confirmarReuniao(valores: ReuniaoValores) {
+    if (!pendenteReuniao) return
+    const { id, destino, origem } = pendenteReuniao
+    // Re-localiza o card no momento da confirmação — o quadro pode ter mudado
+    // enquanto o dialog estava aberto.
+    const achado = acharCard(id)
+    if (!achado) return
+
+    const anterior = quadro
+    const cardMovido: OportunidadeCard = {
+      ...achado.card,
+      status: 'aberta',
+      etapaId: destino,
+      motivoPerda: null,
+    }
+    setQuadro({
+      ...quadro,
+      [achado.colunaId]: (quadro[achado.colunaId] ?? []).filter((c) => c.id !== id),
+      [destino]: [cardMovido, ...(quadro[destino] ?? [])],
+    })
+
+    // SEQUENCIAL de propósito (pool max=3): reabrir (se vinha de fechado) →
+    // mover → criar a reunião. Nunca Promise.all.
+    if (origem === GANHO || origem === PERDIDO) {
+      const reaberto = await reabrirOportunidade(id)
+      if ('error' in reaberto && reaberto.error) {
+        setQuadro(anterior)
+        toast.error(reaberto.error)
+        return
+      }
+    }
+
+    const movido = await moverOportunidade(id, destino)
+    if ('error' in movido && movido.error) {
+      setQuadro(anterior)
+      toast.error(movido.error)
+      return
+    }
+
+    const result = await criarReuniaoCrm({ oportunidadeId: id, ...valores })
+    if ('error' in result && result.error) {
+      // A etapa já mudou no servidor — não reverter o movimento.
+      toast.error(`Card movido, mas a reunião não foi criada: ${result.error}`)
+    } else if ('data' in result && result.data?.avisoCalendar) {
+      toast.warning(result.data.avisoCalendar)
+    } else {
+      toast.success('Reunião agendada e evento criado no Google Calendar.')
+    }
+
     router.refresh()
   }
 
@@ -455,6 +537,17 @@ export function KanbanCrm({
         onConfirm={(motivo) => {
           void confirmarPerda(motivo)
           setPendentePerda(null)
+        }}
+      />
+
+      {/* Agendamento ao arrastar para "Reunião agendada" (quick 260716-kq1). */}
+      <ReuniaoDialog
+        open={!!pendenteReuniao}
+        nomeNegocio={pendenteReuniao?.nome}
+        onCancel={() => setPendenteReuniao(null)}
+        onConfirm={(v) => {
+          void confirmarReuniao(v)
+          setPendenteReuniao(null)
         }}
       />
 
