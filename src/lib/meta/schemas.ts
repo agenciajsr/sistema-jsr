@@ -41,6 +41,9 @@ export const metaInsightSchema = z.object({
   ctr: z.string().optional(),
   actions: z.array(metaActionSchema).optional().default([]),
   action_values: z.array(metaActionSchema).optional().default([]),
+  // Objetivo OFICIAL da campanha (ex.: 'OUTCOME_SALES', 'OUTCOME_LEADS') —
+  // pedido em fields desde a Etapa 2 de /campanhas.
+  objective: z.string().optional(),
   date_start: z.string(),
   date_stop: z.string(),
 })
@@ -77,6 +80,58 @@ export const metaAdInsightSchema = z.object({
 
 export const metaAdInsightsResponseSchema = z.object({
   data: z.array(metaAdInsightSchema),
+  paging: z.object({
+    cursors: z.object({
+      before: z.string().optional(),
+      after: z.string().optional(),
+    }).optional(),
+    next: z.string().optional(),
+  }).optional(),
+})
+
+// Schema para insight de campanha com breakdown idade × gênero
+// (level=campaign, breakdowns=age,gender — janela agregada de ~30d).
+export const metaDemografiaInsightSchema = z.object({
+  campaign_id: z.string(),
+  campaign_name: z.string().default(''),
+  spend: z.string().default('0'),
+  impressions: z.string().default('0'),
+  clicks: z.string().default('0'),
+  actions: z.array(metaActionSchema).optional().default([]),
+  action_values: z.array(metaActionSchema).optional().default([]),
+  age: z.string(), // '13-17' | '18-24' | ... | '65+' | 'Unknown'
+  gender: z.string(), // 'male' | 'female' | 'unknown'
+  date_start: z.string(),
+  date_stop: z.string(),
+})
+
+export const metaDemografiaInsightsResponseSchema = z.object({
+  data: z.array(metaDemografiaInsightSchema),
+  paging: z.object({
+    cursors: z.object({
+      before: z.string().optional(),
+      after: z.string().optional(),
+    }).optional(),
+    next: z.string().optional(),
+  }).optional(),
+})
+
+// Schema para insight de campanha com breakdown region (janela agregada ~30d).
+export const metaRegiaoInsightSchema = z.object({
+  campaign_id: z.string(),
+  campaign_name: z.string().default(''),
+  spend: z.string().default('0'),
+  impressions: z.string().default('0'),
+  clicks: z.string().default('0'),
+  actions: z.array(metaActionSchema).optional().default([]),
+  action_values: z.array(metaActionSchema).optional().default([]),
+  region: z.string(),
+  date_start: z.string(),
+  date_stop: z.string(),
+})
+
+export const metaRegiaoInsightsResponseSchema = z.object({
+  data: z.array(metaRegiaoInsightSchema),
   paging: z.object({
     cursors: z.object({
       before: z.string().optional(),

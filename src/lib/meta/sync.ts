@@ -1,13 +1,15 @@
 import { eq, and } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { adAccounts, adInsights, campaignInsights } from '@/lib/db/schema'
+import { adAccounts, adInsights, campaignInsights, demografiaInsights, regiaoInsights } from '@/lib/db/schema'
 import {
   fetchMetaAdAccounts,
   fetchCampaignInsights,
   fetchAdInsights,
   fetchAdMeta,
   fetchAccountBalance,
+  fetchDemografiaInsights,
+  fetchRegiaoInsights,
 } from '@/lib/meta/client'
 
 // Lógica de sincronização Meta compartilhada entre a Route Handler (/api/sync-meta),
@@ -43,6 +45,7 @@ export async function syncSingleAccount(account: { id: string; metaAccountId: st
       ctr: insight.ctr ?? null,
       actions: insight.actions.length > 0 ? insight.actions : null,
       actionValues: insight.action_values.length > 0 ? insight.action_values : null,
+      objective: insight.objective ?? null,
       syncedAt: new Date(),
     }
 
@@ -111,6 +114,93 @@ export async function syncSingleAccount(account: { id: string; metaAccountId: st
     }
   } catch (err) {
     console.warn(`[sync-meta] Erro ad_insights ${account.metaAccountId}:`, err)
+  }
+
+  // Demografia (idade × gênero) e Regiões — janela agregada ~30d, como ad_insights:
+  // 1 janela nova por dia de sync. Chamadas SEQUENCIAIS (rate limit da Meta) e
+  // bloco em try/catch próprio: nunca derruba o sync da conta.
+  try {
+    const demoRows = await fetchDemografiaInsights(account.metaAccountId)
+    for (const row of demoRows) {
+      const [existing] = await db
+        .select({ id: demografiaInsights.id })
+        .from(demografiaInsights)
+        .where(
+          and(
+            eq(demografiaInsights.adAccountId, account.id),
+            eq(demografiaInsights.campaignId, row.campaign_id),
+            eq(demografiaInsights.age, row.age),
+            eq(demografiaInsights.gender, row.gender),
+            eq(demografiaInsights.dateStart, row.date_start),
+          ),
+        )
+        .limit(1)
+
+      const data = {
+        campaignName: row.campaign_name,
+        spend: row.spend,
+        impressions: parseInt(row.impressions, 10),
+        clicks: parseInt(row.clicks, 10),
+        actions: row.actions.length > 0 ? row.actions : null,
+        actionValues: row.action_values.length > 0 ? row.action_values : null,
+        dateStop: row.date_stop,
+        syncedAt: new Date(),
+      }
+
+      if (existing) {
+        await db.update(demografiaInsights).set(data).where(eq(demografiaInsights.id, existing.id))
+      } else {
+        await db.insert(demografiaInsights).values({
+          adAccountId: account.id,
+          campaignId: row.campaign_id,
+          age: row.age,
+          gender: row.gender,
+          dateStart: row.date_start,
+          ...data,
+        })
+      }
+    }
+
+    const regiaoRows = await fetchRegiaoInsights(account.metaAccountId)
+    for (const row of regiaoRows) {
+      const [existing] = await db
+        .select({ id: regiaoInsights.id })
+        .from(regiaoInsights)
+        .where(
+          and(
+            eq(regiaoInsights.adAccountId, account.id),
+            eq(regiaoInsights.campaignId, row.campaign_id),
+            eq(regiaoInsights.region, row.region),
+            eq(regiaoInsights.dateStart, row.date_start),
+          ),
+        )
+        .limit(1)
+
+      const data = {
+        campaignName: row.campaign_name,
+        spend: row.spend,
+        impressions: parseInt(row.impressions, 10),
+        clicks: parseInt(row.clicks, 10),
+        actions: row.actions.length > 0 ? row.actions : null,
+        actionValues: row.action_values.length > 0 ? row.action_values : null,
+        dateStop: row.date_stop,
+        syncedAt: new Date(),
+      }
+
+      if (existing) {
+        await db.update(regiaoInsights).set(data).where(eq(regiaoInsights.id, existing.id))
+      } else {
+        await db.insert(regiaoInsights).values({
+          adAccountId: account.id,
+          campaignId: row.campaign_id,
+          region: row.region,
+          dateStart: row.date_start,
+          ...data,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn(`[sync-meta] Erro demografia/regioes ${account.metaAccountId}:`, err)
   }
 
   // Saldo

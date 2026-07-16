@@ -138,9 +138,53 @@ export const campaignInsights = pgTable('campaign_insights', {
   ctr: numeric('ctr', { precision: 8, scale: 4 }),
   actions: jsonb('actions'),
   actionValues: jsonb('action_values'),
+  // Objetivo OFICIAL da campanha na Meta (ex.: 'OUTCOME_SALES', 'OUTCOME_LEADS').
+  // Nullable: linhas antigas (pré-Etapa 2) não têm; classificarObjetivo é o fallback.
+  objective: text('objective'),
   syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   accountDateCampaignIdx: index('ci_account_date_campaign_idx').on(table.adAccountId, table.date, table.campaignId),
+}))
+
+// --- Demografia Insights (breakdown idade × gênero, janela agregada ~30d) ---
+// Como ad_insights: 1 janela nova por dia de sync — o painel usa SEMPRE a janela
+// mais recente por (campaignId, age, gender) via maior dateStop.
+export const demografiaInsights = pgTable('demografia_insights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  campaignId: text('campaign_id').notNull(),
+  campaignName: text('campaign_name').notNull(),
+  age: text('age').notNull(), // '13-17' | '18-24' | ... | '65+' | 'Unknown'
+  gender: text('gender').notNull(), // 'male' | 'female' | 'unknown'
+  spend: numeric('spend', { precision: 10, scale: 2 }).notNull().default('0'),
+  impressions: integer('impressions').default(0),
+  clicks: integer('clicks').default(0),
+  actions: jsonb('actions'),
+  actionValues: jsonb('action_values'),
+  dateStart: date('date_start').notNull(),
+  dateStop: date('date_stop').notNull(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  accountCampaignDateIdx: index('demografia_account_campaign_date_idx').on(table.adAccountId, table.campaignId, table.dateStop),
+}))
+
+// --- Região Insights (breakdown region, janela agregada ~30d) ---
+export const regiaoInsights = pgTable('regiao_insights', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adAccountId: uuid('ad_account_id').notNull().references(() => adAccounts.id, { onDelete: 'cascade' }),
+  campaignId: text('campaign_id').notNull(),
+  campaignName: text('campaign_name').notNull(),
+  region: text('region').notNull(),
+  spend: numeric('spend', { precision: 10, scale: 2 }).notNull().default('0'),
+  impressions: integer('impressions').default(0),
+  clicks: integer('clicks').default(0),
+  actions: jsonb('actions'),
+  actionValues: jsonb('action_values'),
+  dateStart: date('date_start').notNull(),
+  dateStop: date('date_stop').notNull(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  accountCampaignDateIdx: index('regiao_account_campaign_date_idx').on(table.adAccountId, table.campaignId, table.dateStop),
 }))
 
 export const frequenciaChecklistEnum = pgEnum('frequencia_checklist', ['diaria', 'semanal', 'mensal'])
@@ -338,6 +382,12 @@ export const adAccountsRelations = relations(adAccounts, ({ one, many }) => ({
 }))
 export const campaignInsightsRelations = relations(campaignInsights, ({ one }) => ({
   adAccount: one(adAccounts, { fields: [campaignInsights.adAccountId], references: [adAccounts.id] }),
+}))
+export const demografiaInsightsRelations = relations(demografiaInsights, ({ one }) => ({
+  adAccount: one(adAccounts, { fields: [demografiaInsights.adAccountId], references: [adAccounts.id] }),
+}))
+export const regiaoInsightsRelations = relations(regiaoInsights, ({ one }) => ({
+  adAccount: one(adAccounts, { fields: [regiaoInsights.adAccountId], references: [adAccounts.id] }),
 }))
 
 // --- Adset Insights (conjuntos de anúncio) ---

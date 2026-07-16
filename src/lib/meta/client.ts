@@ -1,6 +1,12 @@
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 
-import { metaAdAccountsResponseSchema, metaAdInsightsResponseSchema, metaInsightsResponseSchema } from './schemas'
+import {
+  metaAdAccountsResponseSchema,
+  metaAdInsightsResponseSchema,
+  metaDemografiaInsightsResponseSchema,
+  metaInsightsResponseSchema,
+  metaRegiaoInsightsResponseSchema,
+} from './schemas'
 
 const META_BASE_URL = 'https://graph.facebook.com'
 
@@ -132,7 +138,7 @@ export async function fetchCampaignInsights(adAccountId: string) {
   const since = dataMenosDias(30, until)
   const raw = await metaFetch(`/act_${adAccountId}/insights`, {
     level: 'campaign',
-    fields: 'campaign_id,campaign_name,spend,impressions,clicks,reach,cpc,cpm,ctr,actions,action_values',
+    fields: 'campaign_id,campaign_name,objective,spend,impressions,clicks,reach,cpc,cpm,ctr,actions,action_values',
     time_range: JSON.stringify({ since, until }),
     time_increment: '1',
     limit: '100',
@@ -181,6 +187,69 @@ export async function fetchAdInsights(adAccountId: string) {
     try {
       const nextRaw = await metaFetchUrl(nextUrl)
       const nextParsed = metaAdInsightsResponseSchema.parse(nextRaw)
+      allData.push(...nextParsed.data)
+    } catch { /* ignorar erro de paginação extra */ }
+  }
+
+  return allData
+}
+
+/**
+ * Busca insights de campanha com breakdown IDADE × GÊNERO. Janela agregada dos
+ * últimos 30 dias ATÉ hoje no fuso de Brasília (mesmo cálculo do fetchAdInsights),
+ * SEM time_increment — uma linha por (campanha, faixa etária, gênero) no período.
+ * Segue paginação (max 1 página extra = 400 registros).
+ */
+export async function fetchDemografiaInsights(adAccountId: string) {
+  const until = hojeBrasilia()
+  const since = dataMenosDias(30, until)
+  const raw = await metaFetch(`/act_${adAccountId}/insights`, {
+    level: 'campaign',
+    breakdowns: 'age,gender',
+    fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions,action_values',
+    time_range: JSON.stringify({ since, until }),
+    limit: '200',
+  })
+
+  const parsed = metaDemografiaInsightsResponseSchema.parse(raw)
+  const allData = [...parsed.data]
+
+  const nextUrl = parsed.paging?.next
+  if (nextUrl) {
+    try {
+      const nextRaw = await metaFetchUrl(nextUrl)
+      const nextParsed = metaDemografiaInsightsResponseSchema.parse(nextRaw)
+      allData.push(...nextParsed.data)
+    } catch { /* ignorar erro de paginação extra */ }
+  }
+
+  return allData
+}
+
+/**
+ * Busca insights de campanha com breakdown REGION (estado/região). Janela
+ * agregada dos últimos 30 dias ATÉ hoje (fuso de Brasília), SEM time_increment.
+ * Segue paginação (max 1 página extra = 400 registros).
+ */
+export async function fetchRegiaoInsights(adAccountId: string) {
+  const until = hojeBrasilia()
+  const since = dataMenosDias(30, until)
+  const raw = await metaFetch(`/act_${adAccountId}/insights`, {
+    level: 'campaign',
+    breakdowns: 'region',
+    fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions,action_values',
+    time_range: JSON.stringify({ since, until }),
+    limit: '200',
+  })
+
+  const parsed = metaRegiaoInsightsResponseSchema.parse(raw)
+  const allData = [...parsed.data]
+
+  const nextUrl = parsed.paging?.next
+  if (nextUrl) {
+    try {
+      const nextRaw = await metaFetchUrl(nextUrl)
+      const nextParsed = metaRegiaoInsightsResponseSchema.parse(nextRaw)
       allData.push(...nextParsed.data)
     } catch { /* ignorar erro de paginação extra */ }
   }

@@ -155,6 +155,13 @@
       "when": 1784141112047,
       "tag": "0023_relatorios_configuraveis",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784162033243,
+      "tag": "0025_etapa2_campanhas",
+      "breakpoints": true
     }
   ]
 }
