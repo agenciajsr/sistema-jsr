@@ -109,7 +109,7 @@ O que varia é o **lado de quem ENVIA**:
 - Extensão WhatsApp (WaScript) → CRM: ✅ funcionando (fix decisivo foi CORS; filtro "Primeiro Contato Frio" no servidor).
 - Automações em /ferramentas: ✅ aviso de lead novo por WhatsApp FUNCIONANDO (token novo gerado pelo usuário; número SEM o nono dígito: 557197371160 — JIDs antigos não têm o 9; se mensagem não chegar a um número, testar sem o 9). Mensagem automática ao lead: construída, DESLIGADA — usuário vai reformular o texto antes de ligar.
 
-**1. Pendência imediata da Fase 1:** Meta Lead Ads via Make (usuário optou por Make como ponte). Passo a passo já entregue na conversa: cenário Facebook Lead Ads "New Lead" → HTTP POST para `https://sistema-jsr.vercel.app/api/crm/leads?token=<CRM_LEADS_TOKEN>` com JSON {fonte:'meta_lead_ad', nome, telefone, email, extra:{respostas:[{pergunta,resposta}], utm:{utm_campaign, utm_content}, meta:{campanha, conjunto, anuncio}}}. Quando o usuário montar, validar o que chega com scripts/ver-ultimo-lead.ts.
+**1. ✅ CONCLUÍDO (16/jul/2026): Meta Lead Ads via Make FUNCIONANDO.** Blueprint entregue e importado (`automacao_make_exemplo/[JSR] Meta Lead Ads para CRM JSR.blueprint.json` — NÃO commitar, contém o token). Cenário: Facebook Lead Ads "New Lead" (módulo 2) → HTTP POST JSON PLANO (cada pergunta como chave própria; o normalizador não aceita `extra` aninhado) para `/api/crm/leads?token=`. Lead de teste do Meta validado no inbox (fonte=meta_lead_ad, 5 respostas + rastreamento). Dedup por dia confirmado (2º teste idêntico → duplicado, correto). Campanha/conjunto/anúncio vêm vazios no lead de TESTE — validar rastreamento no 1º lead real. CRM_LEADS_TOKEN agora também está no .env.local.
 
 **2. Página /integracoes:** trabalhar como hub de conexões (Instagram, WhatsApp etc.), no padrão da integração Google já feita.
 
@@ -117,7 +117,7 @@ O que varia é o **lado de quem ENVIA**:
 
 **4. Chat dentro do CRM (caixa de entrada WhatsApp/Instagram unificada):** desejo do usuário (conversar com o lead sem sair do sistema, tipo Kommo/Chatwoot). Explicado: exige API com recebimento de mensagens (webhook de entrada) + armazenamento de conversas + UI de chat; Z-API/Evolution suportam. Riscos: APIs não-oficiais de WhatsApp têm risco (baixo, mas real) de banimento do número; Instagram tem API oficial (Meta) p/ DMs. É um PROJETÃO — tratar como fase própria depois do funil básico.
 
-**5. Fase 2 do funil na fila:** Agendamento → Google Agenda (~90% pronto; falta criar credenciais no Google Cloud + deploy — ver memória google-calendar-pendente-setup).
+**5. ✅ CONCLUÍDO (16/jul/2026): Fase 2 — Agendamento → Google Agenda.** Usuário criou as credenciais no Google Cloud e a agenda está conectada em produção.
 
 ## Log de decisões
 - 2026-07-16: criado o planejamento; **Fase 1 (Entrada do Lead) priorizada**. Confirmado que webhook de captação + persistência em `origem_detalhe` já existem — Fase 1 foca em EXIBIR (rastreamento + respostas no card), padronizar payload, expandir origens e conectar fontes.
