@@ -65,10 +65,29 @@ async function registrarErroInbox(corpo: string, contentType: string, motivo: st
   }
 }
 
+// CORS: a extensão de WhatsApp roda DENTRO do navegador (WhatsApp Web) — o
+// browser faz preflight OPTIONS antes do POST cross-origin e bloqueia o envio
+// se não houver estes cabeçalhos (o Make os devolve; nós também precisamos).
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, x-crm-token',
+  'Access-Control-Max-Age': '86400',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
+/** JSON de resposta sempre com os cabeçalhos de CORS. */
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: CORS_HEADERS })
+}
+
 // Validação de URL: algumas ferramentas (extensões, automações) fazem um GET
 // na URL antes de aceitar o webhook. Responde 200 sem expor nada.
 export async function GET() {
-  return NextResponse.json({ ok: true })
+  return json({ ok: true })
 }
 
 export async function POST(request: Request) {
@@ -77,7 +96,7 @@ export async function POST(request: Request) {
   const tokenRecebido =
     request.headers.get('x-crm-token') ?? new URL(request.url).searchParams.get('token')
   if (!token || tokenRecebido !== token) {
-    return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 })
+    return json({ error: 'Nao autorizado.' }, 401)
   }
 
   // Corpo em TEXTO primeiro (via clone) — se qualquer etapa falhar, gravamos o
@@ -98,37 +117,37 @@ export async function POST(request: Request) {
       bruto = await lerCorpoCru(request)
     } catch {
       await registrarErroInbox(corpoTexto, contentType, 'Corpo nao e JSON nem form-data valido.')
-      return NextResponse.json({ error: 'Corpo da requisicao invalido.' }, { status: 400 })
+      return json({ error: 'Corpo da requisicao invalido.' }, 400)
     }
 
     // Extensão de WhatsApp (prospecção ativa): a extensão dispara para TODOS os
     // contatos — só ingerimos quem está na etapa "Primeiro Contato Frio" (mesmo
     // filtro do antigo cenário do Make). O resto é ignorado com 200 (não é erro).
     if (ehPayloadExtensaoWhats(bruto) && !eventoAceitoExtensaoWhats(bruto)) {
-      return NextResponse.json({ ignorado: true })
+      return json({ ignorado: true })
     }
 
     const parsed = leadEntradaSchema.safeParse(normalizarLeadEntrada(bruto))
     if (!parsed.success) {
       const mensagem = parsed.error.issues[0]?.message ?? 'Dados invalidos.'
       await registrarErroInbox(corpoTexto, contentType, `Validacao: ${mensagem}`)
-      return NextResponse.json({ error: mensagem }, { status: 400 })
+      return json({ error: mensagem }, 400)
     }
 
     // (c) workspace (v1 single-tenant, seed da migration 0019).
     const workspace = await getWorkspaceAtual()
     if (!workspace) {
-      return NextResponse.json({ error: 'Workspace nao configurado.' }, { status: 503 })
+      return json({ error: 'Workspace nao configurado.' }, 503)
     }
 
     // (d) ingestão compartilhada com dedup idempotente por dia.
     const resultado = await processarLead(parsed.data, workspace.id)
 
     if ('duplicado' in resultado && resultado.duplicado) {
-      return NextResponse.json({ duplicado: true })
+      return json({ duplicado: true })
     }
 
-    return NextResponse.json({
+    return json({
       ok: true,
       contatoId: resultado.contatoId,
       oportunidadeId: resultado.oportunidadeId,
@@ -136,6 +155,6 @@ export async function POST(request: Request) {
   } catch (erro) {
     console.error('[api/crm/leads]', erro)
     await registrarErroInbox(corpoTexto, contentType, `Excecao: ${erro instanceof Error ? erro.message : String(erro)}`)
-    return NextResponse.json({ error: 'Erro ao processar o lead.' }, { status: 500 })
+    return json({ error: 'Erro ao processar o lead.' }, 500)
   }
 }
