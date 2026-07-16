@@ -26,17 +26,15 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import {
-  adicionarNegocioLead,
   atualizarAtendenteLead,
   atualizarFotoLead,
   atualizarLead,
-  atualizarValorNegocio,
   excluirLead,
   getFichaLead,
   renomearLead,
   salvarNotasLead,
+  salvarProdutosNegocio,
 } from '@/actions/crm-lead'
-import { deletarOportunidade } from '@/actions/crm'
 import { desvincularTagLead, vincularTagLead } from '@/actions/crm-tags'
 import { concluirAtividadeCrm } from '@/actions/crm-atividades'
 import { Badge } from '@/components/ui/badge'
@@ -429,9 +427,39 @@ export function FichaLead({
   }
 
   // --- Produtos e Valores ---
+  // Produtos vivem DENTRO do negocio selecionado (jsonb, migration 0026).
+  // Adicionar/remover produto NAO cria nem apaga card no kanban — corrige o bug
+  // em que adicionar servico "criava outro lead" e excluir o unico produto
+  // "apagava o lead" do quadro (16/jul/2026).
+
+  /** Lista de produtos do negocio: jsonb novo, ou fallback legado {servico, valor}. */
+  function produtosDoNegocio(n: Ficha['negocios'][number] | null): { servico: string; valor: number | null }[] {
+    if (!n) return []
+    if (Array.isArray(n.produtos)) {
+      return (n.produtos as { servico?: unknown; valor?: unknown }[])
+        .filter((p) => typeof p?.servico === 'string')
+        .map((p) => ({
+          servico: p.servico as string,
+          valor: typeof p.valor === 'number' && Number.isFinite(p.valor) ? p.valor : null,
+        }))
+    }
+    return n.servico ? [{ servico: n.servico, valor: n.valor }] : []
+  }
+
+  async function salvarProdutos(novos: { servico: string; valor: number | null }[]) {
+    if (!contatoId || !negocioSelecionado) return
+    const result = await salvarProdutosNegocio(negocioSelecionado, novos)
+    if ('error' in result && result.error) {
+      toast.error(result.error)
+      return
+    }
+    setValoresRascunho({})
+    await carregar(contatoId, true)
+    router.refresh()
+  }
 
   async function adicionarProduto() {
-    if (!contatoId || !novoProdutoServico) {
+    if (!negocioSelecionado || !novoProdutoServico) {
       toast.error('Escolha o produto/servico.')
       return
     }
@@ -442,59 +470,35 @@ export function FichaLead({
     }
     setSalvandoProduto(true)
     try {
-      const negocioAtual = ficha?.negocios.find((n) => n.id === negocioSelecionado)
-      const result = await adicionarNegocioLead(
-        contatoId,
-        novoProdutoServico,
-        valorNum,
-        negocioAtual?.pipelineId,
-      )
-      if ('error' in result && result.error) {
-        toast.error(result.error)
-        return
-      }
+      const atuais = produtosDoNegocio(ficha?.negocios.find((n) => n.id === negocioSelecionado) ?? null)
+      await salvarProdutos([...atuais, { servico: novoProdutoServico, valor: valorNum }])
       toast.success('Produto adicionado.')
       setNovoProdutoServico('')
       setNovoProdutoValor('')
-      await carregar(contatoId, true)
-      router.refresh()
     } finally {
       setSalvandoProduto(false)
     }
   }
 
-  async function salvarValorProduto(negocioId: string) {
-    if (!contatoId) return
-    const rascunho = valoresRascunho[negocioId]
+  async function salvarValorProduto(indice: number) {
+    const rascunho = valoresRascunho[String(indice)]
     if (rascunho === undefined) return
     const valorNum = rascunho.trim() ? Number(rascunho.replace(',', '.')) : null
     if (valorNum !== null && (!Number.isFinite(valorNum) || valorNum < 0)) {
       toast.error('Valor invalido.')
       return
     }
-    const result = await atualizarValorNegocio(negocioId, valorNum)
-    if ('error' in result && result.error) {
-      toast.error(result.error)
-      return
-    }
-    setValoresRascunho((prev) => {
-      const { [negocioId]: _descartado, ...resto } = prev
-      return resto
-    })
-    await carregar(contatoId, true)
-    router.refresh()
+    const atuais = produtosDoNegocio(ficha?.negocios.find((n) => n.id === negocioSelecionado) ?? null)
+    if (!atuais[indice]) return
+    const novos = atuais.map((p, i) => (i === indice ? { ...p, valor: valorNum } : p))
+    await salvarProdutos(novos)
   }
 
-  async function excluirProduto(negocioId: string) {
-    if (!contatoId) return
-    const result = await deletarOportunidade(negocioId)
-    if ('error' in result && result.error) {
-      toast.error(result.error)
-      return
-    }
+  async function excluirProduto(indice: number) {
+    const atuais = produtosDoNegocio(ficha?.negocios.find((n) => n.id === negocioSelecionado) ?? null)
+    const novos = atuais.filter((_, i) => i !== indice)
+    await salvarProdutos(novos)
     toast.success('Produto removido.')
-    await carregar(contatoId, true)
-    router.refresh()
   }
 
   async function confirmarExcluirLead() {
@@ -1208,8 +1212,8 @@ export function FichaLead({
                         </>
                       )}
 
-                      {/* --- PRODUTOS E VALORES (imagem04): cada negocio do lead
-                          e um produto/servico com valor editavel; total no fim. --- */}
+                      {/* --- PRODUTOS E VALORES (imagem04): produtos DENTRO do
+                          negocio selecionado; total no fim. --- */}
                       <div className="rounded-lg border">
                         <div className="flex items-center justify-between border-b px-4 py-3">
                           <p className="flex items-center gap-2 text-sm font-semibold">
@@ -1219,26 +1223,21 @@ export function FichaLead({
                         </div>
 
                         <div className="divide-y">
-                          {ficha.negocios.map((n) => (
-                            <div key={n.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                          {produtosDoNegocio(negocio).map((p, i) => (
+                            <div key={i} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
-                                  {rotuloServico(n.servico)}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  #{n.numero}
-                                  {n.status === 'ganha' && ' · Ganho'}
-                                  {n.status === 'perdida' && ' · Perdido'}
+                                  {rotuloServico(p.servico)}
                                 </p>
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-muted-foreground">R$</span>
                                 <Input
-                                  value={valoresRascunho[n.id] ?? (n.valor != null ? String(n.valor) : '')}
+                                  value={valoresRascunho[String(i)] ?? (p.valor != null ? String(p.valor) : '')}
                                   onChange={(e) =>
-                                    setValoresRascunho((prev) => ({ ...prev, [n.id]: e.target.value }))
+                                    setValoresRascunho((prev) => ({ ...prev, [String(i)]: e.target.value }))
                                   }
-                                  onBlur={() => void salvarValorProduto(n.id)}
+                                  onBlur={() => void salvarValorProduto(i)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                                   }}
@@ -1250,7 +1249,7 @@ export function FichaLead({
                                   type="button"
                                   title="Remover produto"
                                   aria-label="Remover produto"
-                                  onClick={() => void excluirProduto(n.id)}
+                                  onClick={() => void excluirProduto(i)}
                                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                                 >
                                   <Trash2 className="size-3.5" />
@@ -1296,14 +1295,12 @@ export function FichaLead({
                           </Button>
                         </div>
 
-                        {/* Total: soma dos negocios NAO perdidos. */}
+                        {/* Total: soma dos produtos do negocio selecionado. */}
                         <div className="flex items-center justify-between border-t px-4 py-3">
                           <p className="text-sm font-semibold">Total</p>
                           <p className="text-sm font-bold tabular-nums">
                             {formatoBRL.format(
-                              ficha.negocios
-                                .filter((n) => n.status !== 'perdida')
-                                .reduce((soma, n) => soma + (n.valor ?? 0), 0),
+                              produtosDoNegocio(negocio).reduce((soma, p) => soma + (p.valor ?? 0), 0),
                             )}
                           </p>
                         </div>

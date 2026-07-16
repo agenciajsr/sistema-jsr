@@ -416,6 +416,7 @@ export async function getFichaLead(contatoId: string) {
         id: crmOportunidades.id,
         titulo: crmOportunidades.titulo,
         servico: crmOportunidades.servico,
+        produtos: crmOportunidades.produtos,
         valor: crmOportunidades.valor,
         status: crmOportunidades.status,
         motivoPerda: crmOportunidades.motivoPerda,
@@ -855,6 +856,54 @@ export async function adicionarNegocioLead(
   } catch (e) {
     console.error('[adicionarNegocioLead]', e)
     return { error: 'Nao foi possivel adicionar o produto.' }
+  }
+}
+
+export type ProdutoNegocio = { servico: string; valor: number | null }
+
+/**
+ * Salva a lista de PRODUTOS de um negocio (secao "Produtos e Valores" da ficha).
+ * Os produtos vivem DENTRO do negocio (jsonb, migration 0026) — adicionar ou
+ * remover produto NAO cria nem apaga card no kanban. Sincroniza:
+ *   valor do negocio = soma dos valores dos produtos;
+ *   servico do negocio = servico do primeiro produto (titulo do card).
+ */
+export async function salvarProdutosNegocio(oportunidadeId: string, produtos: ProdutoNegocio[]) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  for (const p of produtos) {
+    if (!SERVICOS_JSR[p.servico as keyof typeof SERVICOS_JSR]) return { error: 'Servico invalido.' }
+    if (p.valor !== null && (!Number.isFinite(p.valor) || p.valor < 0)) {
+      return { error: 'O valor nao pode ser negativo.' }
+    }
+  }
+
+  const soma = produtos.reduce((s, p) => s + (p.valor ?? 0), 0)
+
+  try {
+    const [salvo] = await db
+      .update(crmOportunidades)
+      .set({
+        produtos,
+        valor: produtos.length > 0 ? String(soma) : null,
+        servico: produtos[0]?.servico ?? null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(crmOportunidades.id, oportunidadeId), eq(crmOportunidades.workspaceId, workspace.id)),
+      )
+      .returning({ id: crmOportunidades.id })
+    if (!salvo) return { error: 'Negocio nao encontrado.' }
+
+    revalidatePath('/crm')
+    return { data: { ok: true } }
+  } catch (e) {
+    console.error('[salvarProdutosNegocio]', e)
+    return { error: 'Nao foi possivel salvar os produtos.' }
   }
 }
 

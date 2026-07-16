@@ -752,6 +752,10 @@ export const crmOportunidades = pgTable('crm_oportunidades', {
   // LEGADO: array de interesses do form antigo/ingest. NAO e usado no fluxo
   // lead-first (quem manda e `servico`). Mantido para nao quebrar a API publica.
   servicosInteresse: jsonb('servicos_interesse'), // string[]
+  // Produtos/servicos DENTRO do negocio: [{servico, valor}]. Um negocio = um card
+  // no kanban; adicionar/remover produto NAO cria/apaga card (migration 0026).
+  // null = legado: a UI/actions caem em [{servico, valor}] da propria linha.
+  produtos: jsonb('produtos'),
   dataPrevistaFechamento: date('data_prevista_fechamento'),
   ordemNaEtapa: integer('ordem_na_etapa').notNull().default(0),
   // Preenchido quando a oportunidade GANHA vira cliente da agência.
