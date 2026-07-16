@@ -21,15 +21,17 @@ import {
 import { totaisVazios, type TotaisPeriodo } from './metricas'
 import {
   agregarDemografia,
-  agregarRegioes,
+  rankingDeRegioes,
   deduplicarJanelaMaisRecente,
   objetivoDaCampanha,
   type LinhaDemografia,
   type LinhaRegiao,
+  type MetricaRegiao,
   type ObjetivoChip,
+  type RankingRegioes,
 } from './demografia'
 
-export type { LinhaDemografia, LinhaRegiao, ObjetivoChip }
+export type { LinhaDemografia, LinhaRegiao, ObjetivoChip, MetricaRegiao, RankingRegioes }
 
 /** Ponto da série diária, já quebrado por campanha (o gráfico agrega client-side). */
 export type PontoSerie = {
@@ -109,7 +111,7 @@ export type PainelCampanhas = {
   // Demografia/regiões refletem a janela ~30d do Meta independente do período
   // selecionado (mesma limitação aceita dos anúncios — a UI avisa).
   demografia: LinhaDemografia[]
-  regioes: LinhaRegiao[]
+  regioes: RankingRegioes
   temDados: boolean
 }
 
@@ -125,7 +127,7 @@ function painelVazio(clienteId: string, heroi: Heroi, contas: number): PainelCam
     conjuntos: [],
     anuncios: [],
     demografia: [],
-    regioes: [],
+    regioes: { metrica: 'heroi', linhas: [] },
     temDados: false,
   }
 }
@@ -495,8 +497,9 @@ export async function getPainelCampanhas(
   }
 
   // Query D: regiao_insights — mesmo padrão de janela ~30d + dedupe por
-  // (campaignId, region); ranking agregado por região, ordenado por resultados.
-  let regioes: LinhaRegiao[] = []
+  // (campaignId, region); o ranking escolhe a métrica pelo dado disponível
+  // (chave-herói quando o Meta entrega; senão cliques no link — ver rankingDeRegioes).
+  let regioes: RankingRegioes = { metrica: 'heroi', linhas: [] }
   try {
     const regiaoRows = await db
       .select({
@@ -519,7 +522,7 @@ export async function getPainelCampanhas(
       )
 
     const dedup = deduplicarJanelaMaisRecente(regiaoRows, (r) => `${r.campaignId}|${r.region}`)
-    regioes = agregarRegioes(dedup, heroi.chave)
+    regioes = rankingDeRegioes(dedup, heroi.chave)
   } catch {
     // regiao_insights pode não existir/estar vazia — seção fica vazia
   }
