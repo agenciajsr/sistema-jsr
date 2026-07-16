@@ -55,6 +55,9 @@ export type OportunidadeCard = {
   // Adicionados para o mockup: tempo relativo e aviso "Nao contatado".
   createdAt: string // ISO
   semContato: boolean
+  // Preenchido quando o negócio GANHO já virou cliente da agência — o kanban
+  // usa para NÃO reoferecer a conversão (dialog Converter em cliente).
+  clienteId: string | null
 }
 
 export type EtapaKanban = {
@@ -158,6 +161,7 @@ const CAMPOS_CARD = {
   motivoPerda: crmOportunidades.motivoPerda,
   dataPrevistaFechamento: crmOportunidades.dataPrevistaFechamento,
   createdAt: crmOportunidades.createdAt,
+  clienteId: crmOportunidades.clienteId,
   contatoId: crmOportunidades.contatoId,
   contatoNome: crmContatos.nome,
   contatoTelefoneNormalizado: crmContatos.telefoneNormalizado,
@@ -178,6 +182,7 @@ type LinhaCard = {
   motivoPerda: string | null
   dataPrevistaFechamento: string | null
   createdAt: Date
+  clienteId: string | null
   contatoId: string | null
   contatoNome: string | null
   contatoTelefoneNormalizado: string | null
@@ -221,6 +226,7 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
     dataPrevistaFechamento: o.dataPrevistaFechamento,
     createdAt: criada.toISOString(),
     semContato,
+    clienteId: o.clienteId,
   }
 }
 

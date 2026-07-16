@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CardOportunidade } from '@/components/crm/card-oportunidade'
+import { ConverterClienteDialog } from '@/components/crm/converter-cliente-dialog'
 import { FichaLead } from '@/components/crm/ficha-lead'
 import type { ColunaFechada, ColunaKanban, OportunidadeCard } from '@/lib/crm/dados'
 
@@ -132,6 +133,9 @@ export function KanbanCrm({
   const [quadro, setQuadro] = useState<Quadro>(() => montarQuadro(colunas, colunasFechadas))
   const [arrastandoId, setArrastandoId] = useState<string | null>(null)
   const [contatoAberto, setContatoAberto] = useState<string | null>(null)
+  // Card recém-GANHO aguardando a oferta "Converter em cliente?" (Fase 3 do
+  // funil). null = dialog fechado. Cancelar NÃO desfaz o ganho.
+  const [conversaoPendente, setConversaoPendente] = useState<OportunidadeCard | null>(null)
 
   // RESSINCRONIZACAO com o servidor: o movimento otimista pinta o quadro na
   // hora e o router.refresh() traz a verdade depois — sem isto o board ficaria
@@ -240,6 +244,13 @@ export function KanbanCrm({
             ? 'Negocio reaberto.'
             : 'Negocio movido.',
     )
+
+    // Ganho confirmado no servidor → oferece a conversão em cliente. Só quando
+    // o negócio ainda NÃO virou cliente (clienteId nulo) — já convertido não
+    // reabre o dialog.
+    if (destino === GANHO && !cardMovido.clienteId) {
+      setConversaoPendente(cardMovido)
+    }
     router.refresh()
   }
 
@@ -406,6 +417,14 @@ export function KanbanCrm({
         contatoId={contatoAberto}
         onOpenChange={(aberta) => {
           if (!aberta) setContatoAberto(null)
+        }}
+      />
+
+      {/* Oferta pós-ganho: converter o lead em cliente da agência (Fase 3). */}
+      <ConverterClienteDialog
+        oportunidade={conversaoPendente}
+        onOpenChange={(aberta) => {
+          if (!aberta) setConversaoPendente(null)
         }}
       />
     </>
