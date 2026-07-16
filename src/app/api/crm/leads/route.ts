@@ -10,6 +10,7 @@ import {
   eventoAceitoExtensaoWhats,
   normalizarLeadEntrada,
 } from '@/lib/crm/normalizar-entrada'
+import { dispararAutomacoesLeadNovo } from '@/lib/crm/automacoes'
 import { leadEntradaSchema } from '@/lib/validations/crm'
 
 // API pública de captação de leads (landing pages, automações externas).
@@ -146,6 +147,10 @@ export async function POST(request: Request) {
     if ('duplicado' in resultado && resultado.duplicado) {
       return json({ duplicado: true })
     }
+
+    // Automações de lead novo (Ferramentas): aviso ao SDR + mensagem ao lead.
+    // Nunca lançam — falha de envio não impede o lead de entrar.
+    await dispararAutomacoesLeadNovo(normalizarLeadEntrada(bruto))
 
     return json({
       ok: true,

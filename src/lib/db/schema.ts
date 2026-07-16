@@ -926,3 +926,14 @@ export const crmLeadInboxRelations = relations(crmLeadInbox, ({ one }) => ({
   contato: one(crmContatos, { fields: [crmLeadInbox.contatoId], references: [crmContatos.id] }),
   oportunidade: one(crmOportunidades, { fields: [crmLeadInbox.oportunidadeId], references: [crmOportunidades.id] }),
 }))
+
+// --- Automações (aba Ferramentas) ---
+// Central de automações liga/desliga com configuração editável (migration 0027).
+// chave: 'aviso_lead_novo' (avisa SDR via WhatsApp) | 'mensagem_lead_novo'
+// (primeira mensagem automática ao lead). config: { token, numeros?, mensagem }.
+export const automacoes = pgTable('automacoes', {
+  chave: text('chave').primaryKey(),
+  ativo: boolean('ativo').notNull().default(false),
+  config: jsonb('config'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
