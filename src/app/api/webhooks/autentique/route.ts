@@ -5,6 +5,8 @@
 // no plano atual, essa consulta é a validação. O botão "Atualizar status" na
 // tabela /contratos é o fallback oficial caso o webhook não chegue.
 
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
 import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 
@@ -43,9 +45,40 @@ function extrairDocumentoId(payload: unknown): string | null {
   return null
 }
 
+// Conferência de procedência via Endpoint Secret (HMAC-SHA256 do corpo cru).
+// SOFT por design: assinatura ausente/divergente gera warn mas NÃO rejeita —
+// a fonte da verdade continua sendo a consulta à API. Header exato pode variar
+// por versão da Autentique, então testamos os candidatos conhecidos.
+function conferirAssinatura(request: Request, corpoCru: string): void {
+  const secret = process.env.AUTENTIQUE_WEBHOOK_SECRET
+  if (!secret) return
+  const recebida =
+    request.headers.get('x-autentique-signature') ??
+    request.headers.get('x-signature') ??
+    request.headers.get('signature')
+  if (!recebida) {
+    console.warn('[webhook autentique] sem header de assinatura no request')
+    return
+  }
+  const esperada = createHmac('sha256', secret).update(corpoCru).digest('hex')
+  const limpa = recebida.replace(/^sha256=/, '').trim().toLowerCase()
+  const a = Buffer.from(limpa)
+  const b = Buffer.from(esperada)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    console.warn('[webhook autentique] assinatura do webhook divergente do secret')
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const payload = await request.json().catch(() => null)
+    const corpoCru = await request.text().catch(() => '')
+    conferirAssinatura(request, corpoCru)
+    let payload: unknown = null
+    try {
+      payload = JSON.parse(corpoCru)
+    } catch {
+      payload = null
+    }
     const documentoId = extrairDocumentoId(payload)
     if (!documentoId) {
       console.warn('[webhook autentique] payload sem id de documento reconhecível')
