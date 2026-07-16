@@ -102,6 +102,23 @@ O que varia é o **lado de quem ENVIA**:
 
 ---
 
+## PRÓXIMOS PASSOS (retomar aqui — sessão encerrada 16/jul/2026 ~03h)
+
+**Estado ao encerrar: Fase 1 praticamente fechada e TESTADA pelo usuário em produção:**
+- Landing (Elementor) → CRM: ✅ leads com UTM rastreado (com UTM rastreia, sem UTM não — correto) e respostas no card.
+- Extensão WhatsApp (WaScript) → CRM: ✅ funcionando (fix decisivo foi CORS; filtro "Primeiro Contato Frio" no servidor).
+- Automações em /ferramentas: ✅ aviso de lead novo por WhatsApp FUNCIONANDO (token novo gerado pelo usuário; número SEM o nono dígito: 557197371160 — JIDs antigos não têm o 9; se mensagem não chegar a um número, testar sem o 9). Mensagem automática ao lead: construída, DESLIGADA — usuário vai reformular o texto antes de ligar.
+
+**1. Pendência imediata da Fase 1:** Meta Lead Ads via Make (usuário optou por Make como ponte). Passo a passo já entregue na conversa: cenário Facebook Lead Ads "New Lead" → HTTP POST para `https://sistema-jsr.vercel.app/api/crm/leads?token=<CRM_LEADS_TOKEN>` com JSON {fonte:'meta_lead_ad', nome, telefone, email, extra:{respostas:[{pergunta,resposta}], utm:{utm_campaign, utm_content}, meta:{campanha, conjunto, anuncio}}}. Quando o usuário montar, validar o que chega com scripts/ver-ultimo-lead.ts.
+
+**2. Página /integracoes:** trabalhar como hub de conexões (Instagram, WhatsApp etc.), no padrão da integração Google já feita.
+
+**3. Migrar envios de WhatsApp da extensão WaScript para Z-API ou Evolution API (futuro):** usuário considera mais seguro/robusto (não depende de WhatsApp Web aberto). Usos planejados: aviso de lead p/ equipe, 1ª mensagem ao lead, relatório semanal nos grupos dos clientes, alerta de verba baixa direto no grupo do cliente. A camada de automações de /ferramentas já isola o envio (enviarTextoWascript em src/lib/crm/automacoes.ts) — trocar o provedor é trocar essa função.
+
+**4. Chat dentro do CRM (caixa de entrada WhatsApp/Instagram unificada):** desejo do usuário (conversar com o lead sem sair do sistema, tipo Kommo/Chatwoot). Explicado: exige API com recebimento de mensagens (webhook de entrada) + armazenamento de conversas + UI de chat; Z-API/Evolution suportam. Riscos: APIs não-oficiais de WhatsApp têm risco (baixo, mas real) de banimento do número; Instagram tem API oficial (Meta) p/ DMs. É um PROJETÃO — tratar como fase própria depois do funil básico.
+
+**5. Fase 2 do funil na fila:** Agendamento → Google Agenda (~90% pronto; falta criar credenciais no Google Cloud + deploy — ver memória google-calendar-pendente-setup).
+
 ## Log de decisões
 - 2026-07-16: criado o planejamento; **Fase 1 (Entrada do Lead) priorizada**. Confirmado que webhook de captação + persistência em `origem_detalhe` já existem — Fase 1 foca em EXIBIR (rastreamento + respostas no card), padronizar payload, expandir origens e conectar fontes.
 - 2026-07-16: **coração da Fase 1 ENTREGUE e testado em produção.** Landing (Elementor) ligada direto no `/api/crm/leads?token=` (sem Make); endpoint aceita token na URL + entende form-data do Elementor (Advanced Data ON); mapeia nome/whats/email, separa UTM e guarda as respostas qualificadoras; card do lead exibe "Respostas do formulário" + "Rastreamento". Lead de teste chegou completo (nome/whats/email + 7 respostas). Commits: 6369527, 5c12158, 7d49ffc.
