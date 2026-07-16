@@ -2,12 +2,14 @@
 
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
 
 import { db } from '@/lib/db'
-import { crmTarefas } from '@/lib/db/schema'
+import { crmOportunidades, crmTarefas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
+import { criarEvento } from '@/lib/google/calendar'
 import { atividadeSchema, type AtividadeInput } from '@/lib/validations/crm'
 
 // Atividades AGENDADAS do CRM (modal "Criar atividade" da ficha do lead).
@@ -71,6 +73,128 @@ export async function criarAtividadeCrm(input: AtividadeInput) {
   } catch (e) {
     console.error('[criarAtividadeCrm]', e)
     return { error: 'Nao foi possivel criar a atividade.' }
+  }
+}
+
+// Agendamento de reunião pelo Kanban (quick 260716-kq1): ao mover um card
+// para "Reunião agendada", o modal coleta data/horas e esta action cria a
+// atividade tipo 'reuniao' em crm_tarefas E o evento no Google Calendar numa
+// ação só. A falha do Calendar NUNCA desfaz a atividade — degradação graciosa
+// com aviso (avisoCalendar) quando não há conta conectada ou a API falha.
+
+const reuniaoSchema = z
+  .object({
+    oportunidadeId: z.string().uuid('Negocio invalido.'),
+    titulo: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
+    data: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Informe a data da reuniao.'),
+    horaInicio: z.string().regex(/^\d{2}:\d{2}$/, 'Informe a hora de inicio.'),
+    horaFim: z.string().regex(/^\d{2}:\d{2}$/, 'Informe a hora de fim.'),
+    observacao: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined),
+  })
+  .refine((v) => v.horaFim > v.horaInicio, {
+    message: 'O horario de fim deve ser depois do inicio.',
+    path: ['horaFim'],
+  })
+
+export type ReuniaoInput = z.input<typeof reuniaoSchema>
+
+/**
+ * Cria a atividade de reunião no card do lead + o evento no Google Calendar.
+ * NÃO move a oportunidade — quem move é o kanban (moverOportunidade), mesmo
+ * desenho do fluxo de perda.
+ */
+export async function criarReuniaoCrm(input: ReuniaoInput) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  const parsed = reuniaoSchema.safeParse(input)
+  if (!parsed.success) return { error: primeiroErro(parsed.error) }
+
+  const v = parsed.data
+  try {
+    // A oportunidade traz contatoId e o título do negócio (defaults do form).
+    // Queries SEQUENCIAIS (pool max=3), nunca Promise.all.
+    const [oportunidade] = await db
+      .select({
+        id: crmOportunidades.id,
+        titulo: crmOportunidades.titulo,
+        contatoId: crmOportunidades.contatoId,
+      })
+      .from(crmOportunidades)
+      .where(
+        and(
+          eq(crmOportunidades.id, v.oportunidadeId),
+          eq(crmOportunidades.workspaceId, workspace.id),
+        ),
+      )
+      .limit(1)
+
+    if (!oportunidade) return { error: 'Negócio não encontrado.' }
+
+    const titulo = v.titulo ?? `Reunião — ${oportunidade.titulo}`
+    const dataInicio = new Date(`${v.data}T${v.horaInicio}`)
+    const dataFim = new Date(`${v.data}T${v.horaFim}`)
+
+    const [tarefa] = await db
+      .insert(crmTarefas)
+      .values({
+        workspaceId: workspace.id,
+        contatoId: oportunidade.contatoId,
+        oportunidadeId: oportunidade.id,
+        titulo,
+        tipo: 'reuniao',
+        notas: v.observacao ?? null,
+        dataInicio,
+        dataFim,
+        // dataVencimento = dataFim: mantém a heurística "sem contato +7d" viva.
+        dataVencimento: dataFim,
+        donoId: currentUser.id,
+      })
+      .returning({ id: crmTarefas.id })
+
+    await registrarAtividadeCrm(workspace.id, currentUser, {
+      tipo: 'tarefa_criada',
+      contatoId: oportunidade.contatoId,
+      oportunidadeId: oportunidade.id,
+      detalhe: titulo,
+    })
+
+    // Evento no Google Calendar — try/catch PRÓPRIO: NAO_CONECTADO ou erro da
+    // API nunca falham a action (a atividade já está criada e fica).
+    let eventoCriado = false
+    let avisoCalendar: string | undefined
+    try {
+      await criarEvento({
+        titulo,
+        descricao: v.observacao,
+        inicio: `${v.data}T${v.horaInicio}:00-03:00`,
+        fim: `${v.data}T${v.horaFim}:00-03:00`,
+      })
+      eventoCriado = true
+    } catch (e) {
+      console.error('[criarReuniaoCrm] Google Calendar', e)
+      avisoCalendar =
+        'Reunião criada, mas o evento não foi criado no Google Calendar (conta não conectada ou erro na API).'
+    }
+
+    revalidatePath('/crm')
+    return { data: { id: tarefa.id, eventoCriado, avisoCalendar } }
+  } catch (e) {
+    console.error('[criarReuniaoCrm]', e)
+    return { error: 'Não foi possível criar a reunião.' }
   }
 }
 
