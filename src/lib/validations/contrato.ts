@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { SERVICOS_KEYS } from '@/lib/crm/servicos'
+import { servicosContratadosSchema } from '@/lib/contratos/servicos-contratados'
 
 const dataRegex = /^\d{4}-\d{2}-\d{2}$/
 
@@ -29,6 +30,9 @@ export const contratoEdicaoSchema = contratoBase
     servico: z.enum(SERVICOS_KEYS).nullable().optional(),
     duracaoMeses: z.coerce.number().int().min(1).max(36).nullable().optional(),
     tipoDocumento: z.string().trim().max(40).nullable().optional(),
+    // quick-260716-ky2: serviços estruturados; null/ausente = contrato legado
+    // (nada obrigatório novo — retrocompatibilidade).
+    servicos: servicosContratadosSchema.nullable().optional(),
   })
   .refine((data) => data.dataVencimento > data.dataInicio, vencimentoAposInicio)
 

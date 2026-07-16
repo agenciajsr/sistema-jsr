@@ -9,9 +9,7 @@ import { Building2, Check, Copy, Link2, Phone, Trophy, User } from 'lucide-react
 import { toast } from 'sonner'
 
 import { converterOportunidadeEmCliente } from '@/actions/crm'
-import { SERVICOS_JSR, SERVICOS_KEYS, type ServicoJsr } from '@/lib/crm/servicos'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Dialog,
@@ -21,12 +19,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  ServicosChecklist,
+  paraServicosContratados,
+  validarChecklist,
+  type ItemChecklist,
+} from '@/components/contratos/servicos-checklist'
 import type { OportunidadeCard } from '@/lib/crm/dados'
 
 // Fase 3 do funil — Ganho → Cliente. Abre DEPOIS do ganho confirmado no
@@ -37,14 +34,13 @@ import type { OportunidadeCard } from '@/lib/crm/dados'
 // Fase 4 Parte 1: a conversão agora coleta duração (3/6 meses), serviço e
 // mensalidade, cria o contrato 'aguardando_dados' e mostra o link público
 // /contrato/[token] com botão copiar no estado de SUCESSO do próprio dialog.
+//
+// quick-260716-ky2: o serviço único + mensalidade digitada viraram um
+// CHECKLIST de serviços com valor individual (plataformas no Tráfego Pago);
+// o total do contrato é a SOMA — calculado, nunca digitado.
 
 const conversaoSchema = z.object({
   duracaoMeses: z.union([z.literal(3), z.literal(6)]),
-  servico: z.enum(SERVICOS_KEYS, { message: 'Escolha o serviço contratado.' }),
-  mensalidade: z
-    .string()
-    .min(1, 'Informe a mensalidade.')
-    .refine((v) => Number(v.replace(',', '.')) > 0, 'Mensalidade deve ser maior que zero.'),
 })
 
 type ConversaoForm = z.infer<typeof conversaoSchema>
@@ -71,17 +67,21 @@ export function ConverterClienteDialog({
   const [sucesso, setSucesso] = useState<Sucesso | null>(null)
   const [copiado, setCopiado] = useState(false)
 
+  const [itens, setItens] = useState<ItemChecklist[]>([])
+  const [erroServicos, setErroServicos] = useState<string | null>(null)
+
   const form = useForm<ConversaoForm>({
     resolver: zodResolver(conversaoSchema),
-    defaultValues: { duracaoMeses: 3, mensalidade: '' },
+    defaultValues: { duracaoMeses: 3 },
   })
   const duracao = form.watch('duracaoMeses')
-  const servico = form.watch('servico')
 
   function fechar(aberta: boolean) {
     if (!aberta) {
       setSucesso(null)
       setCopiado(false)
+      setItens([])
+      setErroServicos(null)
       form.reset()
     }
     onOpenChange(aberta)
@@ -89,11 +89,13 @@ export function ConverterClienteDialog({
 
   function converter(valores: ConversaoForm) {
     if (!oportunidade) return
+    const erro = validarChecklist(itens)
+    setErroServicos(erro)
+    if (erro) return
     startTransition(async () => {
       const result = await converterOportunidadeEmCliente(oportunidade.id, {
         duracaoMeses: valores.duracaoMeses,
-        servico: valores.servico,
-        mensalidade: Number(valores.mensalidade.replace(',', '.')),
+        servicos: paraServicosContratados(itens),
       })
       if ('error' in result && result.error) {
         toast.error(result.error)
@@ -230,44 +232,14 @@ export function ConverterClienteDialog({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Serviço contratado</Label>
-                <Select
-                  value={servico ?? ''}
-                  onValueChange={(v) =>
-                    form.setValue('servico', v as ServicoJsr, { shouldValidate: true })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Escolha o serviço" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICOS_KEYS.map((chave) => (
-                      <SelectItem key={chave} value={chave}>
-                        {SERVICOS_JSR[chave]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.servico && (
-                  <p className="text-xs text-destructive">{form.formState.errors.servico.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="mensalidade">Mensalidade (R$)</Label>
-                <Input
-                  id="mensalidade"
-                  inputMode="decimal"
-                  placeholder="1500,00"
-                  {...form.register('mensalidade')}
-                />
-                {form.formState.errors.mensalidade && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.mensalidade.message}
-                  </p>
-                )}
-              </div>
+              <ServicosChecklist
+                itens={itens}
+                onChange={(novos) => {
+                  setItens(novos)
+                  if (erroServicos) setErroServicos(null)
+                }}
+                erro={erroServicos}
+              />
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button

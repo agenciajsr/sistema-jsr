@@ -14,6 +14,7 @@ import {
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { selecionarContratoAtual, type ContratoRow } from '@/lib/contratos/current'
 import { montarVariaveisContrato } from '@/lib/contratos/variaveis'
+import { somaServicos } from '@/lib/contratos/servicos-contratados'
 import { gerarPdfContrato, contarPaginasPdf, POSICAO_ASSINATURA } from '@/lib/contratos/pdf'
 import { confirmarAssinatura } from '@/lib/contratos/assinatura'
 import {
@@ -115,15 +116,23 @@ export async function atualizarDadosContrato(id: string, input: ContratoEdicaoIn
       return { error: 'Contrato não encontrado.' }
     }
 
+    // quick-260716-ky2: com serviços estruturados, o valor mensal é a SOMA
+    // (recalculada aqui — nunca confiar no total vindo do cliente) e o campo
+    // legado `servico` é sincronizado com o primeiro serviço marcado. Sem
+    // serviços no payload, o comportamento antigo permanece (contrato legado).
+    const comServicos = parsed.data.servicos && parsed.data.servicos.length > 0
     await db
       .update(contratos)
       .set({
         dataInicio: parsed.data.dataInicio,
         dataVencimento: parsed.data.dataVencimento,
-        valorMensal: String(parsed.data.valorMensal),
-        servico: parsed.data.servico ?? null,
+        valorMensal: comServicos
+          ? String(somaServicos(parsed.data.servicos!))
+          : String(parsed.data.valorMensal),
+        servico: comServicos ? parsed.data.servicos![0].servico : (parsed.data.servico ?? null),
         duracaoMeses: parsed.data.duracaoMeses ?? null,
         tipoDocumento: parsed.data.tipoDocumento ?? null,
+        ...(parsed.data.servicos !== undefined ? { servicos: parsed.data.servicos } : {}),
       })
       .where(eq(contratos.id, id))
 
@@ -134,7 +143,7 @@ export async function atualizarDadosContrato(id: string, input: ContratoEdicaoIn
     console.error('[atualizarDadosContrato]', e)
     return {
       error:
-        'Não foi possível salvar. As migrations 0029/0030 podem estar pendentes em produção.',
+        'Não foi possível salvar. As migrations 0029/0030/0031 podem estar pendentes em produção.',
     }
   }
 }
@@ -307,6 +316,9 @@ export type ContratoConsolidado = {
   statusFluxo: string | null
   duracaoMeses: number | null
   servico: string | null
+  // quick-260716-ky2 — serviços estruturados (jsonb); null = legado OU
+  // migration 0031 pendente. Validar com servicosContratadosSchema no consumo.
+  servicos: unknown
   // Fase 4 Parte 2 — null em contratos legados OU enquanto a migration 0030
   // não for aplicada. Timestamps como ISO string (props de client component).
   tipoDocumento: string | null
@@ -348,6 +360,7 @@ export async function listarTodosContratos(): Promise<ContratoConsolidado[]> {
     dadosContratante: null,
     dadosRecebidosEm: null as Date | null,
   }
+  const nulosServicos = { servicos: null as unknown }
   const nulosAssinatura = {
     tipoDocumento: null as string | null,
     autentiqueDocumentoId: null as string | null,
@@ -365,36 +378,46 @@ export async function listarTodosContratos(): Promise<ContratoConsolidado[]> {
       assinadoEm: Date | null
     }
   >
+  const camposAssinatura = {
+    tipoDocumento: contratos.tipoDocumento,
+    autentiqueDocumentoId: contratos.autentiqueDocumentoId,
+    enviadoParaAssinaturaEm: contratos.enviadoParaAssinaturaEm,
+    assinadoEm: contratos.assinadoEm,
+  }
+
   try {
     rows = await db
-      .select({
-        ...camposBase,
-        ...camposFluxo,
-        tipoDocumento: contratos.tipoDocumento,
-        autentiqueDocumentoId: contratos.autentiqueDocumentoId,
-        enviadoParaAssinaturaEm: contratos.enviadoParaAssinaturaEm,
-        assinadoEm: contratos.assinadoEm,
-      })
+      .select({ ...camposBase, ...camposFluxo, ...camposAssinatura, servicos: contratos.servicos })
       .from(contratos)
       .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
       .orderBy(clientes.nome, desc(contratos.dataInicio))
-  } catch (e0030) {
-    console.warn('[listarTodosContratos] colunas de assinatura ausentes (migration 0030 pendente?)', e0030)
+  } catch (e0031) {
+    console.warn('[listarTodosContratos] coluna servicos ausente (migration 0031 pendente?)', e0031)
     try {
-      const sem0030 = await db
-        .select({ ...camposBase, ...camposFluxo })
+      const sem0031 = await db
+        .select({ ...camposBase, ...camposFluxo, ...camposAssinatura })
         .from(contratos)
         .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
         .orderBy(clientes.nome, desc(contratos.dataInicio))
-      rows = sem0030.map((r) => ({ ...r, ...nulosAssinatura }))
-    } catch (e0029) {
-      console.warn('[listarTodosContratos] colunas do fluxo ausentes (migration 0029 pendente?)', e0029)
-      const antigas = await db
-        .select(camposBase)
-        .from(contratos)
-        .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
-        .orderBy(clientes.nome, desc(contratos.dataInicio))
-      rows = antigas.map((r) => ({ ...r, ...nulosFluxo, ...nulosAssinatura }))
+      rows = sem0031.map((r) => ({ ...r, ...nulosServicos }))
+    } catch (e0030) {
+      console.warn('[listarTodosContratos] colunas de assinatura ausentes (migration 0030 pendente?)', e0030)
+      try {
+        const sem0030 = await db
+          .select({ ...camposBase, ...camposFluxo })
+          .from(contratos)
+          .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+          .orderBy(clientes.nome, desc(contratos.dataInicio))
+        rows = sem0030.map((r) => ({ ...r, ...nulosServicos, ...nulosAssinatura }))
+      } catch (e0029) {
+        console.warn('[listarTodosContratos] colunas do fluxo ausentes (migration 0029 pendente?)', e0029)
+        const antigas = await db
+          .select(camposBase)
+          .from(contratos)
+          .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+          .orderBy(clientes.nome, desc(contratos.dataInicio))
+        rows = antigas.map((r) => ({ ...r, ...nulosServicos, ...nulosFluxo, ...nulosAssinatura }))
+      }
     }
   }
 

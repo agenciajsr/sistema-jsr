@@ -21,7 +21,7 @@ import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
 import { montarDadosContrato, gerarToken } from '@/lib/contratos/fluxo'
-import { SERVICOS_KEYS } from '@/lib/crm/servicos'
+import { servicosContratadosSchema, somaServicos } from '@/lib/contratos/servicos-contratados'
 import { hojeBrasilia } from '@/lib/date-br'
 import {
   pipelineSchema,
@@ -667,10 +667,12 @@ export async function ganharOportunidade(id: string, opts?: { criarCliente?: boo
  * conversão SEGUE sem contrato (contratoToken ausente no retorno).
  */
 
+// quick-260716-ky2: serviços ESTRUTURADOS (checklist + plataformas). O total
+// do contrato é a SOMA dos serviços — calculado no servidor, nunca confiado
+// ao cliente.
 const dadosContratoSchema = z.object({
   duracaoMeses: z.union([z.literal(3), z.literal(6)]),
-  servico: z.enum(SERVICOS_KEYS),
-  mensalidade: z.coerce.number().positive('Informe a mensalidade.'),
+  servicos: servicosContratadosSchema,
 })
 
 export type DadosContratoConversao = z.infer<typeof dadosContratoSchema>
@@ -831,13 +833,15 @@ async function criarOuReaproveitarContrato(
       .limit(1)
     if (existente?.token) return existente.token
 
+    // valorMensal = SOMA dos serviços (servidor manda); servico = primeiro
+    // serviço marcado (compat legado — telas antigas seguem funcionando).
     const { dataInicio, dataVencimento, valorMensal } = montarDadosContrato({
       duracaoMeses: dados.duracaoMeses,
-      mensalidade: dados.mensalidade,
+      mensalidade: somaServicos(dados.servicos),
       hoje: hojeBrasilia(),
     })
     const token = gerarToken()
-    await db.insert(contratos).values({
+    const base = {
       clienteId,
       dataInicio,
       dataVencimento,
@@ -845,8 +849,16 @@ async function criarOuReaproveitarContrato(
       token,
       statusFluxo: 'aguardando_dados',
       duracaoMeses: dados.duracaoMeses,
-      servico: dados.servico,
-    })
+      servico: dados.servicos[0].servico,
+    }
+    try {
+      await db.insert(contratos).values({ ...base, servicos: dados.servicos })
+    } catch (eServicos) {
+      // Migration 0031 pendente (coluna servicos ausente): grava sem a
+      // estrutura — o contrato nasce "legado" e pode ser editado depois.
+      console.warn('[criarOuReaproveitarContrato] coluna servicos ausente (migration 0031 pendente?)', eServicos)
+      await db.insert(contratos).values(base)
+    }
     return token
   } catch (e) {
     // Migration 0029 pendente (colunas token/status_fluxo ausentes): a

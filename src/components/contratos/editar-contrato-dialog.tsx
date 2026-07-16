@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -26,12 +26,44 @@ import {
 } from '@/components/ui/select'
 import { atualizarDadosContrato, type ContratoConsolidado } from '@/actions/contratos'
 import { contratoEdicaoSchema } from '@/lib/validations/contrato'
-import { SERVICOS_JSR, SERVICOS_KEYS } from '@/lib/crm/servicos'
+import { servicosContratadosSchema, somaServicos } from '@/lib/contratos/servicos-contratados'
+import {
+  ServicosChecklist,
+  paraServicosContratados,
+  validarChecklist,
+  type ItemChecklist,
+} from '@/components/contratos/servicos-checklist'
+import type { ServicoJsr } from '@/lib/crm/servicos'
 
 // Dialog "Editar" — RHF + Zod (3 generics do zodResolver por causa do
 // z.coerce, memória do projeto). Sentinela 'nenhum' porque o SelectItem do
 // shadcn não aceita value="".
 const NENHUM = 'nenhum'
+
+// quick-260716-ky2: monta o estado do checklist a partir do contrato.
+// Estruturado (servicos jsonb) → itens fiéis; legado (null) → pré-popula 1
+// item de melhor esforço a partir de servico + valorMensal (plataformas em
+// branco — o usuário marca).
+function itensDoContrato(contrato: ContratoConsolidado): ItemChecklist[] {
+  const parsed = servicosContratadosSchema.safeParse(contrato.servicos)
+  if (parsed.success) {
+    return parsed.data.map((s) => ({
+      servico: s.servico,
+      valorStr: String(s.valor).replace('.', ','),
+      plataformas: s.plataformas ?? [],
+    }))
+  }
+  if (contrato.servico) {
+    return [
+      {
+        servico: contrato.servico as ServicoJsr,
+        valorStr: String(Number(contrato.valorMensal)).replace('.', ','),
+        plataformas: [],
+      },
+    ]
+  }
+  return []
+}
 
 type Entrada = z.input<typeof contratoEdicaoSchema>
 type Saida = z.output<typeof contratoEdicaoSchema>
@@ -46,6 +78,15 @@ export function EditarContratoDialog({
   contrato: ContratoConsolidado
 }) {
   const [salvando, startTransition] = useTransition()
+
+  // Checklist de serviços (quick-260716-ky2). `tocou` preserva a
+  // retrocompatibilidade: em contrato legado, se o usuário NÃO mexer nos
+  // serviços, nada de novo é gravado (comportamento atual permanece).
+  const contratoEstruturado = servicosContratadosSchema.safeParse(contrato.servicos).success
+  const [itens, setItens] = useState<ItemChecklist[]>(() => itensDoContrato(contrato))
+  const [tocou, setTocou] = useState(false)
+  const [erroServicos, setErroServicos] = useState<string | null>(null)
+  const usandoServicos = contratoEstruturado || tocou
 
   const form = useForm<Entrada, unknown, Saida>({
     resolver: zodResolver(contratoEdicaoSchema),
@@ -70,13 +111,30 @@ export function EditarContratoDialog({
         duracaoMeses: contrato.duracaoMeses,
         tipoDocumento: contrato.tipoDocumento,
       })
+      setItens(itensDoContrato(contrato))
+      setTocou(false)
+      setErroServicos(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, contrato.id])
 
   function onSubmit(values: Saida) {
+    let payload = values
+    if (usandoServicos) {
+      const erro = validarChecklist(itens)
+      setErroServicos(erro)
+      if (erro) return
+      const servicos = paraServicosContratados(itens)
+      // O servidor recalcula soma/servico — aqui só espelhamos p/ passar no schema.
+      payload = {
+        ...values,
+        servicos,
+        valorMensal: somaServicos(servicos),
+        servico: servicos[0].servico,
+      }
+    }
     startTransition(async () => {
-      const resultado = await atualizarDadosContrato(contrato.id, values)
+      const resultado = await atualizarDadosContrato(contrato.id, payload)
       if ('error' in resultado) {
         toast.error(resultado.error)
         return
@@ -114,42 +172,33 @@ export function EditarContratoDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="valorMensal">Mensalidade (R$)</Label>
-            <Input
-              id="valorMensal"
-              type="number"
-              step="0.01"
-              min="0"
-              {...form.register('valorMensal')}
-            />
-            {erros.valorMensal && (
-              <p className="text-xs text-destructive">{erros.valorMensal.message}</p>
-            )}
-          </div>
+          {!usandoServicos && (
+            <div className="space-y-1.5">
+              <Label htmlFor="valorMensal">Mensalidade (R$)</Label>
+              <Input
+                id="valorMensal"
+                type="number"
+                step="0.01"
+                min="0"
+                {...form.register('valorMensal')}
+              />
+              {erros.valorMensal && (
+                <p className="text-xs text-destructive">{erros.valorMensal.message}</p>
+              )}
+            </div>
+          )}
+
+          <ServicosChecklist
+            itens={itens}
+            onChange={(novos) => {
+              setItens(novos)
+              setTocou(true)
+              if (erroServicos) setErroServicos(null)
+            }}
+            erro={erroServicos}
+          />
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Serviço</Label>
-              <Select
-                value={form.watch('servico') ?? NENHUM}
-                onValueChange={(v) =>
-                  form.setValue('servico', v === NENHUM ? null : (v as Entrada['servico']))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NENHUM}>Sem serviço</SelectItem>
-                  {SERVICOS_KEYS.map((chave) => (
-                    <SelectItem key={chave} value={chave}>
-                      {SERVICOS_JSR[chave]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-1.5">
               <Label>Duração</Label>
               <Select
