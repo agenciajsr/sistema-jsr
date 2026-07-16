@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Fast: corrigido vazamento de preferencias entre clientes em /campanhas (key ausente). Etapa 3 planejada em .planning/ETAPA-3-CAMPANHAS.md, aguardando nova conversa"
-last_updated: "2026-07-16T01:45:00.000Z"
-last_activity: "2026-07-15 - Fast: preferências de KPI/funil vazavam entre clientes (key={cliente} ausente); Etapa 3 de /campanhas planejada"
+stopped_at: "Concluido quick 260716-ezd (Ganho no CRM converte lead em cliente); migration 0028 GERADA e NAO aplicada — checkpoint humano pendente (aplicar na mao + deploy)"
+last_updated: "2026-07-16T14:10:00.000Z"
+last_activity: "2026-07-16 - Completed quick task 260716-ezd: conversao Ganho → Cliente lead-first (action idempotente em 3 niveis + dialog no kanban + modulo puro sob TDD); migration 0028 aditiva (cliente_id em crm_contatos) GERADA, NAO aplicada"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -162,9 +162,10 @@ None yet.
 | 260715-v6c | Card de Regiões de /campanhas com métrica adaptativa — ranking escolhe a métrica pela COBERTURA do dado (soma por região / total da mesma janela 30d e mesmas campanhas), não por presença: 1 compra onsite de 412 (0,2%) mantinha o card zerado em "Regiões que mais vendem"; agora cai para cliques no link com título "Regiões com mais tráfego" e nota citando a limitação de privacidade do Meta (motivo 'sem-cobertura'), ou nota neutra quando o cliente não teve resultado no período ('sem-resultados', não culpa o Meta); limiar 0.5 exportado e comentado com a medição; rankingDeRegioes/campanhasComRegiao puros sob TDD (19 testes, 1496 total) com regressão nomeada do caso real; validado read-only na conta Melzinho (vendas 0,2%→fallback, leads 100% e conversas 108,9%→herói); sem sync/migration | 2026-07-15 | 71bf75c | [260715-v6c-card-de-regioes-metrica-adaptativa-quand](./quick/260715-v6c-card-de-regioes-metrica-adaptativa-quand/) |
 | fast-260715 | **Bug**: preferências de KPI/funil vazavam entre clientes em /campanhas — GradeKpis e FunilConversao nascem de useState a partir das props e, sem `key={cliente}`, o React reaproveitava a instância ao trocar de cliente: a grade seguia com as métricas do cliente anterior e o salvamento otimista gravava essa lista errada por cima da linha do cliente atual (o banco sempre teve 1 linha por cliente — o vazamento era de estado no React). Corrigido com key={cliente} nos dois. Preferências gravadas antes da correção estão contaminadas (Ramon com 0 KPIs ativos) — tratamento planejado na Etapa 3 | 2026-07-15 | 79b09db | [ETAPA-3-CAMPANHAS.md](./ETAPA-3-CAMPANHAS.md) |
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
+| 260716-ezd | Fase 3 do funil — Ganho no CRM converte lead em cliente: action converterOportunidadeEmCliente LEAD-FIRST idempotente em 3 níveis (oportunidade→contato→empresa, nunca duplica), dialog "Converter em cliente?" pós-ganho no kanban (cancelar não desfaz o ganho; card já convertido não reabre), módulo puro conversao.ts sob TDD (11 testes); migration 0028 aditiva (cliente_id em crm_contatos) GERADA e NÃO aplicada — snapshot do Drizzle posto em dia (0026/0027 manuais); degradação graciosa até aplicar | 2026-07-16 | 890bd66 | [260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le](./quick/260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le/) |
 
 ## Session Continuity
 
-Last session: 2026-07-16T01:45:00.000Z
-Stopped at: Concluido quick 260715-v6c (card de Regiões com métrica adaptativa por cobertura)
+Last session: 2026-07-16T14:10:00.000Z
+Stopped at: Concluido quick 260716-ezd (Ganho → Cliente); migration 0028 GERADA e NAO aplicada — aplicar na mao + deploy
 Resume file: None
