@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { sincronizarTudoMeta } from '@/lib/meta/sync'
 import { avaliarEPersistirAlertas, type ResumoAvaliacao } from '@/lib/alertas/persistir'
+import { gerarCobrancasMensais, type ResumoCobrancasMensais } from '@/lib/cobrancas/gerar'
 
 // Rota chamada pelo Vercel Cron (GET) 1×/dia. Descobre/atualiza as contas da Meta
 // e sincroniza insights + saldo de todas as contas ativas. Sem sessão de usuário —
@@ -33,11 +34,23 @@ export async function GET(request: Request) {
       console.error('[cron/sync-meta] falha ao avaliar alertas — seguindo sem alertas', erroAlertas)
     }
 
-    return NextResponse.json(
-      alertasResumo
-        ? { ok: true, contas, insights, alertas: alertasResumo }
-        : { ok: true, contas, insights },
-    )
+    // Carona da Fase 5 (Hobby: sem slot de cron novo): gera as cobranças do
+    // mês dos contratos assinados vigentes e marca vencidas as pendentes sem
+    // Asaas. try/catch PRÓPRIO — falha aqui não quebra o sync.
+    let cobrancasResumo: ResumoCobrancasMensais | null = null
+    try {
+      cobrancasResumo = await gerarCobrancasMensais()
+    } catch (erroCobrancas) {
+      console.error('[cron/sync-meta] falha ao gerar cobranças — seguindo sem cobranças', erroCobrancas)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      contas,
+      insights,
+      ...(alertasResumo ? { alertas: alertasResumo } : {}),
+      ...(cobrancasResumo ? { cobrancas: cobrancasResumo } : {}),
+    })
   } catch (err) {
     console.error('[cron/sync-meta] Erro:', err)
     return NextResponse.json(
