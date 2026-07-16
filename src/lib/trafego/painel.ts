@@ -5,7 +5,7 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { adAccounts, adInsights, campaignInsights, clientes } from '@/lib/db/schema'
+import { adAccounts, adInsights, campaignInsights, clientes, demografiaInsights, regiaoInsights } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 // parseActionsExtendido/parseActionValues vêm de ./aggregate (fonte única —
@@ -19,6 +19,17 @@ import {
   type Periodo,
 } from './aggregate'
 import { totaisVazios, type TotaisPeriodo } from './metricas'
+import {
+  agregarDemografia,
+  agregarRegioes,
+  deduplicarJanelaMaisRecente,
+  objetivoDaCampanha,
+  type LinhaDemografia,
+  type LinhaRegiao,
+  type ObjetivoChip,
+} from './demografia'
+
+export type { LinhaDemografia, LinhaRegiao, ObjetivoChip }
 
 /** Ponto da série diária, já quebrado por campanha (o gráfico agrega client-side). */
 export type PontoSerie = {
@@ -55,6 +66,9 @@ export type LinhaCampanha = {
   engajamento: number
   receita: number
   resultadoHeroi: number
+  // Chip de objetivo: objective OFICIAL da Meta quando existe; senão fallback
+  // classificarObjetivo (objetivo cadastrado do cliente); null quando nada resolve.
+  objetivo: ObjetivoChip | null
 }
 
 export type LinhaConjunto = {
@@ -92,6 +106,10 @@ export type PainelCampanhas = {
   campanhas: LinhaCampanha[]
   conjuntos: LinhaConjunto[]
   anuncios: LinhaAnuncio[]
+  // Demografia/regiões refletem a janela ~30d do Meta independente do período
+  // selecionado (mesma limitação aceita dos anúncios — a UI avisa).
+  demografia: LinhaDemografia[]
+  regioes: LinhaRegiao[]
   temDados: boolean
 }
 
@@ -106,6 +124,8 @@ function painelVazio(clienteId: string, heroi: Heroi, contas: number): PainelCam
     campanhas: [],
     conjuntos: [],
     anuncios: [],
+    demografia: [],
+    regioes: [],
     temDados: false,
   }
 }
@@ -222,6 +242,7 @@ export async function getPainelCampanhas(
       reach: campaignInsights.reach,
       actions: campaignInsights.actions,
       actionValues: campaignInsights.actionValues,
+      objective: campaignInsights.objective,
     })
     .from(campaignInsights)
     .where(
@@ -236,8 +257,16 @@ export async function getPainelCampanhas(
   const totaisAnterior = totaisVazios()
   const porDiaCampanha = new Map<string, PontoSerie>()
   const porCampanha = new Map<string, LinhaCampanha>()
+  // objective OFICIAL não-nulo mais recente por campanha (linhas antigas são null)
+  const objectivePorCampanha = new Map<string, { objective: string; date: string }>()
 
   for (const i of insights) {
+    if (i.objective) {
+      const atual = objectivePorCampanha.get(i.campaignId)
+      if (!atual || i.date > atual.date) {
+        objectivePorCampanha.set(i.campaignId, { objective: i.objective, date: i.date })
+      }
+    }
     const spend = Number(i.spend) || 0
     const impressions = i.impressions ?? 0
     const clicks = i.clicks ?? 0
@@ -317,8 +346,18 @@ export async function getPainelCampanhas(
         engajamento: r.engajamento,
         receita,
         resultadoHeroi: resultadoDaChave(r, heroi.chave),
+        objetivo: null, // preenchido após o loop (objective mais recente por campanha)
       })
     }
+  }
+
+  // Chip de objetivo por campanha: objective oficial mais recente com fallback
+  // para o classificarObjetivo do objetivo cadastrado do cliente.
+  for (const camp of porCampanha.values()) {
+    camp.objetivo = objetivoDaCampanha(
+      objectivePorCampanha.get(camp.campaignId)?.objective ?? null,
+      cliente.objetivoPrincipal ?? null,
+    )
   }
 
   totaisAtual.resultadoHeroi = resultadoDaChave(totaisAtual, heroi.chave)
@@ -416,6 +455,75 @@ export async function getPainelCampanhas(
     // ad_insights pode não existir ainda — níveis conjuntos/anúncios ficam vazios
   }
 
+  // Query C: demografia_insights (idade × gênero). Mesma natureza do ad_insights:
+  // janela AGREGADA de ~30d, 1 janela nova por dia de sync — usar SEMPRE a janela
+  // mais recente por (campaignId, age, gender). Reflete os últimos ~30 dias do
+  // Meta independente do período selecionado (a UI avisa). Degradação graciosa.
+  let demografia: LinhaDemografia[] = []
+  try {
+    const demoRows = await db
+      .select({
+        campaignId: demografiaInsights.campaignId,
+        campaignName: demografiaInsights.campaignName,
+        age: demografiaInsights.age,
+        gender: demografiaInsights.gender,
+        spend: demografiaInsights.spend,
+        impressions: demografiaInsights.impressions,
+        clicks: demografiaInsights.clicks,
+        actions: demografiaInsights.actions,
+        actionValues: demografiaInsights.actionValues,
+        dateStop: demografiaInsights.dateStop,
+      })
+      .from(demografiaInsights)
+      .where(
+        and(
+          inArray(demografiaInsights.adAccountId, contaIds),
+          gte(demografiaInsights.dateStop, inicioAtual),
+        ),
+      )
+
+    const dedup = deduplicarJanelaMaisRecente(demoRows, (r) => `${r.campaignId}|${r.age}|${r.gender}`)
+    demografia = agregarDemografia(dedup)
+    for (const linha of demografia) {
+      linha.resultados = resultadoDaChave(
+        { leads: linha.leads, vendas: linha.compras, conversas: linha.conversas },
+        heroi.chave,
+      )
+    }
+  } catch {
+    // demografia_insights pode não existir/estar vazia — seção fica vazia
+  }
+
+  // Query D: regiao_insights — mesmo padrão de janela ~30d + dedupe por
+  // (campaignId, region); ranking agregado por região, ordenado por resultados.
+  let regioes: LinhaRegiao[] = []
+  try {
+    const regiaoRows = await db
+      .select({
+        campaignId: regiaoInsights.campaignId,
+        campaignName: regiaoInsights.campaignName,
+        region: regiaoInsights.region,
+        spend: regiaoInsights.spend,
+        impressions: regiaoInsights.impressions,
+        clicks: regiaoInsights.clicks,
+        actions: regiaoInsights.actions,
+        actionValues: regiaoInsights.actionValues,
+        dateStop: regiaoInsights.dateStop,
+      })
+      .from(regiaoInsights)
+      .where(
+        and(
+          inArray(regiaoInsights.adAccountId, contaIds),
+          gte(regiaoInsights.dateStop, inicioAtual),
+        ),
+      )
+
+    const dedup = deduplicarJanelaMaisRecente(regiaoRows, (r) => `${r.campaignId}|${r.region}`)
+    regioes = agregarRegioes(dedup, heroi.chave)
+  } catch {
+    // regiao_insights pode não existir/estar vazia — seção fica vazia
+  }
+
   const seriePorDia = Array.from(porDiaCampanha.values()).sort(
     (a, b) => a.date.localeCompare(b.date) || a.campaignName.localeCompare(b.campaignName),
   )
@@ -433,6 +541,8 @@ export async function getPainelCampanhas(
     campanhas,
     conjuntos,
     anuncios,
+    demografia,
+    regioes,
     temDados: totaisAtual.spend > 0 || totaisAtual.impressions > 0 || campanhas.length > 0,
   }
 }
