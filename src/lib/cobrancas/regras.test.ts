@@ -5,7 +5,24 @@ import {
   dataVencimento,
   contratoElegivel,
   competenciasPendentes,
+  deveUsarAsaas,
 } from './regras'
+
+describe('deveUsarAsaas', () => {
+  it('true para modo automatico_asaas', () => {
+    expect(deveUsarAsaas({ modoCobranca: 'automatico_asaas' })).toBe(true)
+  })
+
+  it('false para modo manual_pix', () => {
+    expect(deveUsarAsaas({ modoCobranca: 'manual_pix' })).toBe(false)
+  })
+
+  it('false para modo desconhecido ou nulo (dado legado) — nunca cobrar taxa por engano', () => {
+    expect(deveUsarAsaas({ modoCobranca: null })).toBe(false)
+    expect(deveUsarAsaas({ modoCobranca: '' })).toBe(false)
+    expect(deveUsarAsaas({ modoCobranca: 'qualquer_coisa' })).toBe(false)
+  })
+})
 
 describe('competenciaDe', () => {
   it('extrai YYYY-MM de uma data YYYY-MM-DD', () => {
