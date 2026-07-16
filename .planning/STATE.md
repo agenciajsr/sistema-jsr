@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Concluido quick 260716-i87 (PDF fiel ao DOCX + 2 signatarios Autentique)
-last_updated: "2026-07-16T16:28:28.170Z"
+stopped_at: Concluido quick 260716-khp (motivo de perda estruturado no CRM)
+last_updated: "2026-07-16T17:54:20.744Z"
 last_activity: "2026-07-15 - Completed quick task 260715-la8: Relatórios configuráveis (blocos por conta, cron diário único, dialog Novo Relatório)"
 progress:
   total_phases: 6
@@ -165,9 +165,10 @@ None yet.
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 | 260716-ezd | Fase 3 do funil — Ganho no CRM converte lead em cliente: action converterOportunidadeEmCliente LEAD-FIRST idempotente em 3 níveis (oportunidade→contato→empresa, nunca duplica), dialog "Converter em cliente?" pós-ganho no kanban (cancelar não desfaz o ganho; card já convertido não reabre), módulo puro conversao.ts sob TDD (11 testes); migration 0028 aditiva (cliente_id em crm_contatos) GERADA e NÃO aplicada — snapshot do Drizzle posto em dia (0026/0027 manuais); degradação graciosa até aplicar | 2026-07-16 | 890bd66 | [260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le](./quick/260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le/) |
 | 260716-g4h | Fase 4 Parte 1 — Contratos: conversão Ganho→Cliente coleta duração (3/6)/serviço/mensalidade e cria contrato aguardando_dados com token único (alimenta MRR via valorMensal); página pública /contrato/[token] mobile-first sem login (PJ/PF, CPF/CNPJ com dígito verificador, reenvio idempotente); /contratos com badges do fluxo + copiar link; módulos puros sob TDD (29 testes); migration 0029 aditiva GERADA e NÃO aplicada | 2026-07-16 | b92f6cf | [260716-g4h-fase-4-parte-1-contratos-dialog-com-plan](./quick/260716-g4h-fase-4-parte-1-contratos-dialog-com-plan/) |
+| 260716-khp | CRM — motivo de perda estruturado: Dialog pt-BR com 7 motivos padronizados ("Outro" com campo livre obrigatório) substitui o window.prompt ao arrastar para Perdido; módulo puro motivos-perda.ts sob TDD (6 testes); cancelar não move o card; motivo salvo na coluna motivo_perda existente (sem migration) | 2026-07-16 | 4334ac6 | [260716-khp-crm-motivo-de-perda-estruturado-ao-mover](./quick/260716-khp-crm-motivo-de-perda-estruturado-ao-mover/) |
 
 ## Session Continuity
 
-Last session: 2026-07-16T16:28:28.165Z
-Stopped at: Concluido quick 260716-i87 (PDF fiel ao DOCX + 2 signatarios Autentique)
+Last session: 2026-07-16T17:54:20.738Z
+Stopped at: Concluido quick 260716-khp (motivo de perda estruturado no CRM)
 Resume file: None
