@@ -1,12 +1,13 @@
 'use client'
 
-// Card "Regiões" — ranking top ~10 regiões com MÉTRICA ADAPTATIVA:
-// - ranking.metrica === 'heroi': ranqueia pela chave-herói do cliente (vendas/leads/
-//   conversas), com custo por resultado — comportamento padrão.
-// - ranking.metrica === 'linkClicks': o Meta não entregou a chave-herói por região
-//   (não entrega conversão de pixel por região — limitação de privacidade), então o
-//   ranking usa cliques no link, o título vira "Regiões com mais tráfego" e o card
-//   exibe uma nota explicando a limitação. Melhor que mostrar zeros sem explicação.
+// Card "Regiões" — ranking top ~10 regiões com MÉTRICA ADAPTATIVA (ver
+// rankingDeRegioes): a mecânica já decidiu a métrica pela cobertura do dado e
+// devolveu o motivo — aqui só escolhemos título, unidade, sufixo do custo e a nota.
+// - motivo 'heroi': ranqueia pela chave-herói do cliente, custo por resultado.
+// - motivo 'sem-cobertura': o Meta não entrega conversão de pixel por região
+//   (privacidade) → ranking por cliques no link + nota citando a limitação.
+// - motivo 'sem-resultados': o cliente não teve resultado no período → nota NEUTRA;
+//   culpar o Meta aqui seria mentira.
 // Dados refletem a janela ~30d do sync (mesma limitação dos anúncios).
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,6 +39,13 @@ export function RegioesSection({ ranking, heroiChave, labelHeroi }: RegioesSecti
   const titulo = modoHeroi ? TITULO_POR_HEROI[heroiChave] : 'Regiões com mais tráfego'
   const unidade = modoHeroi ? labelHeroi.toLowerCase() : 'cliques no link'
   const sufixoCusto = modoHeroi ? '/result.' : '/clique no link'
+
+  const notaDoFallback =
+    ranking.motivo === 'sem-cobertura'
+      ? 'O Meta não entrega compras e leads de pixel separados por região (limitação de privacidade da plataforma). Por isso este ranking usa cliques no link.'
+      : ranking.motivo === 'sem-resultados'
+        ? `Sem ${labelHeroi.toLowerCase()} registradas no período — ranking por cliques no link.`
+        : null
 
   return (
     <Card className="border-none shadow-[var(--shadow-sm)]">
@@ -89,10 +97,9 @@ export function RegioesSection({ ranking, heroiChave, labelHeroi }: RegioesSecti
                 </div>
               ))}
             </div>
-            {!modoHeroi && (
+            {notaDoFallback && (
               <p className="rounded-md bg-muted/50 px-2 py-1.5 text-center text-xs text-muted-foreground">
-                O Meta não entrega compras e leads de pixel separados por região (limitação de
-                privacidade da plataforma). Por isso este ranking usa cliques no link.
+                {notaDoFallback}
               </p>
             )}
             <p className="rounded-md bg-muted/50 py-1.5 text-center text-xs text-muted-foreground">

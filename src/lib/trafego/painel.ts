@@ -27,11 +27,19 @@ import {
   type LinhaDemografia,
   type LinhaRegiao,
   type MetricaRegiao,
+  type MotivoRegiao,
   type ObjetivoChip,
   type RankingRegioes,
 } from './demografia'
 
-export type { LinhaDemografia, LinhaRegiao, ObjetivoChip, MetricaRegiao, RankingRegioes }
+export type {
+  LinhaDemografia,
+  LinhaRegiao,
+  ObjetivoChip,
+  MetricaRegiao,
+  MotivoRegiao,
+  RankingRegioes,
+}
 
 /** Ponto da série diária, já quebrado por campanha (o gráfico agrega client-side). */
 export type PontoSerie = {
@@ -127,7 +135,7 @@ function painelVazio(clienteId: string, heroi: Heroi, contas: number): PainelCam
     conjuntos: [],
     anuncios: [],
     demografia: [],
-    regioes: { metrica: 'heroi', linhas: [] },
+    regioes: { metrica: 'heroi', motivo: 'heroi', linhas: [] },
     temDados: false,
   }
 }
@@ -497,9 +505,9 @@ export async function getPainelCampanhas(
   }
 
   // Query D: regiao_insights — mesmo padrão de janela ~30d + dedupe por
-  // (campaignId, region); o ranking escolhe a métrica pelo dado disponível
-  // (chave-herói quando o Meta entrega; senão cliques no link — ver rankingDeRegioes).
-  let regioes: RankingRegioes = { metrica: 'heroi', linhas: [] }
+  // (campaignId, region); o ranking escolhe a métrica pela COBERTURA do dado
+  // (chave-herói quando o Meta entrega o suficiente; senão cliques no link).
+  let regioes: RankingRegioes = { metrica: 'heroi', motivo: 'heroi', linhas: [] }
   try {
     const regiaoRows = await db
       .select({
@@ -521,8 +529,27 @@ export async function getPainelCampanhas(
         ),
       )
 
+    // Query D2 (SEQUENCIAL, nunca Promise.all): total da chave-herói na MESMA
+    // janela ~30d do sync de região — é o denominador da cobertura. NÃO pode usar o
+    // período selecionado: 7d contra a janela de 30d inflaria a cobertura e 90d a
+    // subestimaria, disparando fallback falso.
+    const inicioJanelaRegiao = dataMenosDias(29, hojeBrasilia())
+    const refRows = await db
+      .select({ actions: campaignInsights.actions })
+      .from(campaignInsights)
+      .where(
+        and(
+          inArray(campaignInsights.adAccountId, contaIds),
+          gte(campaignInsights.date, inicioJanelaRegiao),
+        ),
+      )
+    const totalReferencia = refRows.reduce(
+      (soma, r) => soma + resultadoDaChave(parseActionsExtendido(r.actions), heroi.chave),
+      0,
+    )
+
     const dedup = deduplicarJanelaMaisRecente(regiaoRows, (r) => `${r.campaignId}|${r.region}`)
-    regioes = rankingDeRegioes(dedup, heroi.chave)
+    regioes = rankingDeRegioes(dedup, heroi.chave, totalReferencia)
   } catch {
     // regiao_insights pode não existir/estar vazia — seção fica vazia
   }
