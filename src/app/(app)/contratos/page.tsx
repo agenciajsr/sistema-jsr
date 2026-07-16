@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileSignature } from 'lucide-react'
+import { FileSignature, Hourglass, Inbox } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { listarTodosContratos } from '@/actions/contratos'
+import { rotuloStatusFluxo, badgeStatusFluxo } from '@/lib/contratos/fluxo'
+import { rotuloServico } from '@/lib/crm/servicos'
+import { CopiarLinkBotao } from '@/components/contratos/copiar-link-botao'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
@@ -34,17 +37,19 @@ export default async function ContratosPage() {
 
   const vigentes = contratos.filter((c) => c.vigente)
   const mrrTotal = vigentes.reduce((acc, c) => acc + Number(c.valorMensal), 0)
+  const aguardandoDados = contratos.filter((c) => c.statusFluxo === 'aguardando_dados').length
+  const dadosRecebidos = contratos.filter((c) => c.statusFluxo === 'dados_recebidos').length
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Contratos</h1>
         <p className="text-sm text-muted-foreground">
-          Todos os contratos, de todos os clientes, em um só lugar.
+          Todos os contratos, de todos os clientes — do link enviado ao contrato assinado.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Contratos Vigentes"
           value={String(vigentes.length)}
@@ -58,6 +63,20 @@ export default async function ContratosPage() {
           icon={FileSignature}
           color="success"
         />
+        <StatCard
+          label="Aguardando Dados"
+          value={String(aguardandoDados)}
+          icon={Hourglass}
+          color="warning"
+          helper="link enviado, cliente ainda não preencheu"
+        />
+        <StatCard
+          label="Dados Recebidos"
+          value={String(dadosRecebidos)}
+          icon={Inbox}
+          color="primary"
+          helper="prontos para gerar o contrato"
+        />
       </div>
 
       <Card className="border-none shadow-sm">
@@ -67,17 +86,21 @@ export default async function ContratosPage() {
         <CardContent>
           {contratos.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum contrato registrado. Cadastre contratos na ficha de cada cliente.
+              Nenhum contrato registrado. Converta um negócio ganho no CRM ou cadastre pela ficha do
+              cliente.
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
+                  <TableHead>Serviço</TableHead>
+                  <TableHead>Duração</TableHead>
+                  <TableHead>Status do fluxo</TableHead>
                   <TableHead>Início</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Valor Mensal</TableHead>
+                  <TableHead>Fim</TableHead>
+                  <TableHead className="text-right">Mensalidade</TableHead>
+                  <TableHead className="w-12 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -90,16 +113,28 @@ export default async function ContratosPage() {
                       >
                         {contrato.clienteNome}
                       </Link>
+                      {!contrato.vigente && (
+                        <span className="ml-2 text-xs text-muted-foreground">(anterior)</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {contrato.servico ? rotuloServico(contrato.servico) : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {contrato.duracaoMeses ? `${contrato.duracaoMeses} meses` : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={badgeStatusFluxo(contrato.statusFluxo)}>
+                        {rotuloStatusFluxo(contrato.statusFluxo)}
+                      </Badge>
                     </TableCell>
                     <TableCell>{formatarData(contrato.dataInicio)}</TableCell>
                     <TableCell>{formatarData(contrato.dataVencimento)}</TableCell>
-                    <TableCell>
-                      <Badge variant={contrato.vigente ? 'secondary' : 'outline'}>
-                        {contrato.vigente ? 'Vigente' : 'Encerrado'}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right">
                       {formatadorMoeda.format(Number(contrato.valorMensal))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {contrato.token ? <CopiarLinkBotao token={contrato.token} /> : null}
                     </TableCell>
                   </TableRow>
                 ))}

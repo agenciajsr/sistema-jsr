@@ -108,24 +108,72 @@ export type ContratoConsolidado = {
   dataVencimento: string
   valorMensal: string
   vigente: boolean
+  // Fase 4 Parte 1 — null em contratos legados OU enquanto a migration 0029
+  // não for aplicada (degradação graciosa: a consulta recai na antiga).
+  token: string | null
+  statusFluxo: string | null
+  duracaoMeses: number | null
+  servico: string | null
 }
 
 // Lista TODOS os contratos (de todos os clientes) para a tela /contratos.
 // Marca como `vigente` o contrato atual de cada cliente (maior dataInicio),
 // mesma regra usada na ficha do cliente — evita contar duplicatas no MRR.
 export async function listarTodosContratos(): Promise<ContratoConsolidado[]> {
-  const rows = await db
-    .select({
-      id: contratos.id,
-      clienteId: contratos.clienteId,
-      clienteNome: clientes.nome,
-      dataInicio: contratos.dataInicio,
-      dataVencimento: contratos.dataVencimento,
-      valorMensal: contratos.valorMensal,
-    })
-    .from(contratos)
-    .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
-    .orderBy(clientes.nome, desc(contratos.dataInicio))
+  // Tenta a consulta COMPLETA (com as colunas do fluxo da 0029); se as colunas
+  // ainda não existirem em produção, recai na consulta antiga com campos novos
+  // = null (padrão getWorkspaceAtual). Queries SEQUENCIAIS.
+  let rows: Array<{
+    id: string
+    clienteId: string
+    clienteNome: string
+    dataInicio: string
+    dataVencimento: string
+    valorMensal: string
+    token: string | null
+    statusFluxo: string | null
+    duracaoMeses: number | null
+    servico: string | null
+  }>
+  try {
+    rows = await db
+      .select({
+        id: contratos.id,
+        clienteId: contratos.clienteId,
+        clienteNome: clientes.nome,
+        dataInicio: contratos.dataInicio,
+        dataVencimento: contratos.dataVencimento,
+        valorMensal: contratos.valorMensal,
+        token: contratos.token,
+        statusFluxo: contratos.statusFluxo,
+        duracaoMeses: contratos.duracaoMeses,
+        servico: contratos.servico,
+      })
+      .from(contratos)
+      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+      .orderBy(clientes.nome, desc(contratos.dataInicio))
+  } catch (e) {
+    console.warn('[listarTodosContratos] colunas do fluxo ausentes (migration 0029 pendente?)', e)
+    const antigas = await db
+      .select({
+        id: contratos.id,
+        clienteId: contratos.clienteId,
+        clienteNome: clientes.nome,
+        dataInicio: contratos.dataInicio,
+        dataVencimento: contratos.dataVencimento,
+        valorMensal: contratos.valorMensal,
+      })
+      .from(contratos)
+      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+      .orderBy(clientes.nome, desc(contratos.dataInicio))
+    rows = antigas.map((r) => ({
+      ...r,
+      token: null,
+      statusFluxo: null,
+      duracaoMeses: null,
+      servico: null,
+    }))
+  }
 
   // Agrupa por cliente e descobre o contrato vigente (atual) de cada um.
   const porCliente = new Map<string, ContratoRow[]>()
