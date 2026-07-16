@@ -3,6 +3,11 @@
 // regiões e mapeamento do objective oficial da Meta para o rótulo do chip —
 // com classificarObjetivo (objetivo cadastrado do cliente) como FALLBACK.
 //
+// ⚠️ O ranking de regiões tem MÉTRICA ADAPTATIVA (rankingDeRegioes): o Meta não
+// entrega conversões de pixel (compras/leads offsite) por região — limitação de
+// privacidade da plataforma. Quando a chave-herói não chega, o ranking usa
+// cliques no link. A decisão é dirigida pelo dado, nunca por tipo de cliente.
+//
 // ⚠️ Demografia/regiões vêm do sync como JANELA AGREGADA de ~30 dias (1 janela
 // nova por dia, igual ad_insights): o consumidor deve usar SEMPRE a janela mais
 // recente por chave (deduplicarJanelaMaisRecente), nunca somar janelas.
@@ -109,14 +114,24 @@ export function agregarDemografia(rows: LinhaDemografiaBruta[]): LinhaDemografia
   return Array.from(porChave.values())
 }
 
-/** Linha do ranking de regiões (já com custo por resultado da chave-herói). */
+/** Linha do ranking de regiões (custo já calculado pela métrica escolhida). */
 export type LinhaRegiao = {
   region: string
   spend: number
   impressions: number
   clicks: number
-  resultados: number
+  linkClicks: number
+  resultados: number // resultado da chave-herói (pode ser 0 — ver rankingDeRegioes)
   custoPorResultado: number | null
+}
+
+/** Métrica que comanda o ranking: 'heroi' = dado disponível; 'linkClicks' = fallback. */
+export type MetricaRegiao = 'heroi' | 'linkClicks'
+
+/** Ranking de regiões + qual métrica o dado permitiu usar. */
+export type RankingRegioes = {
+  metrica: MetricaRegiao
+  linhas: LinhaRegiao[]
 }
 
 function resultadoDaChave(r: { leads: number; vendas: number; conversas: number }, chave: ChaveHeroi): number {
@@ -127,10 +142,23 @@ function resultadoDaChave(r: { leads: number; vendas: number; conversas: number 
 
 /**
  * Agrega linhas brutas (JÁ deduplicadas) por região, somando todas as campanhas,
- * com `resultados` = chave-herói do cliente. Ordena por resultados desc
- * (desempate por spend desc).
+ * e escolhe a métrica do ranking pelo DADO DISPONÍVEL (nunca por tipo/nicho de cliente):
+ *
+ * - soma dos resultados da chave-herói > 0 → metrica 'heroi': ranking pela chave,
+ *   custoPorResultado = spend / resultados
+ * - soma = 0 → metrica 'linkClicks': ranking por cliques no link,
+ *   custoPorResultado = spend / linkClicks
+ *
+ * Por que o fallback existe: o Meta NÃO entrega conversões de pixel (compras/leads
+ * offsite) quebradas por região — limitação de privacidade da plataforma pós-iOS 14.
+ * Por região só chegam link_click, page_engagement, video_view, conversas onsite e
+ * lead de formulário instantâneo. Mostrar 0 sem explicação parece bug; o painel então
+ * ranqueia por tráfego e avisa. Como a decisão olha o dado, o caso "lead onsite"
+ * (chega → modo herói) e "lead de pixel" (não chega → fallback) se resolvem sozinhos.
+ *
+ * Empate é desfeito por spend desc.
  */
-export function agregarRegioes(rows: LinhaRegiaoBruta[], chave: ChaveHeroi): LinhaRegiao[] {
+export function rankingDeRegioes(rows: LinhaRegiaoBruta[], chave: ChaveHeroi): RankingRegioes {
   const porRegiao = new Map<string, LinhaRegiao>()
   for (const row of rows) {
     const spend = Number(row.spend) || 0
@@ -141,6 +169,7 @@ export function agregarRegioes(rows: LinhaRegiaoBruta[], chave: ChaveHeroi): Lin
       exist.spend += spend
       exist.impressions += row.impressions ?? 0
       exist.clicks += row.clicks ?? 0
+      exist.linkClicks += r.linkClicks
       exist.resultados += resultado
     } else {
       porRegiao.set(row.region, {
@@ -148,16 +177,25 @@ export function agregarRegioes(rows: LinhaRegiaoBruta[], chave: ChaveHeroi): Lin
         spend,
         impressions: row.impressions ?? 0,
         clicks: row.clicks ?? 0,
+        linkClicks: r.linkClicks,
         resultados: resultado,
         custoPorResultado: null,
       })
     }
   }
+
   const linhas = Array.from(porRegiao.values())
+  const totalHeroi = linhas.reduce((soma, l) => soma + l.resultados, 0)
+  const metrica: MetricaRegiao = totalHeroi > 0 ? 'heroi' : 'linkClicks'
+  const valor = (l: LinhaRegiao) => (metrica === 'heroi' ? l.resultados : l.linkClicks)
+
   for (const l of linhas) {
-    l.custoPorResultado = l.resultados > 0 ? l.spend / l.resultados : null
+    const base = valor(l)
+    l.custoPorResultado = base > 0 ? l.spend / base : null
   }
-  return linhas.sort((a, b) => b.resultados - a.resultados || b.spend - a.spend)
+  linhas.sort((a, b) => valor(b) - valor(a) || b.spend - a.spend)
+
+  return { metrica: linhas.length === 0 ? 'heroi' : metrica, linhas }
 }
 
 // --- Objetivo da campanha (chip da tabela) ---
