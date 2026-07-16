@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth/session'
 import { getProfiles } from '@/actions/clientes'
 import { getTarefa } from '@/lib/tarefas/dados'
 import { TarefaDetalhe } from './tarefa-detalhe'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 
 // Backstop contra o timeout de 300s da Vercel — mesmo padrão de /tarefas.
 export const maxDuration = 60
@@ -34,11 +35,14 @@ export default async function TarefaDetalhePage({
   const responsaveis = await getProfiles()
 
   return (
-    <TarefaDetalhe
-      tarefa={tarefa}
-      clientes={clientesLista}
-      responsaveis={responsaveis}
-      usuarioId={currentUser.id}
-    />
+    <div className="space-y-4">
+      <BotaoVoltar href="/tarefas" label="Tarefas" />
+      <TarefaDetalhe
+        tarefa={tarefa}
+        clientes={clientesLista}
+        responsaveis={responsaveis}
+        usuarioId={currentUser.id}
+      />
+    </div>
   )
 }

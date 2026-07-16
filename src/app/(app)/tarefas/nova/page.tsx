@@ -9,6 +9,7 @@ import { hojeBrasilia } from '@/lib/date-br'
 import { COLUNAS_ORDEM } from '@/lib/tarefas/quadro'
 import type { TarefaStatus } from '@/lib/tarefas/recorrencia'
 import { NovaTarefaForm } from './nova-tarefa-form'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 
 // Backstop contra o timeout de 300s da Vercel — mesmo padrão de /tarefas/[id].
 export const maxDuration = 60
@@ -41,11 +42,14 @@ export default async function NovaTarefaPage({
   const dataInicial = DATA_ISO.test(data ?? '') ? data! : hojeBrasilia()
 
   return (
-    <NovaTarefaForm
-      clientes={clientesLista}
-      responsaveis={responsaveis}
-      statusInicial={statusInicial}
-      dataInicial={dataInicial}
-    />
+    <div className="space-y-4">
+      <BotaoVoltar href="/tarefas" label="Tarefas" />
+      <NovaTarefaForm
+        clientes={clientesLista}
+        responsaveis={responsaveis}
+        statusInicial={statusInicial}
+        dataInicial={dataInicial}
+      />
+    </div>
   )
 }

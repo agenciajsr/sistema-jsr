@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 
 import { ClienteForm } from '@/components/cliente-form'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { db } from '@/lib/db'
 import { clientes } from '@/lib/db/schema'
 
@@ -25,7 +26,10 @@ export default async function EditarClientePage({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-8">
-      <h1 className="text-[28px] leading-tight font-semibold">Editar Cliente</h1>
+      <div className="space-y-2">
+        <BotaoVoltar href={`/clientes/${id}`} label="Cliente" />
+        <h1 className="text-[28px] leading-tight font-semibold">Editar Cliente</h1>
+      </div>
       <ClienteForm
         mode="editar"
         clienteId={cliente.id}

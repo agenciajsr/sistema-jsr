@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { eq } from 'drizzle-orm'
 import { format, parseISO } from 'date-fns'
 import { Activity, CalendarClock, TrendingUp, Wallet } from 'lucide-react'
@@ -179,6 +180,7 @@ export default async function ClienteDetalhePage({
 
   return (
     <div className="space-y-6">
+      <BotaoVoltar href="/clientes" label="Clientes" />
       {/* Cabeçalho estilo Painel */}
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">

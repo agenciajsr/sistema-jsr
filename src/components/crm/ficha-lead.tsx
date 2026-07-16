@@ -54,6 +54,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { CriarAtividadeDialog } from '@/components/crm/criar-atividade-dialog'
 import { TagsSelect } from '@/components/crm/tags-select'
 import {
@@ -543,6 +544,10 @@ export function FichaLead({
           <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[340px_1fr]">
             {/* ============ PAINEL ESQUERDO ============ */}
             <div className="min-h-0 overflow-y-auto border-r">
+              {/* Voltar: fecha a ficha e retorna ao Kanban/Lista do CRM. */}
+              <div className="px-2 pt-2">
+                <BotaoVoltar label="Voltar" onClick={() => onOpenChange(false)} />
+              </div>
               {/* Faixa suave + avatar grande com o lapis de upload. */}
               <div className="bg-gradient-to-b from-emerald-100/80 to-transparent px-4 pt-8 pb-2 text-center dark:from-emerald-950/40">
                 <div className="relative mx-auto size-24">

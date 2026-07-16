@@ -10,6 +10,7 @@ import { CriativosCampeoes } from '@/components/trafego/criativos-campeoes'
 import { HealthScoreCliente } from '@/components/trafego/health-score-cliente'
 import { GradeKpis } from '@/components/trafego/grade-kpis'
 import { LandingClientes } from '@/components/trafego/landing-clientes'
+import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { GraficoPerformance } from '@/components/trafego/grafico-performance'
 import { TabelaNiveis } from '@/components/trafego/tabela-niveis'
 import { FunilConversao } from '@/components/trafego/funil-conversao'
@@ -90,7 +91,11 @@ export default async function CampanhasPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Campanhas</h1>
+          {/* Com cliente selecionado, volta para a tela inicial de cards. */}
+          {cliente && <BotaoVoltar href="/campanhas" label="Todos os clientes" className="mb-1" />}
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {clienteSelecionado ? clienteSelecionado.nome : 'Campanhas'}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Performance unificada por cliente: verba, resultados e campanhas.
           </p>
