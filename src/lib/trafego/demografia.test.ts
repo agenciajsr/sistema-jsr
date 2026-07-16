@@ -4,6 +4,7 @@ import {
   deduplicarJanelaMaisRecente,
   agregarDemografia,
   rankingDeRegioes,
+  LIMIAR_COBERTURA_REGIAO,
   objetivoDaCampanha,
   type LinhaDemografiaBruta,
   type LinhaRegiaoBruta,
@@ -113,14 +114,15 @@ describe('agregarDemografia', () => {
 })
 
 describe('rankingDeRegioes', () => {
-  it('modo herói: há resultados da chave -> agrega por região (somando campanhas), custo por resultado e ordem por resultados desc', () => {
+  it('modo herói: cobertura total -> agrega por região (somando campanhas), custo por resultado e ordem por resultados desc', () => {
     const rows = [
       linhaRegiao({ campaignId: 'c1', region: 'Sao Paulo', spend: '10.00', actions: [{ action_type: 'lead', value: '2' }] }),
       linhaRegiao({ campaignId: 'c2', region: 'Sao Paulo', spend: '20.00', actions: [{ action_type: 'lead', value: '4' }] }),
       linhaRegiao({ campaignId: 'c1', region: 'Minas Gerais', spend: '5.00', actions: [{ action_type: 'lead', value: '10' }] }),
     ]
-    const { metrica, linhas } = rankingDeRegioes(rows, 'leads')
+    const { metrica, motivo, linhas } = rankingDeRegioes(rows, 'leads', 16)
     expect(metrica).toBe('heroi')
+    expect(motivo).toBe('heroi')
     expect(linhas[0].region).toBe('Minas Gerais')
     expect(linhas[0].resultados).toBe(10)
     expect(linhas[0].custoPorResultado).toBeCloseTo(0.5)
@@ -130,8 +132,34 @@ describe('rankingDeRegioes', () => {
     expect(linhas[1].custoPorResultado).toBeCloseTo(5)
   })
 
-  it('modo fallback: chave sem nenhum resultado por região -> ranqueia por cliques no link, com custo por clique no link', () => {
-    // Caso real: o Meta não entrega conversão de pixel por região, só link_click/page_engagement.
+  it('REGRESSÃO (caso real Melzinho): 1 compra por região de 412 reais (0,2%) -> fallback por cobertura, NÃO modo herói', () => {
+    // O bug que motivou a task: 1 onsite_conversion.purchase (compra dentro do
+    // Instagram, que escapa da restrição de privacidade) fazia `soma > 0` dar
+    // verdadeiro e o card seguia "Regiões que mais vendem" com ZERO no resto.
+    const rows = [
+      linhaRegiao({
+        region: 'Sao Paulo',
+        spend: '6561.87',
+        actions: [
+          { action_type: 'onsite_conversion.purchase', value: '1' },
+          { action_type: 'link_click', value: '9784' },
+        ],
+      }),
+      linhaRegiao({
+        region: 'Minas Gerais',
+        spend: '2102.68',
+        actions: [{ action_type: 'link_click', value: '3471' }],
+      }),
+    ]
+    const { metrica, motivo, linhas } = rankingDeRegioes(rows, 'vendas', 412)
+    expect(metrica).toBe('linkClicks')
+    expect(motivo).toBe('sem-cobertura')
+    expect(linhas[0].region).toBe('Sao Paulo')
+    expect(linhas[0].linkClicks).toBe(9784)
+    expect(linhas[0].custoPorResultado).toBeCloseTo(6561.87 / 9784)
+  })
+
+  it('cobertura < limiar: ranqueia por cliques no link, com custo por clique no link', () => {
     const rows = [
       linhaRegiao({
         campaignId: 'c1',
@@ -152,8 +180,9 @@ describe('rankingDeRegioes', () => {
         ],
       }),
     ]
-    const { metrica, linhas } = rankingDeRegioes(rows, 'vendas')
+    const { metrica, motivo, linhas } = rankingDeRegioes(rows, 'vendas', 100)
     expect(metrica).toBe('linkClicks')
+    expect(motivo).toBe('sem-cobertura')
     expect(linhas[0].region).toBe('Bahia')
     expect(linhas[0].linkClicks).toBe(500)
     expect(linhas[0].resultados).toBe(0)
@@ -163,7 +192,7 @@ describe('rankingDeRegioes', () => {
     expect(linhas[1].custoPorResultado).toBeCloseTo(0.5) // 100 / 200
   })
 
-  it('a regra é dirigida pelo DADO: conversas onsite chegam por região -> modo herói (nada de hardcode por cliente)', () => {
+  it('a regra é dirigida pelo DADO: conversas onsite chegam por região com cobertura total -> modo herói', () => {
     const rows = [
       linhaRegiao({
         region: 'Sao Paulo',
@@ -174,28 +203,60 @@ describe('rankingDeRegioes', () => {
         ],
       }),
     ]
-    const { metrica, linhas } = rankingDeRegioes(rows, 'conversas')
+    const { metrica, motivo, linhas } = rankingDeRegioes(rows, 'conversas', 9)
     expect(metrica).toBe('heroi')
+    expect(motivo).toBe('heroi')
     expect(linhas[0].resultados).toBe(9)
     expect(linhas[0].linkClicks).toBe(400)
     expect(linhas[0].custoPorResultado).toBeCloseTo(10)
   })
 
-  it('tudo zerado (actions null, sem spend): cai no fallback, custoPorResultado null e não lança', () => {
-    const { metrica, linhas } = rankingDeRegioes(
-      [linhaRegiao({ actions: null, spend: '0.00' })],
+  it('cobertura EXATAMENTE no limiar (0.5) -> modo herói (fixa a borda)', () => {
+    const rows = [
+      linhaRegiao({
+        region: 'Sao Paulo',
+        spend: '50.00',
+        actions: [
+          { action_type: 'lead', value: '5' },
+          { action_type: 'link_click', value: '900' },
+        ],
+      }),
+    ]
+    const { metrica, motivo } = rankingDeRegioes(rows, 'leads', 10)
+    expect(LIMIAR_COBERTURA_REGIAO).toBe(0.5)
+    expect(metrica).toBe('heroi')
+    expect(motivo).toBe('heroi')
+  })
+
+  it('totalReferencia = 0 (cliente sem resultado no período): fallback com motivo sem-resultados — não é limitação do Meta', () => {
+    const { metrica, motivo, linhas } = rankingDeRegioes(
+      [linhaRegiao({ actions: [{ action_type: 'link_click', value: '30' }], spend: '10.00' })],
       'vendas',
+      0,
     )
     expect(metrica).toBe('linkClicks')
+    expect(motivo).toBe('sem-resultados')
+    expect(linhas[0].linkClicks).toBe(30)
+  })
+
+  it('tudo zerado (actions null, sem spend): não lança e custoPorResultado é null', () => {
+    const { metrica, motivo, linhas } = rankingDeRegioes(
+      [linhaRegiao({ actions: null, spend: '0.00' })],
+      'vendas',
+      0,
+    )
+    expect(metrica).toBe('linkClicks')
+    expect(motivo).toBe('sem-resultados')
     expect(linhas[0].resultados).toBe(0)
     expect(linhas[0].linkClicks).toBe(0)
     expect(linhas[0].custoPorResultado).toBeNull()
   })
 
   it('lista vazia: linhas vazias e não lança', () => {
-    const ranking = rankingDeRegioes([], 'leads')
+    const ranking = rankingDeRegioes([], 'leads', 0)
     expect(ranking.linhas).toEqual([])
     expect(ranking.metrica).toBe('heroi')
+    expect(ranking.motivo).toBe('heroi')
   })
 })
 
