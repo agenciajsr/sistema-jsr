@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluido quick 260715-tud (Etapa 2 /campanhas: demografia idade×gênero, regiões, objective oficial; migration 0025 APLICADA)"
-last_updated: "2026-07-16T00:55:00.000Z"
-last_activity: "2026-07-15 - Completed quick task 260715-tud: Etapa 2 de /campanhas (demografia, regiões, objetivo oficial)"
+stopped_at: "Concluido quick 260715-v6c (card de Regioes com metrica adaptativa por COBERTURA; limitacao da Graph API por regiao documentada)"
+last_updated: "2026-07-16T01:45:00.000Z"
+last_activity: "2026-07-15 - Completed quick task 260715-v6c: card de Regiões com métrica adaptativa (cobertura)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -100,6 +100,8 @@ Recent decisions affecting current work:
 - [quick-260715-0zf]: API publica de captacao (POST /api/crm/leads) NAO tem modo desprotegido (diferente dos crons): CRM_LEADS_TOKEN ausente = 401 para tudo. Dedup idempotente em 2 niveis: inbox por sha256(fonte|email-ou-telefone|dia) e contato por email (case-insensitive) OU telefone normalizado.
 - [Phase quick-260715-oz9]: getCurrentUser tem withRetry (5s→8s) na revalidação completa; deslogado retorna null sem gastar retry; erro só após 2 falhas
 - [Phase quick-260715-oz9]: Pool postgres.js: max=5 (era 3) para a 2ª tentativa do withRetry não disputar com queries órfãs; max_pipeline=1 e statement_timeout=12s intocados; sem global-error.tsx (root layout estático)
+- [quick-260715-v6c]: LIMITAÇÃO FECHADA DA GRAPH API (medida 15/jul/2026, conta real): o Meta NÃO entrega conversões de PIXEL (compras/leads offsite) quebradas por região — privacidade pós-iOS 14. Nenhuma variação resolve (region em qualquer nível = 0; attribution windows = 0; dma = erro #100). Por região só chegam link_click, page_engagement, video_view, conversas onsite e lead de formulário instantâneo. O fallback do card de Regiões por cliques no link é a resposta honesta, NÃO um bug nosso — não reinvestigar.
+- [quick-260715-v6c]: Métrica do ranking de regiões decide por COBERTURA (soma por região / total da MESMA janela 30d e MESMAS campanhas do breakdown), nunca por presença (soma > 0). Presença tinha furo comprovado: 1 onsite_conversion.purchase de 412 (0,2%) mantinha o card zerado em modo herói. Limiar LIMIAR_COBERTURA_REGIAO=0.5 exportado; separação medida (0,2% vs 100%+) torna o valor exato irrelevante. Denominador SEMPRE no mesmo recorte do numerador — período do filtro ou campanha fora do breakdown distorcem e disparam fallback falso.
 
 ### Pending Todos
 
@@ -157,10 +159,11 @@ None yet.
 | 260715-pmm | Redesign da /campanhas no padrão do dashboard Meta Ads de referência — grade de 24 KPIs configurável (Organizar drag+switch persistido POR CLIENTE, toggle Comparar vs. período anterior c/ cor semântica), gráfico Performance multi-métrica (legenda clicável, eixos duplos, filtro por campanha), tabela campanhas/conjuntos/anúncios (busca, status badge, thumbnails, totais), Funil de Conversão 2-6 etapas; getPainelCampanhas (~3 queries sequenciais); catálogo puro c/ 14 testes; tabela preferencias_campanhas + migration 0024 GERADA e NÃO aplicada (rodar scripts/aplicar-migration-0024.ts) | 2026-07-15 | 0bddf26 | [260715-pmm-redesign-da-pagina-campanhas-kpis-config](./quick/260715-pmm-redesign-da-pagina-campanhas-kpis-config/) |
 | fast-260715 | Correção pós-deploy do painel /campanhas: --chart-1..5 no CSS (gráfico Performance invisível), anúncios/criativos pela janela mais recente do ad_insights (janela ~30d, não diária), conjuntos derivados dos anúncios (adset_insights vazia), aviso na tabela de níveis | 2026-07-15 | 47cd411 | — |
 | 260715-tud | Etapa 2 de /campanhas — sync com breakdowns idade×gênero e região + objective oficial (tabelas demografia_insights/regiao_insights, migration 0025 APLICADA via script manual); seção Dados Demográficos (barras empilhadas, Ocultar Gênero, seletor de campanha/métrica), ranking de Regiões pela chave-herói e chips de filtro por objetivo na tabela (objective Meta c/ classificarObjetivo como fallback); módulo puro demografia.ts sob TDD (10 testes, 1487 total); sync validado ponta a ponta em conta real (172 linhas demografia, 250 regiões) | 2026-07-15 | 2c28ee4 | [260715-tud-etapa-2-campanhas-demografia-idade-gener](./quick/260715-tud-etapa-2-campanhas-demografia-idade-gener/) |
+| 260715-v6c | Card de Regiões de /campanhas com métrica adaptativa — ranking escolhe a métrica pela COBERTURA do dado (soma por região / total da mesma janela 30d e mesmas campanhas), não por presença: 1 compra onsite de 412 (0,2%) mantinha o card zerado em "Regiões que mais vendem"; agora cai para cliques no link com título "Regiões com mais tráfego" e nota citando a limitação de privacidade do Meta (motivo 'sem-cobertura'), ou nota neutra quando o cliente não teve resultado no período ('sem-resultados', não culpa o Meta); limiar 0.5 exportado e comentado com a medição; rankingDeRegioes/campanhasComRegiao puros sob TDD (19 testes, 1496 total) com regressão nomeada do caso real; validado read-only na conta Melzinho (vendas 0,2%→fallback, leads 100% e conversas 108,9%→herói); sem sync/migration | 2026-07-15 | 71bf75c | [260715-v6c-card-de-regioes-metrica-adaptativa-quand](./quick/260715-v6c-card-de-regioes-metrica-adaptativa-quand/) |
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 
 ## Session Continuity
 
-Last session: 2026-07-16T00:55:00.000Z
-Stopped at: Concluido quick 260715-tud (Etapa 2 /campanhas: demografia, regiões, objective oficial; migration 0025 APLICADA)
+Last session: 2026-07-16T01:45:00.000Z
+Stopped at: Concluido quick 260715-v6c (card de Regiões com métrica adaptativa por cobertura)
 Resume file: None
