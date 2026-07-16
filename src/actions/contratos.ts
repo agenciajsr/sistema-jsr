@@ -5,10 +5,25 @@ import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
 import { contratos, clientes } from '@/lib/db/schema'
-import { contratoSchema, type ContratoInput } from '@/lib/validations/contrato'
+import {
+  contratoSchema,
+  contratoEdicaoSchema,
+  type ContratoInput,
+  type ContratoEdicaoInput,
+} from '@/lib/validations/contrato'
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { selecionarContratoAtual, type ContratoRow } from '@/lib/contratos/current'
-import { requireAdmin } from '@/lib/auth/session'
+import { montarVariaveisContrato } from '@/lib/contratos/variaveis'
+import { gerarPdfContrato } from '@/lib/contratos/pdf'
+import { confirmarAssinatura } from '@/lib/contratos/assinatura'
+import {
+  criarDocumento,
+  consultarDocumento,
+  AutentiqueTokenAusenteError,
+} from '@/lib/autentique/client'
+import { requireAdmin, getCurrentUser } from '@/lib/auth/session'
+
+const ERRO_TOKEN_AUTENTIQUE = 'Configure o token da Autentique (AUTENTIQUE_API_TOKEN na Vercel).'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
 
@@ -69,6 +84,165 @@ export async function atualizarContrato(id: string, input: ContratoInput) {
   revalidatePath('/contratos')
 
   return { data: { id } }
+}
+
+// Edição COMPLETA (Fase 4 Parte 2): datas/valor + serviço, duração e tipo de
+// documento. Mantém o gate de admin, como atualizarContrato.
+export async function atualizarDadosContrato(id: string, input: ContratoEdicaoInput) {
+  const adminCheck = await requireAdmin()
+  if ('error' in adminCheck) {
+    return { error: 'Apenas administradores podem editar contratos.' }
+  }
+
+  const parsed = contratoEdicaoSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? ERRO_VALIDACAO }
+  }
+
+  try {
+    const [existente] = await db
+      .select({ clienteId: contratos.clienteId })
+      .from(contratos)
+      .where(eq(contratos.id, id))
+
+    if (!existente) {
+      return { error: 'Contrato não encontrado.' }
+    }
+
+    await db
+      .update(contratos)
+      .set({
+        dataInicio: parsed.data.dataInicio,
+        dataVencimento: parsed.data.dataVencimento,
+        valorMensal: String(parsed.data.valorMensal),
+        servico: parsed.data.servico ?? null,
+        duracaoMeses: parsed.data.duracaoMeses ?? null,
+        tipoDocumento: parsed.data.tipoDocumento ?? null,
+      })
+      .where(eq(contratos.id, id))
+
+    revalidatePath(`/clientes/${existente.clienteId}`)
+    revalidatePath('/contratos')
+    return { data: { id } }
+  } catch (e) {
+    console.error('[atualizarDadosContrato]', e)
+    return {
+      error:
+        'Não foi possível salvar. As migrations 0029/0030 podem estar pendentes em produção.',
+    }
+  }
+}
+
+// Envia (ou REENVIA) o contrato para assinatura na Autentique. Reenvio quando
+// já está aguardando_assinatura: cria um NOVO documento (o PDF é regenerado
+// com os dados ATUAIS — se o contratante corrigiu os dados pelo link, o novo
+// envio reflete a correção) e sobrescreve o autentiqueDocumentoId; o documento
+// antigo fica órfão na Autentique, o que é inofensivo.
+export async function enviarParaAssinatura(contratoId: string) {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sessão expirada — faça login novamente.' }
+
+  try {
+    const [row] = await db
+      .select({
+        id: contratos.id,
+        clienteId: contratos.clienteId,
+        clienteNome: clientes.nome,
+        dataInicio: contratos.dataInicio,
+        dataVencimento: contratos.dataVencimento,
+        valorMensal: contratos.valorMensal,
+        duracaoMeses: contratos.duracaoMeses,
+        dadosContratante: contratos.dadosContratante,
+      })
+      .from(contratos)
+      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+      .where(eq(contratos.id, contratoId))
+
+    if (!row) return { error: 'Contrato não encontrado.' }
+    if (!row.dadosContratante) {
+      return { error: 'O contratante ainda não preencheu os dados.' }
+    }
+
+    const vars = montarVariaveisContrato({
+      contrato: {
+        dataInicio: row.dataInicio,
+        dataVencimento: row.dataVencimento,
+        valorMensal: row.valorMensal,
+        duracaoMeses: row.duracaoMeses,
+      },
+      dadosContratante: row.dadosContratante,
+    })
+    if ('error' in vars) return { error: vars.error }
+
+    const pdf = await gerarPdfContrato(vars.data)
+    const documento = await criarDocumento({
+      nome: `Contrato JSR — ${row.clienteNome}`,
+      pdf,
+      signatario: { email: vars.data.emailSignatario, nome: vars.data.nomeSignatario },
+    })
+
+    await db
+      .update(contratos)
+      .set({
+        autentiqueDocumentoId: documento.id,
+        enviadoParaAssinaturaEm: new Date(),
+        statusFluxo: 'aguardando_assinatura',
+      })
+      .where(eq(contratos.id, contratoId))
+
+    revalidatePath('/contratos')
+    revalidatePath(`/clientes/${row.clienteId}`)
+    return { data: { documentoId: documento.id } }
+  } catch (e) {
+    if (e instanceof AutentiqueTokenAusenteError) {
+      return { error: ERRO_TOKEN_AUTENTIQUE }
+    }
+    console.error('[enviarParaAssinatura]', e)
+    return { error: 'Não foi possível enviar para assinatura. Tente novamente em instantes.' }
+  }
+}
+
+// Fallback OFICIAL do webhook: consulta a Autentique e, se todos assinaram,
+// marca assinado + ativa o cliente.
+export async function atualizarStatusAssinatura(contratoId: string) {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sessão expirada — faça login novamente.' }
+
+  try {
+    const [row] = await db
+      .select({
+        id: contratos.id,
+        clienteId: contratos.clienteId,
+        statusFluxo: contratos.statusFluxo,
+        autentiqueDocumentoId: contratos.autentiqueDocumentoId,
+      })
+      .from(contratos)
+      .where(eq(contratos.id, contratoId))
+
+    if (!row) return { error: 'Contrato não encontrado.' }
+    if (!row.autentiqueDocumentoId) {
+      return { error: 'Este contrato ainda não foi enviado para assinatura.' }
+    }
+    if (row.statusFluxo === 'assinado') {
+      return { data: { assinado: true } }
+    }
+
+    const { assinado } = await consultarDocumento(row.autentiqueDocumentoId)
+    if (!assinado) {
+      return { data: { assinado: false } }
+    }
+
+    await confirmarAssinatura(row.id, row.clienteId)
+    revalidatePath('/contratos')
+    revalidatePath(`/clientes/${row.clienteId}`)
+    return { data: { assinado: true } }
+  } catch (e) {
+    if (e instanceof AutentiqueTokenAusenteError) {
+      return { error: ERRO_TOKEN_AUTENTIQUE }
+    }
+    console.error('[atualizarStatusAssinatura]', e)
+    return { error: 'Não foi possível consultar a Autentique. Tente novamente em instantes.' }
+  }
 }
 
 export async function deleteContrato(id: string) {
