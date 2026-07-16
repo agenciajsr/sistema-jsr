@@ -18,6 +18,9 @@ import { ContratoForm } from '@/components/contrato-form'
 import { ChecklistCliente } from '@/components/ficha/checklist-cliente'
 import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
 import { CobrancaCliente } from '@/components/ficha/cobranca-cliente'
+import { FaturasCliente } from '@/components/ficha/faturas-cliente'
+import { getFaturasDoCliente } from '@/lib/cobrancas/dados'
+import { asaasDisponivel } from '@/lib/asaas/client'
 import { VincularContaFicha } from '@/components/ficha/vincular-conta-ficha'
 import { MetasCliente } from '@/components/ficha/metas-cliente'
 import { UploadDocumento } from '@/components/upload-documento'
@@ -154,6 +157,11 @@ export default async function ClienteDetalhePage({
     getAlertasDoCliente(id),
     listarDocumentos(id),
   ])
+
+  // Faturas (tabela cobrancas — Fase 5): query SEQUENCIAL após o lote acima
+  // (pool max=3, memória do projeto — não inflar o Promise.all).
+  const faturas = await getFaturasDoCliente(id)
+  const asaasConfigurado = asaasDisponivel()
 
   // D-03: exclusão de cliente/contrato é exclusiva do Admin.
   const isAdmin = usuario?.role === 'admin'
@@ -300,6 +308,7 @@ export default async function ClienteDetalhePage({
       <Tabs defaultValue="contrato" className="space-y-4">
         <TabsList>
           <TabsTrigger value="contrato">📄 Contrato &amp; Cobrança</TabsTrigger>
+          <TabsTrigger value="faturas">💰 Faturas</TabsTrigger>
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>
           <TabsTrigger value="checklist">✅ Checklist</TabsTrigger>
           <TabsTrigger value="acompanhamento">📝 Acompanhamento</TabsTrigger>
@@ -458,6 +467,14 @@ export default async function ClienteDetalhePage({
           <section className="space-y-4">
             <h2 className="text-[20px] leading-tight font-semibold">💳 Cobrança</h2>
             <CobrancaCliente clienteId={id} usaAsaas={cliente.usaAsaas} cobrancas={cobrancas} />
+          </section>
+        </TabsContent>
+
+        {/* Aba: Faturas (tabela cobrancas — Fase 5, dados REAIS) */}
+        <TabsContent value="faturas" className="space-y-4">
+          <section className="space-y-4">
+            <h2 className="text-[20px] leading-tight font-semibold">Faturas</h2>
+            <FaturasCliente faturas={faturas} asaasConfigurado={asaasConfigurado} />
           </section>
         </TabsContent>
 

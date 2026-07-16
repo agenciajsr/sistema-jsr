@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ClipboardCheck, FileText, Pencil, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Banknote, ClipboardCheck, FileText, Pencil, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,7 @@ import {
   atualizarStatusAssinatura,
   type ContratoConsolidado,
 } from '@/actions/contratos'
+import { gerarCobrancaManual } from '@/actions/cobrancas'
 import {
   rotuloStatusFluxo,
   badgeStatusFluxo,
@@ -158,6 +159,27 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
     })
   }
 
+  function gerarCobranca(contrato: ContratoConsolidado) {
+    setEnviandoId(contrato.id)
+    startTransition(async () => {
+      const resultado = await gerarCobrancaManual(contrato.id)
+      setEnviandoId(null)
+      if (!resultado.ok) {
+        toast.error(resultado.erro)
+        return
+      }
+      if (resultado.aviso) {
+        toast.warning(resultado.aviso)
+        return
+      }
+      toast.success(
+        resultado.invoiceUrl
+          ? `Cobrança gerada — ${resultado.invoiceUrl}`
+          : 'Cobrança gerada.'
+      )
+    })
+  }
+
   function atualizarStatus(contrato: ContratoConsolidado) {
     setEnviandoId(contrato.id)
     startTransition(async () => {
@@ -196,6 +218,7 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
               <TableHead>Fim</TableHead>
               <TableHead className="text-center">Verificar</TableHead>
               <TableHead className="text-center">Enviar</TableHead>
+              <TableHead className="text-center">Cobrança</TableHead>
               <TableHead className="text-center">Preview</TableHead>
               <TableHead className="text-center">Editar</TableHead>
               <TableHead className="text-center">Excluir</TableHead>
@@ -286,6 +309,20 @@ export function TabelaContratos({ contratos }: { contratos: ContratoConsolidado[
                         </BotaoIcone>
                       )}
                     </div>
+                  </TableCell>
+
+                  <TableCell className="text-center">
+                    <BotaoIcone
+                      tooltip={
+                        contrato.statusFluxo === 'assinado'
+                          ? 'Gerar cobrança no Asaas (mensalidade do mês atual)'
+                          : 'Disponível após a assinatura do contrato'
+                      }
+                      desabilitado={contrato.statusFluxo !== 'assinado' || ocupado}
+                      onClick={() => gerarCobranca(contrato)}
+                    >
+                      <Banknote className="size-4" />
+                    </BotaoIcone>
                   </TableCell>
 
                   <TableCell className="text-center">
