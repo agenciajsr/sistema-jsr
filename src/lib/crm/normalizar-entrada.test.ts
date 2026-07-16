@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { normalizarLeadEntrada } from './normalizar-entrada'
+import { normalizarLeadEntrada, extrairDetalheLead } from './normalizar-entrada'
 
 describe('normalizarLeadEntrada', () => {
   it('JSON simples no nosso formato passa direto', () => {
@@ -132,5 +132,40 @@ describe('normalizarLeadEntrada', () => {
     const r = normalizarLeadEntrada(elementorReal)
     expect(r.extra.raw['form[name]']).toBe('Dados de Contato')
     expect(r.extra.raw['fields[name][value]']).toBe('Jack teste')
+  })
+})
+
+describe('extrairDetalheLead', () => {
+  it('extrai respostas e utm do lead normalizado guardado em origem_detalhe', () => {
+    const lead = normalizarLeadEntrada({
+      'fields[name][title]': 'Seu Nome',
+      'fields[name][value]': 'Ana',
+      'fields[q1][title]': 'Faturamento?',
+      'fields[q1][value]': 'Até R$5.000/mês',
+      'fields[utm_source][value]': 'ig',
+      'fields[utm_source][type]': 'hidden',
+    })
+    const d = extrairDetalheLead(lead)
+    expect(d.respostas).toEqual([{ pergunta: 'Faturamento?', resposta: 'Até R$5.000/mês' }])
+    expect(d.utm.utm_source).toBe('ig')
+  })
+
+  it('formatos inesperados/null nunca lançam — devolvem vazio', () => {
+    for (const lixo of [null, undefined, 42, 'x', {}, { extra: null }, { extra: { respostas: 'nao-array' } }]) {
+      const d = extrairDetalheLead(lixo)
+      expect(d.respostas).toEqual([])
+      expect(d.utm).toEqual({})
+    }
+  })
+
+  it('descarta respostas malformadas e utm não-string', () => {
+    const d = extrairDetalheLead({
+      extra: {
+        respostas: [{ pergunta: 'ok', resposta: 'sim' }, { pergunta: 'x' }, { resposta: '' }],
+        utm: { utm_source: 'ig', utm_medium: 123, utm_term: '' },
+      },
+    })
+    expect(d.respostas).toEqual([{ pergunta: 'ok', resposta: 'sim' }])
+    expect(d.utm).toEqual({ utm_source: 'ig' })
   })
 })

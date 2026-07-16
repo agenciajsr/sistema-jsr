@@ -69,6 +69,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { mascararDocumento, mascararTelefone } from '@/lib/crm/mascaras'
 import { nomeOrigem } from '@/lib/crm/origem'
+import { extrairDetalheLead } from '@/lib/crm/normalizar-entrada'
 import { rotuloServico, SERVICOS_JSR, type ServicoJsr } from '@/lib/crm/servicos'
 import { classesCorTag } from '@/lib/crm/tags'
 import { tempoRelativoCurto } from '@/lib/crm/tempo'
@@ -696,6 +697,56 @@ export function FichaLead({
                   <p className="mt-1 text-[10px] text-muted-foreground">Salvando...</p>
                 )}
               </SecaoRecolhivel>
+
+              {/* Respostas do formulario + Rastreamento (UTM): so aparecem quando
+                  o lead veio de captacao externa (webhook) com esses dados. */}
+              {(() => {
+                const { respostas, utm } = extrairDetalheLead(ficha.perfil.origemDetalhe)
+                const LABEL_UTM: Record<string, string> = {
+                  utm_source: 'Origem',
+                  utm_medium: 'Mídia',
+                  utm_campaign: 'Campanha',
+                  utm_content: 'Anúncio / Conteúdo',
+                  utm_term: 'Termo / Palavra-chave',
+                }
+                const utmEntradas = Object.entries(utm)
+                return (
+                  <>
+                    {respostas.length > 0 && (
+                      <SecaoRecolhivel titulo="Respostas do formulário">
+                        <dl className="space-y-3">
+                          {respostas.map((r, i) => (
+                            <div key={i} className="space-y-0.5">
+                              <dt className="text-xs text-muted-foreground">{r.pergunta}</dt>
+                              <dd className="text-sm font-medium">{r.resposta}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </SecaoRecolhivel>
+                    )}
+
+                    {utmEntradas.length > 0 && (
+                      <SecaoRecolhivel titulo="Rastreamento">
+                        <dl className="space-y-2">
+                          {utmEntradas.map(([chave, valor]) => (
+                            <div
+                              key={chave}
+                              className="flex items-baseline justify-between gap-3"
+                            >
+                              <dt className="shrink-0 text-xs text-muted-foreground">
+                                {LABEL_UTM[chave] ?? chave}
+                              </dt>
+                              <dd className="truncate text-right text-sm font-medium" title={valor}>
+                                {valor}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </SecaoRecolhivel>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Cadastro em abas (form RHF unico — Salvar vale para as 3). */}
               <div className="border-t px-4 py-4">

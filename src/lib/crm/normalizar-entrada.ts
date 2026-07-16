@@ -112,6 +112,44 @@ function coletarCampos(raw: Record<string, string>): { campos: Campo[]; utm: Rec
   return { campos, utm }
 }
 
+/**
+ * Extrai, de forma DEFENSIVA, as respostas do formulário e os UTM guardados em
+ * `crm_contatos.origem_detalhe` (que é o próprio lead normalizado). Usado pelo
+ * card do lead para exibir "Respostas do formulário" e "Rastreamento". Nunca
+ * lança: qualquer formato inesperado -> listas/objeto vazios.
+ */
+export function extrairDetalheLead(origemDetalhe: unknown): {
+  respostas: ParPergunta[]
+  utm: Record<string, string>
+} {
+  const vazio = { respostas: [] as ParPergunta[], utm: {} as Record<string, string> }
+  if (!origemDetalhe || typeof origemDetalhe !== 'object') return vazio
+  const extra = (origemDetalhe as { extra?: unknown }).extra
+  if (!extra || typeof extra !== 'object') return vazio
+
+  const respostasRaw = (extra as { respostas?: unknown }).respostas
+  const respostas = Array.isArray(respostasRaw)
+    ? respostasRaw.filter(
+        (p): p is ParPergunta =>
+          !!p &&
+          typeof p === 'object' &&
+          typeof (p as ParPergunta).pergunta === 'string' &&
+          typeof (p as ParPergunta).resposta === 'string' &&
+          (p as ParPergunta).resposta.trim() !== '',
+      )
+    : []
+
+  const utmRaw = (extra as { utm?: unknown }).utm
+  const utm: Record<string, string> = {}
+  if (utmRaw && typeof utmRaw === 'object') {
+    for (const [k, v] of Object.entries(utmRaw as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.trim() !== '') utm[k] = v
+    }
+  }
+
+  return { respostas, utm }
+}
+
 /** Acha o 1º campo cujo rótulo casa a heurística e tem valor; devolve o Campo. */
 function acharCampo(campos: Campo[], re: RegExp): Campo | undefined {
   return campos.find((c) => re.test(c.label) && c.value.trim() !== '')

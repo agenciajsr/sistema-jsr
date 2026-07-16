@@ -393,6 +393,7 @@ export async function getFichaLead(contatoId: string) {
         estado: crmContatos.estado,
         notas: crmContatos.notas,
         origem: crmContatos.origem,
+        origemDetalhe: crmContatos.origemDetalhe,
         fotoUrl: crmContatos.fotoUrl,
         donoId: crmContatos.donoId,
         donoNome: profiles.nome,
