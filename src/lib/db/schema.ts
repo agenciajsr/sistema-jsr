@@ -673,6 +673,9 @@ export const crmContatos = pgTable('crm_contatos', {
   origem: text('origem').notNull().default('manual'),
   origemDetalhe: jsonb('origem_detalhe'),
   donoId: uuid('dono_id').references(() => profiles.id, { onDelete: 'set null' }),
+  // Preenchido quando o lead vira cliente da agência — idempotência da
+  // conversão Ganho → Cliente (nunca duplicar cliente para o mesmo lead).
+  clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({

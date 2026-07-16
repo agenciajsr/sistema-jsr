@@ -162,6 +162,13 @@
       "when": 1784162033243,
       "tag": "0025_etapa2_campanhas",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784210045866,
+      "tag": "0028_crm_contatos_cliente_id",
+      "breakpoints": true
     }
   ]
 }

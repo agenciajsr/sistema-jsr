@@ -16,6 +16,7 @@ import {
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
+import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
 import {
   pipelineSchema,
   etapaSchema,
@@ -639,6 +640,169 @@ export async function ganharOportunidade(id: string, opts?: { criarCliente?: boo
   } catch (e) {
     console.error('[ganharOportunidade]', e)
     return { error: 'Nao foi possivel marcar a oportunidade como ganha.' }
+  }
+}
+
+/**
+ * Fase 3 do funil — Ganho → Cliente. Roda DEPOIS do ganho (decisão posterior
+ * do dialog): converte o lead da oportunidade GANHA em cliente da agência com
+ * status 'aguardando_inicio', reaproveitando nome/telefone/e-mail do contato.
+ *
+ * Idempotente em 3 níveis (nunca duplica cliente):
+ *  (a) oportunidade.clienteId já preenchido → retorna o existente;
+ *  (b) contato.clienteId preenchido (o lead já converteu em outro negócio);
+ *  (c) empresa.clienteId preenchido (a empresa já é cliente).
+ * Em (b)/(c) só VINCULA o id existente onde faltar e retorna jaExistia: true.
+ */
+export async function converterOportunidadeEmCliente(oportunidadeId: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    const [oportunidade] = await db
+      .select({
+        id: crmOportunidades.id,
+        status: crmOportunidades.status,
+        contatoId: crmOportunidades.contatoId,
+        empresaId: crmOportunidades.empresaId,
+        clienteId: crmOportunidades.clienteId,
+      })
+      .from(crmOportunidades)
+      .where(
+        and(
+          eq(crmOportunidades.id, oportunidadeId),
+          eq(crmOportunidades.workspaceId, workspace.id)
+        )
+      )
+
+    if (!oportunidade) return { error: 'Oportunidade nao encontrada.' }
+    if (oportunidade.status !== 'ganha') {
+      return { error: 'So negocios GANHOS podem ser convertidos em cliente.' }
+    }
+
+    // (a) a própria oportunidade já converteu.
+    if (oportunidade.clienteId) {
+      return { data: { clienteId: oportunidade.clienteId, jaExistia: true } }
+    }
+
+    // Queries SEQUENCIAIS de propósito (pool max=3) — nunca Promise.all.
+    let contato:
+      | { id: string; nome: string; telefone: string | null; email: string | null; clienteId: string | null }
+      | undefined
+    if (oportunidade.contatoId) {
+      try {
+        const [c] = await db
+          .select({
+            id: crmContatos.id,
+            nome: crmContatos.nome,
+            telefone: crmContatos.telefone,
+            email: crmContatos.email,
+            clienteId: crmContatos.clienteId,
+          })
+          .from(crmContatos)
+          .where(eq(crmContatos.id, oportunidade.contatoId))
+        contato = c
+      } catch (e) {
+        // Degradação graciosa: enquanto a migration da coluna cliente_id em
+        // crm_contatos não for aplicada, o select acima falha. A conversão
+        // segue sem a idempotência POR CONTATO (a por oportunidade/empresa fica).
+        console.warn('[converterOportunidadeEmCliente] coluna cliente_id ausente em crm_contatos?', e)
+        const [c] = await db
+          .select({
+            id: crmContatos.id,
+            nome: crmContatos.nome,
+            telefone: crmContatos.telefone,
+            email: crmContatos.email,
+          })
+          .from(crmContatos)
+          .where(eq(crmContatos.id, oportunidade.contatoId))
+        contato = c ? { ...c, clienteId: null } : undefined
+      }
+    }
+
+    let empresa: { id: string; nome: string; clienteId: string | null } | undefined
+    if (oportunidade.empresaId) {
+      const [e] = await db
+        .select({ id: crmEmpresas.id, nome: crmEmpresas.nome, clienteId: crmEmpresas.clienteId })
+        .from(crmEmpresas)
+        .where(eq(crmEmpresas.id, oportunidade.empresaId))
+      empresa = e
+    }
+
+    // (b)/(c) contato ou empresa já viraram cliente → só vincular o existente.
+    const existente = clienteExistenteDe({ contato, empresa })
+    if (existente) {
+      await vincularClienteNoFunil(existente, oportunidade.id, contato, empresa)
+      await registrarAtividadeCrm(workspace.id, currentUser, {
+        tipo: 'ganho',
+        oportunidadeId: oportunidade.id,
+        detalhe: 'Vinculado a cliente existente da carteira',
+      })
+      revalidatePath('/crm')
+      revalidatePath('/clientes')
+      return { data: { clienteId: existente, jaExistia: true } }
+    }
+
+    // Caso novo: cria o cliente com os dados do lead.
+    const payload = dadosClienteDe({ contato, empresa })
+    if (!payload) return { error: 'Negocio sem contato e sem empresa — nada para converter.' }
+
+    const [clienteNovo] = await db.insert(clientes).values(payload).returning({ id: clientes.id })
+
+    await vincularClienteNoFunil(clienteNovo.id, oportunidade.id, contato, empresa)
+
+    await registrarAtividadeCrm(workspace.id, currentUser, {
+      tipo: 'ganho',
+      oportunidadeId: oportunidade.id,
+      detalhe: 'Convertido em cliente da carteira',
+    })
+
+    revalidatePath('/crm')
+    revalidatePath('/clientes')
+    return { data: { clienteId: clienteNovo.id, jaExistia: false } }
+  } catch (e) {
+    console.error('[converterOportunidadeEmCliente]', e)
+    return { error: 'Nao foi possivel converter o negocio em cliente.' }
+  }
+}
+
+/**
+ * Vincula clienteId na oportunidade, no contato e na empresa (os que existirem
+ * e ainda estiverem sem vínculo). Updates SEQUENCIAIS — pool max=3.
+ * NÃO exportada: helper interno da conversão.
+ */
+async function vincularClienteNoFunil(
+  clienteId: string,
+  oportunidadeId: string,
+  contato?: { id: string; clienteId: string | null },
+  empresa?: { id: string; clienteId: string | null }
+) {
+  await db
+    .update(crmOportunidades)
+    .set({ clienteId, updatedAt: new Date() })
+    .where(eq(crmOportunidades.id, oportunidadeId))
+
+  if (contato && !contato.clienteId) {
+    try {
+      await db
+        .update(crmContatos)
+        .set({ clienteId, updatedAt: new Date() })
+        .where(eq(crmContatos.id, contato.id))
+    } catch (e) {
+      // Coluna cliente_id ainda não aplicada em produção: loga e segue — a
+      // conversão funciona; a idempotência por contato chega com a migration.
+      console.warn('[vincularClienteNoFunil] falha ao vincular contato (migration pendente?)', e)
+    }
+  }
+
+  if (empresa && !empresa.clienteId) {
+    await db
+      .update(crmEmpresas)
+      .set({ clienteId, updatedAt: new Date() })
+      .where(eq(crmEmpresas.id, empresa.id))
   }
 }
 
