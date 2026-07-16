@@ -1,11 +1,9 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Plus, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 
 import { AppSidebar } from '@/components/app-sidebar'
 import { AlertasBell } from '@/components/layout/alertas-bell'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { Button } from '@/components/ui/button'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { getCurrentUser } from '@/lib/auth/session'
 
@@ -55,13 +53,6 @@ export default async function AppLayout({
             <ThemeToggle />
 
             <AlertasBell />
-
-            <Button asChild size="sm" className="gap-1.5">
-              <Link href="/clientes/novo">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Novo cliente</span>
-              </Link>
-            </Button>
           </div>
         </header>
         {/* min-w-0: sem isto, um item flex nunca encolhe abaixo da largura do
