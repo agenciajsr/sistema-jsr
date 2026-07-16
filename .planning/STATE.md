@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluido quick 260716-ezd (Ganho no CRM converte lead em cliente); migration 0028 GERADA e NAO aplicada — checkpoint humano pendente (aplicar na mao + deploy)"
-last_updated: "2026-07-16T14:10:00.000Z"
-last_activity: "2026-07-16 - Completed quick task 260716-ezd: conversao Ganho → Cliente lead-first (action idempotente em 3 niveis + dialog no kanban + modulo puro sob TDD); migration 0028 aditiva (cliente_id em crm_contatos) GERADA, NAO aplicada"
+stopped_at: "Concluido quick 260716-g4h (Fase 4 Parte 1 — Contratos: dialog + link publico); migration 0029 GERADA e NAO aplicada — checkpoint humano pendente (aplicar na mao + deploy)"
+last_updated: "2026-07-16T21:30:00.000Z"
+last_activity: "2026-07-16 - Completed quick task 260716-g4h: Fase 4 Parte 1 do funil — conversao gera contrato aguardando_dados com token, pagina publica /contrato/[token] PJ/PF sem login, /contratos com fluxo; migration 0029 aditiva GERADA, NAO aplicada"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -163,9 +163,10 @@ None yet.
 | fast-260715 | **Bug**: preferências de KPI/funil vazavam entre clientes em /campanhas — GradeKpis e FunilConversao nascem de useState a partir das props e, sem `key={cliente}`, o React reaproveitava a instância ao trocar de cliente: a grade seguia com as métricas do cliente anterior e o salvamento otimista gravava essa lista errada por cima da linha do cliente atual (o banco sempre teve 1 linha por cliente — o vazamento era de estado no React). Corrigido com key={cliente} nos dois. Preferências gravadas antes da correção estão contaminadas (Ramon com 0 KPIs ativos) — tratamento planejado na Etapa 3 | 2026-07-15 | 79b09db | [ETAPA-3-CAMPANHAS.md](./ETAPA-3-CAMPANHAS.md) |
 | 260715-ibf | Tarefas visão DIÁRIA — botão único "Hoje" com calendário popover (shadcn popover+calendar) no lugar dos 2 inputs date + texto duplicado; coluna Concluídas só mostra concluídas NO dia visualizado (concluidaEm fuso BR, fallback legado data===dia) via tarefasDaVisaoDiaria pura sob TDD (10 testes novos, 237 total); ?dia= comanda a URL; sem migration | 2026-07-15 | 996030e | [260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot](./quick/260715-ibf-tarefas-corrigir-seletor-de-datas-so-bot/) |
 | 260716-ezd | Fase 3 do funil — Ganho no CRM converte lead em cliente: action converterOportunidadeEmCliente LEAD-FIRST idempotente em 3 níveis (oportunidade→contato→empresa, nunca duplica), dialog "Converter em cliente?" pós-ganho no kanban (cancelar não desfaz o ganho; card já convertido não reabre), módulo puro conversao.ts sob TDD (11 testes); migration 0028 aditiva (cliente_id em crm_contatos) GERADA e NÃO aplicada — snapshot do Drizzle posto em dia (0026/0027 manuais); degradação graciosa até aplicar | 2026-07-16 | 890bd66 | [260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le](./quick/260716-ezd-fase-3-do-funil-ganho-no-crm-converte-le/) |
+| 260716-g4h | Fase 4 Parte 1 — Contratos: conversão Ganho→Cliente coleta duração (3/6)/serviço/mensalidade e cria contrato aguardando_dados com token único (alimenta MRR via valorMensal); página pública /contrato/[token] mobile-first sem login (PJ/PF, CPF/CNPJ com dígito verificador, reenvio idempotente); /contratos com badges do fluxo + copiar link; módulos puros sob TDD (29 testes); migration 0029 aditiva GERADA e NÃO aplicada | 2026-07-16 | b92f6cf | [260716-g4h-fase-4-parte-1-contratos-dialog-com-plan](./quick/260716-g4h-fase-4-parte-1-contratos-dialog-com-plan/) |
 
 ## Session Continuity
 
 Last session: 2026-07-16T14:10:00.000Z
-Stopped at: Concluido quick 260716-ezd (Ganho → Cliente); migration 0028 GERADA e NAO aplicada — aplicar na mao + deploy
+Stopped at: Concluido quick 260716-g4h (Contratos Parte 1); migrations 0028/0029 GERADAS e NAO aplicadas — aplicar na mao + deploy
 Resume file: None
