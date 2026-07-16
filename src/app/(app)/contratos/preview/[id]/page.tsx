@@ -5,7 +5,12 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { contratos, clientes } from '@/lib/db/schema'
 import { montarVariaveisContrato } from '@/lib/contratos/variaveis'
-import { montarSecoesContrato, TITULO_CONTRATO } from '@/lib/contratos/template-trafego'
+import {
+  montarSecoesContrato,
+  montarBlocoAssinaturas,
+  trechosDoParagrafo,
+  TITULO_CONTRATO,
+} from '@/lib/contratos/template-trafego'
 import { CopiarLinkBotao } from '@/components/contratos/copiar-link-botao'
 import { BotaoImprimir } from './botao-imprimir'
 
@@ -108,6 +113,7 @@ export default async function PreviewContratoPage({
   }
 
   const secoes = montarSecoesContrato(vars.data)
+  const assinaturas = montarBlocoAssinaturas(vars.data)
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -128,9 +134,20 @@ export default async function PreviewContratoPage({
             {secao.titulo ? <h2 className="mb-2 mt-6 font-bold">{secao.titulo}</h2> : null}
             {secao.paragrafos.map((p, j) => (
               <p key={j} className="mb-2 text-justify">
-                {p}
+                {trechosDoParagrafo(p).map((t, k) =>
+                  t.negrito ? <strong key={k}>{t.texto}</strong> : t.texto
+                )}
               </p>
             ))}
+          </section>
+        ))}
+        {[assinaturas.contratante, assinaturas.contratado].map((parte) => (
+          <section key={parte.rotulo} className="mb-6 mt-8">
+            <p className="font-bold">{parte.rotulo}</p>
+            <p>Neste ato representada por:</p>
+            <p className="mt-8 font-bold">____________________________________________</p>
+            <p>{parte.nome}</p>
+            <p>{parte.documento}</p>
           </section>
         ))}
         <p className="mt-8 text-xs text-neutral-500 print:hidden">

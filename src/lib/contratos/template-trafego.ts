@@ -9,18 +9,72 @@
 
 import type { VariaveisContrato } from './variaveis'
 
+/** Trecho de parágrafo com marcação de negrito (espelha o DOCX de referência). */
+export type TrechoContrato = { texto: string; negrito?: boolean }
+
+/** Parágrafo: string simples (sem negrito) OU lista de trechos com negrito. */
+export type ParagrafoContrato = string | TrechoContrato[]
+
 export type SecaoContrato = {
   titulo?: string
-  paragrafos: string[]
+  paragrafos: ParagrafoContrato[]
 }
 
-const DADOS_CONTRATADO =
-  'CONTRATADO(A): JSR MÍDIAS (JACSON TRÁFEGO PAGO), pessoa jurídica de direito privado inscrita ' +
+/** Normaliza um parágrafo para lista de trechos (consumo uniforme em PDF/HTML). */
+export function trechosDoParagrafo(p: ParagrafoContrato): TrechoContrato[] {
+  return typeof p === 'string' ? [{ texto: p }] : p
+}
+
+// Textos EXATOS do rodapé do DOCX de referência (word/footer1.xml).
+export const RODAPE_CONTRATO = {
+  nome: 'Jacson Silva Ribeiro',
+  contato: 'E-mail: jacsonribeiiro@gmail.com | Cel: (71)99363-6734',
+  cidade: 'Salvador - BA | CEP 41510-237',
+} as const
+
+const DADOS_CONTRATADO_NEGRITO = 'CONTRATADO(A): JSR MÍDIAS (JACSON TRÁFEGO PAGO),'
+const DADOS_CONTRATADO_RESTO =
+  ' pessoa jurídica de direito privado inscrita ' +
   'no CNPJ de nº 35.368.699/0001-21, com sede localizada na R. Manoel dos Santos Filho, ' +
   'representada por Jacson Silva Ribeiro, solteiro, Gestor de Tráfego Pago, inscrito no CPF ' +
   'nº 069.345.675-28, residente na R. Manoel dos Santos Filho.'
 
 export const TITULO_CONTRATO = 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO'
+
+/** Bloco de assinaturas (linhas na última página do PDF + fecho do preview). */
+export type BlocoAssinaturas = {
+  localEData: string
+  contratante: { rotulo: string; nome: string; documento: string }
+  contratado: { rotulo: string; nome: string; documento: string }
+}
+
+export function montarBlocoAssinaturas(vars: VariaveisContrato): BlocoAssinaturas {
+  return {
+    localEData: `Salvador - BA, ${vars.dataInicioFormatada}.`,
+    contratante: {
+      rotulo: 'CONTRATANTE:',
+      nome: `NOME: ${vars.nomeSignatario}`,
+      documento: `CPF n.º ${vars.cpfSignatario}`,
+    },
+    contratado: {
+      rotulo: 'CONTRATADO:',
+      nome: 'NOME: Jacson Silva Ribeiro',
+      documento: 'CNPJ n.º 35.368.699/0001-21',
+    },
+  }
+}
+
+// No DOCX o parágrafo do CONTRATANTE tem o rótulo e o NOME/razão social em
+// negrito. A qualificação sempre começa pelo nome seguido de vírgula — o split
+// abaixo separa o nome (negrito) do restante (normal).
+function paragrafoContratante(qualificacao: string): TrechoContrato[] {
+  const virgula = qualificacao.indexOf(',')
+  if (virgula === -1) return [{ texto: `CONTRATANTE: ${qualificacao}`, negrito: true }]
+  return [
+    { texto: `CONTRATANTE: ${qualificacao.slice(0, virgula)}`, negrito: true },
+    { texto: qualificacao.slice(virgula) },
+  ]
+}
 
 /** Monta as seções do contrato já com as variáveis interpoladas (texto puro). */
 export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
@@ -28,9 +82,23 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
   return [
     {
       paragrafos: [
-        `CONTRATANTE: ${vars.qualificacaoContratante}`,
-        DADOS_CONTRATADO,
-        'Pelo presente instrumento particular de CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO aqui denominado(a) CONTRATANTE, contrata os serviços da aqui denominada CONTRATADA, que fazem de livre e espontânea vontade, acordando o presente contrato nos seguintes termos:',
+        paragrafoContratante(vars.qualificacaoContratante),
+        [
+          { texto: DADOS_CONTRATADO_NEGRITO, negrito: true },
+          { texto: DADOS_CONTRATADO_RESTO },
+        ],
+        [
+          { texto: 'Pelo presente instrumento particular de ' },
+          { texto: 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE TRÁFEGO PAGO', negrito: true },
+          { texto: ' aqui denominado(a) ' },
+          { texto: 'CONTRATANTE', negrito: true },
+          { texto: ', contrata os serviços da aqui denominada ' },
+          { texto: 'CONTRATADA', negrito: true },
+          {
+            texto:
+              ', que fazem de livre e espontânea vontade, acordando o presente contrato nos seguintes termos:',
+          },
+        ],
       ],
     },
     {
@@ -60,7 +128,16 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
     {
       titulo: 'CLÁUSULA 2ª - DO VALOR E FORMA DE PAGAMENTO',
       paragrafos: [
-        `2.1 O presente serviço será remunerado mensalmente pela quantia de ${vars.valorMensalFormatado}, referente aos serviços efetivamente prestados, acordo feito de ${meses}, devendo ser pago através de transferência ou até mesmo, PIX, na conta corrente nº 5679908-0, agência nº 0001, banco nº 336 - Banco [C6 S.A.] PIX: jacsonribeiiro@icloud.com, em nome do CONTRATADO, para a primeira mensalidade, ficando o dia 30 como data base para o pagamento das demais.`,
+        [
+          {
+            texto: `2.1 O presente serviço será remunerado mensalmente pela quantia de ${vars.valorMensalFormatado}, referente aos serviços efetivamente prestados, acordo feito de `,
+          },
+          { texto: meses, negrito: true },
+          {
+            texto:
+              ', devendo ser pago através de transferência ou até mesmo, PIX, na conta corrente nº 5679908-0, agência nº 0001, banco nº 336 - Banco [C6 S.A.] PIX: jacsonribeiiro@icloud.com, em nome do CONTRATADO, para a primeira mensalidade, ficando o dia 30 como data base para o pagamento das demais.',
+          },
+        ],
         '2.3 Em caso de atraso no pagamento por 5 dias ou mais, os serviços contratados serão suspensos até que haja a devida regularização por parte do CONTRATANTE.',
         '2.4 Fica vedado o CONTRATANTE negociar abatimentos, descontos ou dilações de prazo para o pagamento ou execução dos serviços sem o prévio conhecimento e autorização do CONTRATADO.',
       ],
@@ -69,7 +146,14 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
       titulo: 'CLÁUSULA 3ª - RESPONSABILIDADES DO CONTRATANTE',
       paragrafos: [
         '3.1 Informar o CONTRATADO com clareza quais são os seus objetivos para o negócio com as ações de tráfego pago. Além de informar o CONTRATADO tudo que for necessário para que os objetivos sejam satisfatórios.',
-        '3.2 Fornecer os materiais e/ou alterações sempre com no mínimo 4 dias úteis de antecedência. Sem tais informações o CONTRATADO não poderá dar sequência no serviço contratado.',
+        [
+          { texto: '3.2 Fornecer os materiais e/ou alterações sempre com no mínimo ' },
+          { texto: '4 dias úteis', negrito: true },
+          {
+            texto:
+              ' de antecedência. Sem tais informações o CONTRATADO não poderá dar sequência no serviço contratado.',
+          },
+        ],
         '3.2.1 O CONTRATADO se reserva no direito de efetuar pequenas mudanças nos materiais, inclusive os textos, para aperfeiçoar os conteúdos continuamente.',
         '3.2.2 O CONTRATADO se reserva no direito de mudar os materiais, caso seja necessário, para cumprir as diretrizes estabelecidas pelas plataformas.',
         '3.3 Fornecer ao CONTRATADO as páginas e sites necessários para as campanhas.',
@@ -98,7 +182,11 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
         '4.7 Desenvolver relatórios e prestar conta ao CONTRATANTE na frequência por ele estipulada.',
         '4.8 Realizar e cumprir os serviços contratados de acordo com a descrição do objeto do contrato.',
         '4.9 Respeitar a legislação vigente aplicável à atividade publicitária, criando os anúncios dentro das normas previstas no Código Brasileiro de Autorregulamentação Publicitária e no Código de Defesa do Consumidor.',
-        '4.10 O CONTRATADO NÃO se responsabiliza:',
+        [
+          { texto: '4.10 O CONTRATADO ' },
+          { texto: 'NÃO', negrito: true },
+          { texto: ' se responsabiliza:' },
+        ],
         '4.10.1 Pelo mau funcionamento de serviço e ferramentas de terceiros, ferramentas de busca ou outros que gere qualquer tipo de perda ou a falta de disponibilidade do serviço prestado para o CONTRATANTE.',
         '4.10.2 Pelos danos que o CONTRATANTE venha a sofrer decorrente de mau funcionamento de sua própria conexão ou mau uso da internet ou problemas com sua rede de internet.',
         '4.10.3 Por perdas indiretas que o CONTRATANTE venha a ter por eventuais falhas nas ferramentas e dados cadastrados.',
@@ -185,20 +273,13 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
         '11.11 Cada Parte notificará imediatamente a outra Parte por escrito sobre qualquer tratamento ilegal ou abusivo que os Dados Pessoais possam estar envolvidos, informando a natureza dos dados afetados, os riscos relacionados, bem como as medidas de segurança para a proteção dos dados e mitigação dos prejuízos. Neste caso, as Partes atuarão em total cooperação e prestarão assistência mútua para minimizar possíveis efeitos negativos aos titulares e alinhar a estratégia de defesa, assim como qualquer comunicação com titulares, terceiros e autoridades competentes.',
       ],
     },
+    // Fecho SEM as linhas de assinatura: elas são renderizadas em página
+    // própria (determinística) pelo pdf.tsx e no fim do preview HTML, usando
+    // montarBlocoAssinaturas().
     {
       paragrafos: [
         'E assim, por estarem de justo acordo, as partes assinam este instrumento em 02 (duas) vias de idêntico teor e forma.',
-        `Salvador - BA, ${vars.dataInicioFormatada}.`,
-        'CONTRATANTE:',
-        'Neste ato representada por:',
-        '____________________________________________',
-        `NOME: ${vars.nomeSignatario}`,
-        `CPF n.º ${vars.cpfSignatario}`,
-        'CONTRATADO:',
-        'Neste ato representada por:',
-        '____________________________________________',
-        'NOME: Jacson Silva Ribeiro',
-        'CNPJ n.º 35.368.699/0001-21',
+        [{ texto: `Salvador - BA, ${vars.dataInicioFormatada}.`, negrito: true }],
       ],
     },
   ]
@@ -212,15 +293,33 @@ function escaparHtml(texto: string): string {
     .replace(/"/g, '&quot;')
 }
 
-/** HTML completo do miolo do contrato (título + seções), pronto para o preview. */
+function paragrafoHtml(p: ParagrafoContrato): string {
+  const conteudo = trechosDoParagrafo(p)
+    .map((t) => (t.negrito ? `<strong>${escaparHtml(t.texto)}</strong>` : escaparHtml(t.texto)))
+    .join('')
+  return `<p>${conteudo}</p>`
+}
+
+/** HTML completo do miolo do contrato (título + seções + assinaturas), pronto para o preview. */
 export function montarContratoHtml(vars: VariaveisContrato): string {
   const secoes = montarSecoesContrato(vars)
   const corpo = secoes
     .map((secao) => {
       const titulo = secao.titulo ? `<h2>${escaparHtml(secao.titulo)}</h2>` : ''
-      const paragrafos = secao.paragrafos.map((p) => `<p>${escaparHtml(p)}</p>`).join('\n')
+      const paragrafos = secao.paragrafos.map(paragrafoHtml).join('\n')
       return `${titulo}\n${paragrafos}`
     })
     .join('\n')
-  return `<h1>${escaparHtml(TITULO_CONTRATO)}</h1>\n${corpo}`
+  const b = montarBlocoAssinaturas(vars)
+  const assinaturas = [b.contratante, b.contratado]
+    .map(
+      (parte) =>
+        `<p><strong>${escaparHtml(parte.rotulo)}</strong></p>\n` +
+        `<p>Neste ato representada por:</p>\n` +
+        `<p><strong>____________________________________________</strong></p>\n` +
+        `<p>${escaparHtml(parte.nome)}</p>\n` +
+        `<p>${escaparHtml(parte.documento)}</p>`
+    )
+    .join('\n')
+  return `<h1>${escaparHtml(TITULO_CONTRATO)}</h1>\n${corpo}\n${assinaturas}`
 }
