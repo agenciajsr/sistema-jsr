@@ -165,6 +165,18 @@ function resultadoDaChave(r: { leads: number; vendas: number; conversas: number 
 }
 
 /**
+ * campaignId únicos presentes no breakdown de região. O painel usa esta lista para
+ * filtrar o denominador da cobertura: numerador e denominador precisam falar das
+ * MESMAS campanhas. Sem o filtro, uma campanha que o Meta não retornou no breakdown
+ * infla o denominador e dispara fallback falso (o card diria "Regiões com mais
+ * tráfego" para um cliente cujas vendas por região chegam de verdade).
+ * Lista vazia → [] e o painel nem chega a rodar a query de referência.
+ */
+export function campanhasComRegiao(rows: LinhaRegiaoBruta[]): string[] {
+  return Array.from(new Set(rows.map((r) => r.campaignId)))
+}
+
+/**
  * Agrega linhas brutas (JÁ deduplicadas) por região, somando todas as campanhas, e
  * escolhe a métrica do ranking pela COBERTURA do dado (nunca por tipo/nicho de cliente):
  *
@@ -182,8 +194,10 @@ function resultadoDaChave(r: { leads: number; vendas: number; conversas: number 
  * fazia o card seguir em "Regiões que mais vendem" com ZERO em todo o resto — o bug
  * original. Cobertura mede se o dado é REPRESENTATIVO, não se ele existe.
  *
- * ⚠️ `totalReferencia` deve vir da MESMA janela (~30d) do sync de região, nunca do
- * período selecionado no painel — 7d contra 30d infla a cobertura, 90d a subestima.
+ * ⚠️ `totalReferencia` deve falar do MESMO recorte que o numerador:
+ * - mesma janela (~30d do sync de região), nunca o período selecionado no painel —
+ *   7d contra 30d infla a cobertura, 90d a subestima;
+ * - mesmas campanhas (só as do breakdown — ver campanhasComRegiao).
  *
  * Empate é desfeito por spend desc.
  */

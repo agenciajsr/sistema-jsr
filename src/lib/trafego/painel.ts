@@ -22,6 +22,7 @@ import { totaisVazios, type TotaisPeriodo } from './metricas'
 import {
   agregarDemografia,
   rankingDeRegioes,
+  campanhasComRegiao,
   deduplicarJanelaMaisRecente,
   objetivoDaCampanha,
   type LinhaDemografia,
@@ -529,26 +530,34 @@ export async function getPainelCampanhas(
         ),
       )
 
-    // Query D2 (SEQUENCIAL, nunca Promise.all): total da chave-herói na MESMA
-    // janela ~30d do sync de região — é o denominador da cobertura. NÃO pode usar o
-    // período selecionado: 7d contra a janela de 30d inflaria a cobertura e 90d a
-    // subestimaria, disparando fallback falso.
-    const inicioJanelaRegiao = dataMenosDias(29, hojeBrasilia())
-    const refRows = await db
-      .select({ actions: campaignInsights.actions })
-      .from(campaignInsights)
-      .where(
-        and(
-          inArray(campaignInsights.adAccountId, contaIds),
-          gte(campaignInsights.date, inicioJanelaRegiao),
-        ),
-      )
-    const totalReferencia = refRows.reduce(
-      (soma, r) => soma + resultadoDaChave(parseActionsExtendido(r.actions), heroi.chave),
-      0,
-    )
-
     const dedup = deduplicarJanelaMaisRecente(regiaoRows, (r) => `${r.campaignId}|${r.region}`)
+
+    // Query D2 (SEQUENCIAL, nunca Promise.all): denominador da cobertura — total da
+    // chave-herói no MESMO recorte do numerador:
+    // - mesma janela ~30d do sync de região (NÃO o período selecionado: 7d contra 30d
+    //   inflaria a cobertura, 90d a subestimaria);
+    // - só as campanhas que vieram no breakdown (campanha ausente do breakdown inflaria
+    //   o denominador e dispararia fallback falso).
+    const campanhas = campanhasComRegiao(dedup)
+    let totalReferencia = 0
+    if (campanhas.length > 0) {
+      const inicioJanelaRegiao = dataMenosDias(29, hojeBrasilia())
+      const refRows = await db
+        .select({ actions: campaignInsights.actions })
+        .from(campaignInsights)
+        .where(
+          and(
+            inArray(campaignInsights.adAccountId, contaIds),
+            inArray(campaignInsights.campaignId, campanhas),
+            gte(campaignInsights.date, inicioJanelaRegiao),
+          ),
+        )
+      totalReferencia = refRows.reduce(
+        (soma, r) => soma + resultadoDaChave(parseActionsExtendido(r.actions), heroi.chave),
+        0,
+      )
+    }
+
     regioes = rankingDeRegioes(dedup, heroi.chave, totalReferencia)
   } catch {
     // regiao_insights pode não existir/estar vazia — seção fica vazia
