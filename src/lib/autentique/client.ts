@@ -14,7 +14,8 @@ export class AutentiqueTokenAusenteError extends Error {
 }
 
 function obterToken(): string {
-  const token = process.env.AUTENTIQUE_API_TOKEN
+  // Aceita os dois nomes: AUTENTIQUE_API_TOKEN ou AUTENTIQUE_API_KEY (nome já usado no .env do projeto).
+  const token = process.env.AUTENTIQUE_API_TOKEN ?? process.env.AUTENTIQUE_API_KEY
   if (!token) throw new AutentiqueTokenAusenteError()
   return token
 }

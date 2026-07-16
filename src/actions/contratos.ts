@@ -23,7 +23,7 @@ import {
 } from '@/lib/autentique/client'
 import { requireAdmin, getCurrentUser } from '@/lib/auth/session'
 
-const ERRO_TOKEN_AUTENTIQUE = 'Configure o token da Autentique (AUTENTIQUE_API_TOKEN na Vercel).'
+const ERRO_TOKEN_AUTENTIQUE = 'Configure o token da Autentique (AUTENTIQUE_API_KEY na Vercel).'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
 
