@@ -1,11 +1,12 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileCheck, FileX, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { updateTransacaoStatus } from '@/actions/financeiro'
+import { filtrarAReceber } from '@/lib/financeiro/a-receber'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,11 +60,27 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = 
   vencido: 'destructive',
 }
 
-export function ContasTable({ contas, tipo }: { contas: Conta[]; tipo: 'receita' | 'despesa' }) {
+export function ContasTable({
+  contas,
+  tipo,
+  hoje,
+}: {
+  contas: Conta[]
+  tipo: 'receita' | 'despesa'
+  // 'YYYY-MM-DD' vindo do servidor (hojeBrasilia) — evita divergência server/client.
+  hoje?: string
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [mostrarTodas, setMostrarTodas] = useState(false)
 
-  const total = contas.reduce((acc, c) => acc + Number(c.valor), 0)
+  // Filtro padrão SÓ na aba de receitas (quick-260717-i26): próximos 30 dias
+  // + vencidas. Despesas seguem com a lista completa, como sempre.
+  const filtroAtivo = tipo === 'receita' && !!hoje
+  const contasExibidas = filtroAtivo ? filtrarAReceber(contas, hoje, mostrarTodas) : contas
+
+  // Total do rodapé usa a lista FILTRADA exibida.
+  const total = contasExibidas.reduce((acc, c) => acc + Number(c.valor), 0)
 
   function handleMarcarPago(id: string) {
     startTransition(async () => {
@@ -87,6 +104,23 @@ export function ContasTable({ contas, tipo }: { contas: Conta[]; tipo: 'receita'
 
   return (
     <div className="space-y-4">
+      {filtroAtivo && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            {mostrarTodas
+              ? `Mostrando todas as ${contas.length} contas`
+              : `Mostrando ${contasExibidas.length} de ${contas.length} — próximos 30 dias + vencidas`}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => setMostrarTodas((v) => !v)}>
+            {mostrarTodas ? 'Mostrar próximos 30 dias' : 'Mostrar todas'}
+          </Button>
+        </div>
+      )}
+      {contasExibidas.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Nenhuma conta nos próximos 30 dias. Use “Mostrar todas” para ver as demais.
+        </div>
+      ) : (
       <Table>
         <TableHeader>
           <TableRow>
@@ -103,7 +137,7 @@ export function ContasTable({ contas, tipo }: { contas: Conta[]; tipo: 'receita'
           </TableRow>
         </TableHeader>
         <TableBody>
-          {contas.map((c) => (
+          {contasExibidas.map((c) => (
             <TableRow
               key={c.id}
               className={c.status === 'vencido' ? 'bg-destructive/5' : undefined}
@@ -153,6 +187,7 @@ export function ContasTable({ contas, tipo }: { contas: Conta[]; tipo: 'receita'
           ))}
         </TableBody>
       </Table>
+      )}
       <div className="flex justify-end border-t pt-3">
         <p className="text-sm font-medium">
           Total: <span className={tipo === 'receita' ? 'text-chart-success' : 'text-destructive'}>{formatadorMoeda.format(total)}</span>

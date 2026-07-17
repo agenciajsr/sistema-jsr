@@ -23,6 +23,7 @@ import { getCurrentUser } from '@/lib/auth/session'
 import { withRetry } from '@/lib/utils/with-retry'
 import { hojeBrasilia } from '@/lib/date-br'
 import { progressoDoMes } from '@/lib/financeiro/calculos'
+import { filtrarAReceber } from '@/lib/financeiro/a-receber'
 
 import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
@@ -30,6 +31,7 @@ import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
 import { VisaoAnalitica } from './visao-analitica'
 import { CobrancasTab } from './cobrancas-tab'
+import { PrevisaoPorMes } from './previsao-por-mes'
 import { MonthSelector } from './month-selector'
 
 // Cinto de segurança: teto de execução da função serverless (rede de proteção
@@ -161,6 +163,10 @@ export default async function FinanceiroPage({
   const isMesCorrente = mes === mesHoje && ano === anoHoje
   const prog = progressoDoMes(hoje)
 
+  // Contagem do TabsTrigger "A Receber" reflete a visão padrão (próximos
+  // 30 dias + vencidas). O KPI resumo.aReceber segue INTOCADO.
+  const contasReceberPadrao = filtrarAReceber(contasReceber, hoje, false)
+
   // Sem base de comparação (mês anterior zerado) a variação é null => sem trend.
   const trendDe = (variacao: number | null, subirEBom: boolean) =>
     variacao === null
@@ -264,7 +270,7 @@ export default async function FinanceiroPage({
       <Tabs defaultValue="geral" className="space-y-4">
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="geral">Visao Geral</TabsTrigger>
-          <TabsTrigger value="receber">A Receber ({contasReceber.length})</TabsTrigger>
+          <TabsTrigger value="receber">A Receber ({contasReceberPadrao.length})</TabsTrigger>
           <TabsTrigger value="cobrancas">Cobranças ({cobrancasAtencao})</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar ({contasPagar.length})</TabsTrigger>
           <TabsTrigger value="previsao">Previsao</TabsTrigger>
@@ -286,15 +292,20 @@ export default async function FinanceiroPage({
           </Card>
         </TabsContent>
 
-        <TabsContent value="receber">
-          <Card className="border-none shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Contas a Receber</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ContasTable contas={contasReceber} tipo="receita" />
-            </CardContent>
-          </Card>
+        <TabsContent value="receber" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-1">
+              <PrevisaoPorMes meses={previsaoMeses} />
+            </div>
+            <Card className="border-none shadow-sm lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base">Contas a Receber</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ContasTable contas={contasReceber} tipo="receita" hoje={hoje} />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="cobrancas">
