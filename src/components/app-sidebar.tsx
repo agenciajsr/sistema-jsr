@@ -16,6 +16,7 @@ import {
   Megaphone,
   Plug,
   Target,
+  TrendingUp,
   Users,
   Users2,
   Wallet,
@@ -64,6 +65,7 @@ const secoes: NavSecao[] = [
     label: 'Comercial',
     itens: [
       { title: 'CRM', url: '/crm', icon: Target },
+      { title: 'Funil de Vendas', url: '/funil', icon: TrendingUp },
       { title: 'Clientes', url: '/clientes', icon: Users },
       { title: 'Contratos', url: '/contratos', icon: FileSignature },
     ],
