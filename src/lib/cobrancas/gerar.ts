@@ -4,7 +4,7 @@
 // falha do Asaas nunca desfaz a linha local nem bloqueia fluxo nenhum.
 // Queries SEQUENCIAIS (pool max=3, memória do projeto — nunca Promise.all).
 
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, ne } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import { clientes, cobrancas, contratos } from '@/lib/db/schema'
@@ -89,8 +89,10 @@ export type ResultadoCobranca = {
 /**
  * Insere a cobrança local da competência (fonte da verdade) e, se o Asaas
  * estiver disponível, cria o payment lá e grava asaasPaymentId + invoiceUrl.
- * onConflictDoNothing no índice único parcial → nunca duplica o mês no fluxo
- * automático. Falha do Asaas NÃO desfaz a linha local (D-04): fica pendente
+ * onConflictDoNothing no índice único parcial (só automáticas) segue como
+ * SEGUNDA trava do fluxo automático — a trava primária é a consulta de
+ * competências não canceladas feita por quem chama (gerarPrimeiraCobranca /
+ * gerarCobrancasMensais). Falha do Asaas NÃO desfaz a linha local (D-04): fica pendente
  * sem link — o botão manual em /contratos cobre.
  */
 export async function gerarCobrancaDoMes(
@@ -210,10 +212,12 @@ export async function gerarPrimeiraCobranca(contratoId: string): Promise<void> {
   if (!contrato) return
 
   const hoje = hojeBrasilia()
+  // Competência coberta por QUALQUER cobrança do contrato (manual ou
+  // automática); cancelada não cobre — o mês volta a ser gerado.
   const jaGeradas = await db
     .select({ competencia: cobrancas.competencia })
     .from(cobrancas)
-    .where(and(eq(cobrancas.contratoId, contratoId), eq(cobrancas.criadoVia, 'automatico')))
+    .where(and(eq(cobrancas.contratoId, contratoId), ne(cobrancas.status, 'cancelada')))
 
   const pendentes = competenciasPendentes(
     {
@@ -263,13 +267,15 @@ export async function gerarCobrancasMensais(): Promise<ResumoCobrancasMensais> {
 
   let cobrancasGeradas = 0
   if (vigentes.length > 0) {
+    // Competência coberta por QUALQUER cobrança do contrato (manual ou
+    // automática); cancelada não cobre — o mês volta a ser gerado.
     const jaGeradas = await db
       .select({ contratoId: cobrancas.contratoId, competencia: cobrancas.competencia })
       .from(cobrancas)
       .where(
         and(
           inArray(cobrancas.contratoId, vigentes.map((c) => c.id)),
-          eq(cobrancas.criadoVia, 'automatico'),
+          ne(cobrancas.status, 'cancelada'),
         ),
       )
 

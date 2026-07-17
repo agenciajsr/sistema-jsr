@@ -154,4 +154,26 @@ describe('competenciasPendentes', () => {
       ),
     ).toEqual([])
   })
+
+  // Regressão da duplicata de 2026-07: a query em gerar.ts alimenta a lista
+  // `competenciasJaGeradas` com TODAS as cobranças NÃO canceladas do contrato
+  // (manuais E automáticas) — antes filtrava criadoVia='automatico' e uma
+  // cobrança manual da mesma competência ficava invisível, duplicando no cron.
+  describe('competência coberta por cobrança manual — regressão da duplicata de 2026-07', () => {
+    const contrato = {
+      dataInicio: '2026-07-01',
+      dataVencimento: '2027-06-30',
+      assinadoEm: '2026-07-01',
+    }
+
+    it('competência com cobrança MANUAL presente na lista NÃO volta como pendente', () => {
+      // A manual entra na lista porque a query agora inclui qualquer não cancelada.
+      expect(competenciasPendentes(contrato, ['2026-07'], '2026-07-17')).toEqual([])
+    })
+
+    it('competência cuja única cobrança está CANCELADA (fora da lista) volta como pendente', () => {
+      // Cancelada é excluída da query (ne status 'cancelada') → o mês é regerado.
+      expect(competenciasPendentes(contrato, [], '2026-07-17')).toEqual(['2026-07'])
+    })
+  })
 })
