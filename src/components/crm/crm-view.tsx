@@ -521,7 +521,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
             </DropdownMenu>
           </div>
 
-          <TabsList className="max-w-full overflow-x-auto">
+          <TabsList>
             <TabsTrigger value="kanban">
               <LayoutGrid className="size-4" />
               Kanban

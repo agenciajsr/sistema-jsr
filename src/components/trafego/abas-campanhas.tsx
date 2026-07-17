@@ -26,7 +26,7 @@ export function AbasCampanhas({ abaAtual }: Props) {
 
   return (
     <Tabs value={abaAtual} onValueChange={handleTab}>
-      <TabsList className="max-w-full justify-start overflow-x-auto">
+      <TabsList>
         <TabsTrigger value="performance" className="gap-1.5">
           <Activity className="size-3.5" />
           Performance

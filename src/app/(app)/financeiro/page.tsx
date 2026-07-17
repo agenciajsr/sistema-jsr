@@ -268,7 +268,7 @@ export default async function FinanceiroPage({
 
       {/* Abas */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="max-w-full justify-start overflow-x-auto">
+        <TabsList>
           <TabsTrigger value="geral">Visao Geral</TabsTrigger>
           <TabsTrigger value="receber">A Receber ({contasReceberPadrao.length})</TabsTrigger>
           <TabsTrigger value="cobrancas">Cobranças ({cobrancasAtencao})</TabsTrigger>

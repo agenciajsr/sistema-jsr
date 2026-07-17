@@ -104,7 +104,7 @@ export function ClientesLista({ clientes }: { clientes: ClienteLinha[] }) {
       {/* A tabela é renderizada UMA vez abaixo do TabsList — a lista já vem
           filtrada por `aba`, não há por que duplicá-la em 6 TabsContent. */}
       <Tabs value={aba} onValueChange={(v) => setAba(v as ClienteStatus | 'todos')}>
-        <TabsList className="max-w-full justify-start overflow-x-auto">
+        <TabsList>
           {STATUS_ORDEM.map((s) => (
             <TabsTrigger key={s} value={s}>
               {STATUS_LABEL[s]} ({contagens[s]})

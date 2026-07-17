@@ -311,7 +311,7 @@ export default async function ClienteDetalhePage({
 
       {/* Corpo em abas */}
       <Tabs defaultValue="contrato" className="space-y-4">
-        <TabsList className="max-w-full justify-start overflow-x-auto">
+        <TabsList>
           <TabsTrigger value="contrato">📄 Contrato &amp; Cobrança</TabsTrigger>
           <TabsTrigger value="faturas">💰 Faturas</TabsTrigger>
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>
