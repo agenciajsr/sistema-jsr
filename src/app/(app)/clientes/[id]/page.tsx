@@ -195,7 +195,7 @@ export default async function ClienteDetalhePage({
     <div className="space-y-6">
       <BotaoVoltar href="/clientes" label="Clientes" />
       {/* Cabeçalho estilo Painel */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <h1 className="text-2xl leading-tight font-semibold tracking-tight">{cliente.nome}</h1>
           <div className="flex items-center gap-2">
@@ -219,7 +219,7 @@ export default async function ClienteDetalhePage({
           {cliente.notas && <p className="text-sm text-muted-foreground">{cliente.notas}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {cliente.linkDrive && (
             <Button asChild variant="outline">
               <a href={cliente.linkDrive} target="_blank" rel="noopener noreferrer">
@@ -311,7 +311,7 @@ export default async function ClienteDetalhePage({
 
       {/* Corpo em abas */}
       <Tabs defaultValue="contrato" className="space-y-4">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="contrato">📄 Contrato &amp; Cobrança</TabsTrigger>
           <TabsTrigger value="faturas">💰 Faturas</TabsTrigger>
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>

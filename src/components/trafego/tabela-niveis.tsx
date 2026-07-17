@@ -270,7 +270,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">Detalhamento</CardTitle>
           <Tabs value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
-            <TabsList>
+            <TabsList className="max-w-full justify-start overflow-x-auto">
               <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
               <TabsTrigger value="conjuntos">Conjuntos</TabsTrigger>
               <TabsTrigger value="anuncios">Anúncios</TabsTrigger>

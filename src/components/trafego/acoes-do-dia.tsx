@@ -78,7 +78,7 @@ export function AcoesDoDia({ clienteId, acoes }: AcoesDoDiaProps) {
         <CardTitle className="text-base">Ações do dia</CardTitle>
         {visiveis.length > 0 && (
           <Tabs value={abaEfetiva} onValueChange={(v) => setAba(v as TipoAcao)}>
-            <TabsList>
+            <TabsList className="max-w-full justify-start overflow-x-auto">
               {(['cortar', 'escalar', 'renovar'] as TipoAcao[]).map((t) => (
                 <TabsTrigger key={t} value={t} className="gap-1.5">
                   {TIPO_CONFIG[t].label}
