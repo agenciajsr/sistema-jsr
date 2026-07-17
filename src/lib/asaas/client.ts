@@ -94,8 +94,9 @@ const cobrancaAsaasSchema = z
   .passthrough()
 
 /**
- * Cria uma cobrança AVULSA (D-01) com billingType 'UNDEFINED' (D-02 — o
- * cliente escolhe PIX/boleto na página da fatura).
+ * Cria uma cobrança AVULSA (D-01) com billingType 'BOLETO' (D-02 — a página
+ * da fatura exibe boleto + PIX; cartão não é oferecido, clientes da JSR
+ * pagam por PIX/boleto).
  */
 export async function criarCobranca({
   customer,
@@ -114,7 +115,7 @@ export async function criarCobranca({
     method: 'POST',
     body: {
       customer,
-      billingType: 'UNDEFINED',
+      billingType: 'BOLETO',
       value,
       dueDate,
       description,
