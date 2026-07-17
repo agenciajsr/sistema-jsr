@@ -97,6 +97,8 @@ export type LinhaCampanha = {
   // Chip de objetivo: objective OFICIAL da Meta quando existe; senão fallback
   // classificarObjetivo (objetivo cadastrado do cliente); null quando nada resolve.
   objetivo: ObjetivoChip | null
+  // effective_status oficial da campanha (linha mais recente com valor) — fix 17/jul/2026.
+  effectiveStatus: string | null
 }
 
 export type LinhaConjunto = {
@@ -375,6 +377,7 @@ export async function getPainelCampanhas(
       actions: campaignInsights.actions,
       actionValues: campaignInsights.actionValues,
       objective: campaignInsights.objective,
+      effectiveStatus: campaignInsights.effectiveStatus,
     })
     .from(campaignInsights)
     .where(
@@ -391,12 +394,20 @@ export async function getPainelCampanhas(
   const porCampanha = new Map<string, LinhaCampanha>()
   // objective OFICIAL não-nulo mais recente por campanha (linhas antigas são null)
   const objectivePorCampanha = new Map<string, { objective: string; date: string }>()
+  // effective_status não-nulo mais recente por campanha (mesma mecânica)
+  const statusPorCampanha = new Map<string, { status: string; date: string }>()
 
   for (const i of insights) {
     if (i.objective) {
       const atual = objectivePorCampanha.get(i.campaignId)
       if (!atual || i.date > atual.date) {
         objectivePorCampanha.set(i.campaignId, { objective: i.objective, date: i.date })
+      }
+    }
+    if (i.effectiveStatus) {
+      const atual = statusPorCampanha.get(i.campaignId)
+      if (!atual || i.date > atual.date) {
+        statusPorCampanha.set(i.campaignId, { status: i.effectiveStatus, date: i.date })
       }
     }
     const spend = Number(i.spend) || 0
@@ -479,6 +490,7 @@ export async function getPainelCampanhas(
         receita,
         resultadoHeroi: resultadoDaChave(r, heroi.chave),
         objetivo: null, // preenchido após o loop (objective mais recente por campanha)
+        effectiveStatus: null, // idem
       })
     }
   }
@@ -490,6 +502,7 @@ export async function getPainelCampanhas(
       objectivePorCampanha.get(camp.campaignId)?.objective ?? null,
       cliente.objetivoPrincipal ?? null,
     )
+    camp.effectiveStatus = statusPorCampanha.get(camp.campaignId)?.status ?? null
   }
 
   totaisAtual.resultadoHeroi = resultadoDaChave(totaisAtual, heroi.chave)

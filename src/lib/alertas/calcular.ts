@@ -19,6 +19,7 @@ import {
   ordenarPorSeveridade,
 } from '@/lib/alertas/avaliar'
 import { getAlertasCampanhas } from '@/lib/saude/avaliar-campanhas'
+import { getAlertasCampanhaDiarios } from '@/lib/alertas/regras-campanha'
 import type { Alerta } from '@/lib/alertas/types'
 
 /**
@@ -113,6 +114,10 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
     alertasCampanhas = []
   }
 
+  // Regras DIÁRIAS por campanha/anúncio/conta (Feature 2 — 17/jul/2026).
+  // getAlertasCampanhaDiarios já é à prova de falha (retorna [] em erro).
+  const alertasDiarios = await getAlertasCampanhaDiarios()
+
   // Unificar e ordenar
   return ordenarPorSeveridade([
     ...alertasContratos,
@@ -120,5 +125,6 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
     ...alertasClientes,
     ...alertasSaldo,
     ...alertasCampanhas,
+    ...alertasDiarios,
   ])
 }

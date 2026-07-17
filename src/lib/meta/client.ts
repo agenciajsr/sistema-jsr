@@ -88,6 +88,29 @@ export async function fetchAccountBalance(adAccountId: string): Promise<number |
 }
 
 /**
+ * effective_status por CAMPANHA da conta (fix 17/jul/2026 — coluna Status do
+ * detalhamento mostrava "—" no nível campanhas). Leitura pura; nunca lança —
+ * Map vazio em erro (o sync segue sem status).
+ */
+export async function fetchCampaignStatuses(adAccountId: string): Promise<Map<string, string>> {
+  try {
+    const raw = await metaFetch(`/act_${adAccountId}/campaigns`, {
+      fields: 'id,effective_status',
+      limit: '200',
+    })
+    const result = new Map<string, string>()
+    const data = (raw as { data?: Array<{ id?: string; effective_status?: string }> }).data
+    if (!Array.isArray(data)) return result
+    for (const c of data) {
+      if (c?.id && c.effective_status) result.set(c.id, c.effective_status)
+    }
+    return result
+  } catch {
+    return new Map()
+  }
+}
+
+/**
  * Busca todas as contas de anuncio da Business Manager (owned + client).
  * Combina os dois endpoints e remove duplicatas por id.
  */

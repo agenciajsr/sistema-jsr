@@ -31,10 +31,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import Link from 'next/link'
+
 import {
   marcarAlertaComoLido,
   marcarTodosComoLidos,
   reavaliarAlertasAgora,
+  resolverAlerta,
+  silenciarAlerta,
 } from '@/actions/alertas'
 import type { AlertaPersistido, StatusAlerta, TipoAlerta, SeveridadeAlerta } from '@/lib/alertas/types'
 
@@ -51,6 +55,12 @@ const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>>
   sem_conversao: Ban,
   criativo_rejeitado: ImageOff,
   fadiga_criativo: Repeat,
+  gasto_sem_resultado: Ban,
+  custo_acima_meta: Target,
+  ctr_baixo: MousePointerClick,
+  gasto_disparado: TrendingDown,
+  entrega_parada: AlertTriangle,
+  conta_com_problema: AlertTriangle,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
@@ -64,7 +74,30 @@ const TIPO_LABEL: Record<TipoAlerta, string> = {
   sem_conversao: 'Sem conversao',
   criativo_rejeitado: 'Criativo',
   fadiga_criativo: 'Fadiga',
+  gasto_sem_resultado: 'Gasto sem resultado',
+  custo_acima_meta: 'Custo x meta',
+  ctr_baixo: 'CTR baixo',
+  gasto_disparado: 'Pico de gasto',
+  entrega_parada: 'Entrega parada',
+  conta_com_problema: 'Conta',
 }
+
+/** Tipos ligados a campanha/conta — ganham o atalho "Ver campanha". */
+const TIPOS_CAMPANHA = new Set<TipoAlerta>([
+  'cpa_alto',
+  'performance_caindo',
+  'ctr_caindo',
+  'sem_conversao',
+  'criativo_rejeitado',
+  'fadiga_criativo',
+  'gasto_sem_resultado',
+  'custo_acima_meta',
+  'ctr_baixo',
+  'gasto_disparado',
+  'entrega_parada',
+  'conta_com_problema',
+  'verba_baixa',
+])
 
 const SEVERIDADE_CONFIG: Record<
   SeveridadeAlerta,
@@ -155,6 +188,37 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
     })
   }
 
+  function handleSilenciar(dbId: string) {
+    startTransition(async () => {
+      await silenciarAlerta(dbId, 7)
+      router.refresh()
+    })
+  }
+
+  function handleResolver(dbId: string) {
+    startTransition(async () => {
+      await resolverAlerta(dbId)
+      router.refresh()
+    })
+  }
+
+  // Agrupamento por cliente (Feature 2): a lista já vem ordenada por severidade;
+  // os grupos seguem a ordem de aparição (pior severidade primeiro).
+  const grupos: Array<{ cliente: string; itens: AlertaPersistido[] }> = []
+  const grupoPorCliente = new Map<string, AlertaPersistido[]>()
+  for (const a of visiveis) {
+    const chave = a.clienteNome || 'Geral'
+    let itens = grupoPorCliente.get(chave)
+    if (!itens) {
+      itens = []
+      grupoPorCliente.set(chave, itens)
+      grupos.push({ cliente: chave, itens })
+    }
+    itens.push(a)
+  }
+
+  const agora = Date.now()
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -222,13 +286,22 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-5">
           <TooltipProvider>
-            {visiveis.map((alerta) => {
-              const Icon = TIPO_ICON[alerta.tipo]
+            {grupos.map((grupo) => (
+              <div key={grupo.cliente} className="space-y-2">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                  {grupo.cliente}
+                  <Badge variant="outline" className="px-1.5 text-[11px]">{grupo.itens.length}</Badge>
+                </h2>
+                <div className="space-y-3">
+            {grupo.itens.map((alerta) => {
+              const Icon = TIPO_ICON[alerta.tipo] ?? AlertTriangle
               const sevConfig = SEVERIDADE_CONFIG[alerta.severidade]
+              const silenciado =
+                alerta.silenciadoAte !== null && new Date(alerta.silenciadoAte).getTime() > agora
               return (
-                <Card key={alerta.dbId} className="border-none shadow-sm">
+                <Card key={alerta.dbId} className={`border-none shadow-sm ${silenciado ? 'opacity-60' : ''}`}>
                   <CardContent className="flex items-start justify-between gap-4 py-4">
                     <div className="flex items-start gap-3">
                       <div
@@ -250,6 +323,11 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {silenciado && alerta.silenciadoAte && (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          Silenciado até {formatarDataHoraBr(alerta.silenciadoAte)}
+                        </Badge>
+                      )}
                       {alerta.status === 'resolvido' && alerta.resolvidoEm && (
                         <Badge variant="outline" className="text-muted-foreground">
                           Resolvido em {formatarDataHoraBr(alerta.resolvidoEm)}
@@ -262,6 +340,47 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
                         <sevConfig.icon className="size-3" />
                         {sevConfig.label}
                       </Badge>
+                      {TIPOS_CAMPANHA.has(alerta.tipo) && alerta.clienteId && (
+                        <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/campanhas?cliente=${alerta.clienteId}`}>Ver campanha</Link>
+                        </Button>
+                      )}
+                      {alerta.status !== 'resolvido' && !silenciado && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => handleSilenciar(alerta.dbId)}
+                              disabled={isPending}
+                            >
+                              Silenciar 7d
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p>Esconder este alerta por 7 dias</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {alerta.status !== 'resolvido' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => handleResolver(alerta.dbId)}
+                              disabled={isPending}
+                            >
+                              Resolver
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p>Marcar como resolvido (reabre se a condição voltar)</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                       {alerta.status === 'novo' && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -286,6 +405,9 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
                 </Card>
               )
             })}
+                </div>
+              </div>
+            ))}
           </TooltipProvider>
         </div>
       )}

@@ -5,6 +5,7 @@ import { adAccounts, adInsights, campaignInsights, demografiaInsights, regiaoIns
 import {
   fetchMetaAdAccounts,
   fetchCampaignInsights,
+  fetchCampaignStatuses,
   fetchAdInsights,
   fetchAdMeta,
   fetchAccountBalance,
@@ -61,6 +62,25 @@ export async function syncSingleAccount(account: { id: string; metaAccountId: st
     }
   }
   insightsCount += insights.length
+
+  // effective_status por campanha (fix 17/jul/2026): um UPDATE por campanha
+  // cobre todas as linhas históricas — a UI usa o status mais recente.
+  try {
+    const statuses = await fetchCampaignStatuses(account.metaAccountId)
+    for (const [campaignId, status] of statuses) {
+      await db
+        .update(campaignInsights)
+        .set({ effectiveStatus: status })
+        .where(
+          and(
+            eq(campaignInsights.adAccountId, account.id),
+            eq(campaignInsights.campaignId, campaignId),
+          ),
+        )
+    }
+  } catch (err) {
+    console.warn(`[sync-meta] Erro status de campanhas ${account.metaAccountId}:`, err)
+  }
 
   // Ad insights (criativos) — em paralelo com metadados do anúncio
   try {

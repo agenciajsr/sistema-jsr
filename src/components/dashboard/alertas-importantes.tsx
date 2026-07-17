@@ -29,6 +29,12 @@ const TIPO_HREF: Record<TipoAlerta, string> = {
   sem_conversao: '/campanhas',
   criativo_rejeitado: '/campanhas',
   fadiga_criativo: '/campanhas',
+  gasto_sem_resultado: '/campanhas',
+  custo_acima_meta: '/campanhas',
+  ctr_baixo: '/campanhas',
+  gasto_disparado: '/campanhas',
+  entrega_parada: '/campanhas',
+  conta_com_problema: '/campanhas',
 }
 
 // Lista de alertas importantes com link por linha. Client component (painel e 'use client').
@@ -43,12 +49,23 @@ export function AlertasImportantes() {
     })
   }, [])
 
-  const primeiros = alertas.slice(0, 4)
+  // Bloco "Alertas ativos" (Feature 2): críticos na frente (a lista já vem
+  // ordenada por severidade) + contagem de avisos no cabeçalho.
+  const criticos = alertas.filter((a) => a.severidade === 'critico')
+  const avisos = alertas.filter((a) => a.severidade === 'atencao').length
+  const primeiros = (criticos.length > 0 ? criticos : alertas).slice(0, 4)
 
   return (
     <Card className="border-none shadow-[var(--shadow-sm)]">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Alertas Importantes</CardTitle>
+        <CardTitle className="text-base">
+          Alertas Importantes
+          {loaded && avisos > 0 && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              +{avisos} aviso{avisos > 1 ? 's' : ''}
+            </span>
+          )}
+        </CardTitle>
         <Link href="/alertas" className="text-xs font-medium text-primary hover:underline">
           Ver todas
         </Link>

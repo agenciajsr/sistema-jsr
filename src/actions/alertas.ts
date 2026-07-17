@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, ne, and, desc, count } from 'drizzle-orm'
+import { eq, ne, and, or, desc, count, isNull, lt } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
@@ -34,7 +34,13 @@ function linhaParaAlertaPersistido(row: LinhaAlerta): AlertaPersistido {
     status: row.status as StatusAlerta,
     detectadoEm: row.detectadoEm.toISOString(),
     resolvidoEm: row.resolvidoEm ? row.resolvidoEm.toISOString() : null,
+    silenciadoAte: row.silenciadoAte ? row.silenciadoAte.toISOString() : null,
   }
+}
+
+/** true quando o alerta está silenciado NESTE momento. */
+function estaSilenciado(row: LinhaAlerta): boolean {
+  return row.silenciadoAte !== null && row.silenciadoAte.getTime() > Date.now()
 }
 
 /**
@@ -50,7 +56,7 @@ export async function getAlertas(): Promise<Alerta[]> {
     .from(alertas)
     .where(ne(alertas.status, 'resolvido'))
 
-  return ordenarPorSeveridade(rows.map(linhaParaAlerta))
+  return ordenarPorSeveridade(rows.filter((r) => !estaSilenciado(r)).map(linhaParaAlerta))
 }
 
 /**
@@ -65,7 +71,7 @@ export async function getAlertasDoCliente(clienteId: string): Promise<Alerta[]> 
     .from(alertas)
     .where(and(eq(alertas.clienteId, clienteId), ne(alertas.status, 'resolvido')))
 
-  return ordenarPorSeveridade(rows.map(linhaParaAlerta))
+  return ordenarPorSeveridade(rows.filter((r) => !estaSilenciado(r)).map(linhaParaAlerta))
 }
 
 /**
@@ -101,9 +107,42 @@ export async function getContagemAlertasNovos(): Promise<number> {
   const [row] = await db
     .select({ total: count() })
     .from(alertas)
-    .where(eq(alertas.status, 'novo'))
+    // Silenciados não contam no sininho (silenciado_ate no futuro).
+    .where(
+      and(
+        eq(alertas.status, 'novo'),
+        or(isNull(alertas.silenciadoAte), lt(alertas.silenciadoAte, new Date())),
+      ),
+    )
 
   return row?.total ?? 0
+}
+
+/** Silencia um alerta por N dias (some do sininho e das listas ativas). */
+export async function silenciarAlerta(dbId: string, dias = 7): Promise<void> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return
+
+  const ate = new Date(Date.now() + dias * 24 * 60 * 60 * 1000)
+  await db
+    .update(alertas)
+    .set({ silenciadoAte: ate, updatedAt: new Date() })
+    .where(eq(alertas.id, dbId))
+
+  revalidatePath('/alertas')
+}
+
+/** Resolve um alerta manualmente (o motor pode reabrir se a condição voltar). */
+export async function resolverAlerta(dbId: string): Promise<void> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return
+
+  await db
+    .update(alertas)
+    .set({ status: 'resolvido', resolvidoEm: new Date(), updatedAt: new Date() })
+    .where(eq(alertas.id, dbId))
+
+  revalidatePath('/alertas')
 }
 
 /** Marca um alerta como lido (novo → lido). */

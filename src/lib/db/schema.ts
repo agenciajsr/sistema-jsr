@@ -198,6 +198,9 @@ export const campaignInsights = pgTable('campaign_insights', {
   // Objetivo OFICIAL da campanha na Meta (ex.: 'OUTCOME_SALES', 'OUTCOME_LEADS').
   // Nullable: linhas antigas (pré-Etapa 2) não têm; classificarObjetivo é o fallback.
   objective: text('objective'),
+  // effective_status OFICIAL da campanha na Meta ('ACTIVE', 'PAUSED', ...).
+  // Nullable: linhas antigas não têm; o sync grava por campanha (fix 17/jul/2026).
+  effectiveStatus: text('effective_status'),
   syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   accountDateCampaignIdx: index('ci_account_date_campaign_idx').on(table.adAccountId, table.date, table.campaignId),
@@ -550,6 +553,9 @@ export const alertas = pgTable('alertas', {
   dataRelevante: text('data_relevante').notNull(), // YYYY-MM-DD (mesmo formato do tipo Alerta)
   detectadoEm: timestamp('detectado_em', { withTimezone: true }).notNull().defaultNow(),
   resolvidoEm: timestamp('resolvido_em', { withTimezone: true }),
+  // "Silenciar 7 dias" (Feature 2, 17/jul/2026): até esta data o alerta some do
+  // sininho/listas ativas mesmo aberto. Nullable — linhas antigas não silenciam.
+  silenciadoAte: timestamp('silenciado_ate', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({

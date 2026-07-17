@@ -83,6 +83,7 @@ export async function avaliarEPersistirAlertas(): Promise<ResumoAvaliacao> {
           dataRelevante: alerta.dataRelevante,
           detectadoEm: agora,
           resolvidoEm: null,
+          silenciadoAte: null, // reabertura = ocorrência nova, silêncio antigo não vale
           updatedAt: agora,
         })
         .where(eq(alertas.id, existente.id))

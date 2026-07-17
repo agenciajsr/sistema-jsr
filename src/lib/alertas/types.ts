@@ -9,6 +9,13 @@ export type TipoAlerta =
   | 'sem_conversao'
   | 'criativo_rejeitado'
   | 'fadiga_criativo'
+  // Regras diárias por campanha/anúncio/conta (Feature 2, 17/jul/2026)
+  | 'gasto_sem_resultado'
+  | 'custo_acima_meta'
+  | 'ctr_baixo'
+  | 'gasto_disparado'
+  | 'entrega_parada'
+  | 'conta_com_problema'
 
 export type SeveridadeAlerta = 'critico' | 'atencao' | 'info'
 
@@ -39,4 +46,5 @@ export interface AlertaPersistido extends Alerta {
   status: StatusAlerta
   detectadoEm: string     // ISO
   resolvidoEm: string | null
+  silenciadoAte: string | null // ISO — "Silenciar 7 dias" (null = não silenciado)
 }

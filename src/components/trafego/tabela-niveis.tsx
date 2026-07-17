@@ -79,6 +79,7 @@ type LinhaNormalizada = {
   thumbnailUrl: string | null
   temStatus: boolean
   ativo: boolean | null // null = nível sem effectiveStatus
+  statusBruto: string | null // effective_status oficial (dot colorido)
   objetivo: ObjetivoChip | null // só campanhas têm chip de objetivo
   spend: number
   impressions: number
@@ -90,6 +91,45 @@ type LinhaNormalizada = {
 function statusAtivo(effectiveStatus: string | null): boolean | null {
   if (!effectiveStatus) return null
   return effectiveStatus === 'ACTIVE'
+}
+
+// Rótulo pt-BR + tom do effective_status da Meta (fix 17/jul/2026 — coluna
+// Status do detalhamento). Reprovada = destaque vermelho.
+function rotuloStatus(s: string): { label: string; tom: 'verde' | 'cinza' | 'vermelho' | 'ambar' } {
+  switch (s) {
+    case 'ACTIVE':
+      return { label: 'Ativa', tom: 'verde' }
+    case 'PAUSED':
+    case 'CAMPAIGN_PAUSED':
+    case 'ADSET_PAUSED':
+      return { label: 'Pausada', tom: 'cinza' }
+    case 'DISAPPROVED':
+      return { label: 'Reprovada', tom: 'vermelho' }
+    case 'WITH_ISSUES':
+      return { label: 'Com problemas', tom: 'vermelho' }
+    case 'PENDING_REVIEW':
+    case 'IN_PROCESS':
+      return { label: 'Em análise', tom: 'ambar' }
+    case 'ARCHIVED':
+    case 'DELETED':
+      return { label: 'Arquivada', tom: 'cinza' }
+    default:
+      return { label: s, tom: 'cinza' }
+  }
+}
+
+const TOM_BADGE: Record<'verde' | 'cinza' | 'vermelho' | 'ambar', string> = {
+  verde: 'border-chart-success/30 bg-chart-success/10 text-chart-success',
+  cinza: 'border-border bg-muted text-muted-foreground',
+  vermelho: 'border-destructive/30 bg-destructive/10 text-destructive',
+  ambar: 'border-chart-warning/30 bg-chart-warning/10 text-chart-warning',
+}
+
+const TOM_DOT: Record<'verde' | 'cinza' | 'vermelho' | 'ambar', string> = {
+  verde: 'bg-chart-success',
+  cinza: 'bg-muted-foreground/50',
+  vermelho: 'bg-destructive',
+  ambar: 'bg-chart-warning',
 }
 
 type TabelaNiveisProps = {
@@ -130,8 +170,9 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
         id: c.campaignId,
         nome: c.campaignName,
         thumbnailUrl: null,
-        temStatus: false,
-        ativo: null,
+        temStatus: c.effectiveStatus !== null,
+        ativo: statusAtivo(c.effectiveStatus),
+        statusBruto: c.effectiveStatus,
         objetivo: c.objetivo,
         spend: c.spend,
         impressions: c.impressions,
@@ -147,6 +188,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
         thumbnailUrl: null,
         temStatus: false,
         ativo: null,
+        statusBruto: null,
         objetivo: null,
         spend: c.spend,
         impressions: c.impressions,
@@ -161,6 +203,7 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
       thumbnailUrl: a.thumbnailUrl,
       temStatus: true,
       ativo: statusAtivo(a.effectiveStatus),
+      statusBruto: a.effectiveStatus,
       objetivo: null,
       spend: a.spend,
       impressions: a.impressions,
@@ -218,7 +261,8 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
     }
   }
 
-  const mostraStatus = nivel === 'anuncios'
+  // Campanhas agora também têm effective_status (fix 17/jul/2026).
+  const mostraStatus = nivel !== 'conjuntos'
 
   return (
     <Card className="border-none shadow-[var(--shadow-sm)]">
@@ -347,20 +391,19 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
                         </div>
                       </TableCell>
                       <TableCell>
-                        {l.ativo === null ? (
+                        {l.statusBruto === null ? (
                           <span className="text-muted-foreground">—</span>
                         ) : (
-                          // Badge VISUAL de status — nunca um switch de ação.
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              l.ativo
-                                ? 'border-chart-success/30 bg-chart-success/10 text-chart-success'
-                                : 'border-border bg-muted text-muted-foreground',
-                            )}
-                          >
-                            {l.ativo ? 'Ativo' : 'Inativo'}
-                          </Badge>
+                          // Badge VISUAL de status com dot colorido — nunca um switch de ação.
+                          (() => {
+                            const s = rotuloStatus(l.statusBruto)
+                            return (
+                              <Badge variant="outline" className={cn('gap-1.5', TOM_BADGE[s.tom])}>
+                                <span className={cn('size-1.5 rounded-full', TOM_DOT[s.tom])} />
+                                {s.label}
+                              </Badge>
+                            )
+                          })()
                         )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{moeda(l.spend)}</TableCell>
