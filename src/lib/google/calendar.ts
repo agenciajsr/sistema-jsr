@@ -102,6 +102,21 @@ export async function listarEventosDeHoje(): Promise<EventoAgenda[]> {
   })
 }
 
+/**
+ * Eventos de um intervalo de DIAS fechado (YYYY-MM-DD, fuso de Brasília) —
+ * alimenta a grade de calendário da /agenda (mês ou semana visível).
+ */
+export async function listarEventosPeriodo(
+  inicio: string,
+  fim: string,
+): Promise<EventoAgenda[]> {
+  return listarEventos({
+    timeMin: `${inicio}T00:00:00${OFFSET_BRASILIA}`,
+    timeMax: `${fim}T23:59:59${OFFSET_BRASILIA}`,
+    maxResults: 250,
+  })
+}
+
 /** Próximos compromissos: de agora até o fim do dia daqui a `dias` (Brasília). */
 export async function listarProximos(dias = 14): Promise<EventoAgenda[]> {
   const timeMin = new Date().toISOString()

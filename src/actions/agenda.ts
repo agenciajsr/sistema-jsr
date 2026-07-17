@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/auth/session'
 import {
   criarEvento,
   editarEvento,
+  listarEventosPeriodo,
   listarProximos,
   NAO_CONECTADO,
   type EventoAgenda,
@@ -88,6 +89,29 @@ export async function editarEventoAction(
 export type ProximosResult = {
   conectado: boolean
   eventos: EventoAgenda[]
+}
+
+/**
+ * Eventos de um intervalo de dias (YYYY-MM-DD, Brasília) para a grade de
+ * calendário da /agenda. Nunca lança: conectado=false quando não há conexão.
+ */
+export async function getEventosDoPeriodo(
+  inicio: string,
+  fim: string,
+): Promise<ProximosResult> {
+  const user = await getCurrentUser()
+  if (!user) return { conectado: false, eventos: [] }
+
+  try {
+    const eventos = await listarEventosPeriodo(inicio, fim)
+    return { conectado: true, eventos }
+  } catch (e) {
+    if (e instanceof Error && e.message === NAO_CONECTADO) {
+      return { conectado: false, eventos: [] }
+    }
+    console.error('[getEventosDoPeriodo] Falha ao listar eventos:', e)
+    return { conectado: false, eventos: [] }
+  }
 }
 
 /** Próximos compromissos. Nunca lança: conectado=false quando não há conexão. */
