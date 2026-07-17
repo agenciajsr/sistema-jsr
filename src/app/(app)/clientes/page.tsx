@@ -15,7 +15,7 @@ export default async function ClientesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-[28px] leading-tight font-semibold">Clientes</h1>
         <Button asChild>
           <Link href="/clientes/novo">Cadastrar Cliente</Link>
