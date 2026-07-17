@@ -31,7 +31,7 @@ const erroAsaasSchema = z
   })
   .passthrough()
 
-async function requisicao(path: string, init: { method: 'GET' | 'POST'; body?: unknown }): Promise<unknown> {
+async function requisicao(path: string, init: { method: 'GET' | 'POST' | 'DELETE'; body?: unknown }): Promise<unknown> {
   const chave = process.env.ASAAS_API_KEY
   if (!chave) throw new AsaasIndisponivelError()
 
@@ -124,6 +124,12 @@ export async function criarCobranca({
   })
   const dados = cobrancaAsaasSchema.parse(json)
   return { id: dados.id, invoiceUrl: dados.invoiceUrl ?? null, status: dados.status ?? null }
+}
+
+/** Cancela/remove uma cobrança no Asaas — DELETE /payments/{id}. */
+export async function cancelarCobranca(paymentId: string): Promise<void> {
+  // A resposta é { deleted: true, id } — o status ok já é checado em requisicao.
+  await requisicao(`/payments/${paymentId}`, { method: 'DELETE' })
 }
 
 /**
