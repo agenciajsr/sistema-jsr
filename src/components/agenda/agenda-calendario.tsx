@@ -157,6 +157,10 @@ export function AgendaCalendario({
         </div>
       </div>
 
+      {/* Wrapper mobile: em telas estreitas a grade de 7 colunas rola na horizontal
+          (cabeçalho e dias juntos, alinhados); em ≥sm nada muda. */}
+      <div className="overflow-x-auto">
+      <div className="min-w-[560px] sm:min-w-0">
       {/* Cabeçalho dom–sáb. */}
       <div className="grid grid-cols-7 gap-px">
         {DIAS_SEMANA.map((dia, i) => (
@@ -280,6 +284,8 @@ export function AgendaCalendario({
             </div>
           )
         })}
+      </div>
+      </div>
       </div>
 
       {/* Estado vazio: nenhum evento em toda a grade visível. */}

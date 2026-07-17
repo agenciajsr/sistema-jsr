@@ -125,23 +125,23 @@ export function LandingClientes({ clientes, investido30d, periodo, resumo }: Lan
                 </div>
 
                 <div className="mt-auto grid grid-cols-3 gap-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Investido</p>
-                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs text-muted-foreground">Investido</p>
+                    <p className="truncate text-base font-semibold tracking-tight tabular-nums">
                       {formatadorMoeda.format(r?.spend ?? investido)}
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="truncate text-xs text-muted-foreground" title={r?.heroiLabel ?? 'Resultado'}>
                       {r?.heroiLabel ?? 'Resultado'}
                     </p>
-                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                    <p className="truncate text-base font-semibold tracking-tight tabular-nums">
                       {r ? new Intl.NumberFormat('pt-BR').format(r.resultado) : '—'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Custo/result.</p>
-                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs text-muted-foreground">Custo/result.</p>
+                    <p className="truncate text-base font-semibold tracking-tight tabular-nums">
                       {r?.custoPorResultado != null ? formatadorMoeda.format(r.custoPorResultado) : '—'}
                     </p>
                   </div>

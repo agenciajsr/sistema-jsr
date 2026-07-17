@@ -546,9 +546,9 @@ export function FichaLead({
         {!carregando && erro && <p className="p-6 text-sm text-destructive">{erro}</p>}
 
         {!carregando && !erro && ficha && (
-          <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[340px_1fr]">
+          <div className="flex h-full min-h-0 flex-col overflow-y-auto md:grid md:grid-cols-[340px_1fr] md:overflow-visible">
             {/* ============ PAINEL ESQUERDO ============ */}
-            <div className="min-h-0 overflow-y-auto border-r">
+            <div className="border-b md:min-h-0 md:overflow-y-auto md:border-b-0 md:border-r">
               {/* Voltar: fecha a ficha e retorna ao Kanban/Lista do CRM. */}
               <div className="px-2 pt-2">
                 <BotaoVoltar label="Voltar" onClick={() => onOpenChange(false)} />
@@ -926,7 +926,7 @@ export function FichaLead({
             </div>
 
             {/* ============ PAINEL DIREITO ============ */}
-            <div className="min-h-0 overflow-y-auto">
+            <div className="md:min-h-0 md:overflow-y-auto">
               {/* Ordem pedida pelo usuário: Negócio primeiro (aba padrão), depois
                   Atividades e por último Histórico — igual à referência. */}
               <Tabs defaultValue="negocio" className="p-4">
