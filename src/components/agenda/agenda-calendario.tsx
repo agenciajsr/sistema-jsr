@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import type { EventoAgenda } from '@/lib/google/calendar'
 
@@ -66,6 +67,8 @@ export function AgendaCalendario({
   const router = useRouter()
   // Evento aberto no dialog de detalhes/edição (só eventos com id e horário).
   const [eventoAberto, setEventoAberto] = useState<EventoAgenda | null>(null)
+  // Dia (YYYY-MM-DD) com o Popover "+x mais" aberto — um por vez.
+  const [popoverDiaAberto, setPopoverDiaAberto] = useState<string | null>(null)
 
   const ancora = parseISO(dataAncora)
 
@@ -185,9 +188,10 @@ export function AgendaCalendario({
             <div
               key={chave}
               className={cn(
-                'flex flex-col gap-1 bg-card p-1.5',
-                visao === 'mes' ? 'min-h-24' : 'min-h-48',
+                'flex flex-col gap-1 bg-card p-1.5 transition-colors hover:bg-muted/40',
+                visao === 'mes' ? 'min-h-28' : 'min-h-48',
                 foraDoMes && 'bg-muted/40',
+                ehHoje && 'bg-primary/5 dark:bg-primary/10',
               )}
             >
               <span
@@ -208,7 +212,7 @@ export function AgendaCalendario({
                   key={`${ev.id}-${ev.inicio}`}
                   type="button"
                   onClick={() => abrirEvento(ev)}
-                  className="w-full rounded bg-primary/10 px-1 py-0.5 text-left text-xs text-primary transition-colors hover:bg-primary/20"
+                  className="w-full rounded border-l-2 border-primary bg-primary/10 px-1 py-0.5 text-left text-xs text-primary transition-colors hover:bg-primary/15 dark:bg-primary/20 dark:hover:bg-primary/25"
                   title={ev.titulo}
                 >
                   <span className="block truncate">
@@ -227,12 +231,63 @@ export function AgendaCalendario({
               ))}
 
               {extras > 0 && (
-                <span className="px-1 text-[10px] text-muted-foreground">+{extras} mais</span>
+                <Popover
+                  open={popoverDiaAberto === chave}
+                  onOpenChange={(aberta) => setPopoverDiaAberto(aberta ? chave : null)}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="self-start rounded px-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      +{extras} mais
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-2" align="start">
+                    <p className="px-1 pb-1.5 text-xs font-semibold capitalize text-muted-foreground">
+                      {format(dia, "EEEE, d 'de' MMMM", { locale: ptBR })}
+                    </p>
+                    <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+                      {doDia.map((ev) => (
+                        <button
+                          key={`pop-${ev.id}-${ev.inicio}`}
+                          type="button"
+                          onClick={() => {
+                            setPopoverDiaAberto(null)
+                            abrirEvento(ev)
+                          }}
+                          className="w-full rounded border-l-2 border-primary bg-primary/10 px-2 py-1 text-left text-xs text-primary transition-colors hover:bg-primary/15 dark:bg-primary/20 dark:hover:bg-primary/25"
+                          title={ev.titulo}
+                        >
+                          <span className="block truncate">
+                            {!ev.diaInteiro && (
+                              <span className="mr-1 font-semibold tabular-nums">{horario(ev)}</span>
+                            )}
+                            {ev.titulo}
+                          </span>
+                          {ev.local && (
+                            <span className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+                              <MapPin className="size-2.5 shrink-0" />
+                              {ev.local}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
           )
         })}
       </div>
+
+      {/* Estado vazio: nenhum evento em toda a grade visível. */}
+      {eventos.length === 0 && (
+        <p className="rounded-lg border border-dashed px-3 py-2 text-center text-xs text-muted-foreground">
+          Nenhum compromisso neste período.
+        </p>
+      )}
 
       {/* Detalhes + edição do evento clicado. */}
       <Dialog open={!!eventoAberto} onOpenChange={(aberta) => !aberta && setEventoAberto(null)}>
