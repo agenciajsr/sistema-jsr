@@ -61,6 +61,10 @@ const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>>
   gasto_disparado: TrendingDown,
   entrega_parada: AlertTriangle,
   conta_com_problema: AlertTriangle,
+  fatura_vencendo: Wallet,
+  fatura_vencida: Wallet,
+  assinatura_pendente: Calendar,
+  sla_primeiro_contato: UserX,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
@@ -80,6 +84,10 @@ const TIPO_LABEL: Record<TipoAlerta, string> = {
   gasto_disparado: 'Pico de gasto',
   entrega_parada: 'Entrega parada',
   conta_com_problema: 'Conta',
+  fatura_vencendo: 'Fatura',
+  fatura_vencida: 'Fatura vencida',
+  assinatura_pendente: 'Assinatura',
+  sla_primeiro_contato: '1º contato',
 }
 
 /** Tipos ligados a campanha/conta — ganham o atalho "Ver campanha". */

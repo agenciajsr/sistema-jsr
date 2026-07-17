@@ -828,6 +828,11 @@ export const crmOportunidades = pgTable('crm_oportunidades', {
   produtos: jsonb('produtos'),
   dataPrevistaFechamento: date('data_prevista_fechamento'),
   ordemNaEtapa: integer('ordem_na_etapa').notNull().default(0),
+  // Carimbo do 1º CONTATO comercial do lead (migration 0034, quick-260717-qq6):
+  // preenchido UMA vez (só se null) quando a 1ª tarefa/atividade de contato
+  // (ligação/whatsapp/e-mail/reunião) é concluída ou registrada. Alimenta o
+  // SLA de 24h (src/lib/crm/sla-contato.ts) — indicador no card + alerta.
+  primeiroContatoEm: timestamp('primeiro_contato_em', { withTimezone: true }),
   // Preenchido quando a oportunidade GANHA vira cliente da agência.
   clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -6,11 +6,19 @@
  * regra de negócio — apenas orquestra as queries e os avaliadores existentes.
  */
 
-import { eq, lte } from 'drizzle-orm'
+import { and, eq, isNull, lte, or } from 'drizzle-orm'
 import { addDays, format } from 'date-fns'
 
 import { db } from '@/lib/db'
-import { contratos, transacoes, clientes, adAccounts } from '@/lib/db/schema'
+import {
+  contratos,
+  transacoes,
+  clientes,
+  adAccounts,
+  cobrancas,
+  crmOportunidades,
+  crmContatos,
+} from '@/lib/db/schema'
 import {
   avaliarContratos,
   avaliarTransacoes,
@@ -18,6 +26,15 @@ import {
   avaliarSaldoContas,
   ordenarPorSeveridade,
 } from '@/lib/alertas/avaliar'
+import {
+  avaliarCobrancas,
+  avaliarAssinaturaPendente,
+  avaliarSlaPrimeiroContato,
+  DIAS_AVISO_FATURA,
+  type CobrancaInput,
+  type ContratoAssinaturaInput,
+  type OportunidadeSlaInput,
+} from '@/lib/alertas/avaliar-operacional'
 import { getAlertasCampanhas } from '@/lib/saude/avaliar-campanhas'
 import { getAlertasCampanhaDiarios } from '@/lib/alertas/regras-campanha'
 import type { Alerta } from '@/lib/alertas/types'
@@ -118,6 +135,96 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
   // getAlertasCampanhaDiarios já é à prova de falha (retorna [] em erro).
   const alertasDiarios = await getAlertasCampanhaDiarios()
 
+  // --- Alertas operacionais internos (quick-260717-qq6) ---
+  // Queries SEQUENCIAIS (pool max=3, nunca Promise.all), cada bloco com
+  // try/catch próprio: uma falha aqui NUNCA derruba os demais alertas.
+
+  // (a) Régua de inadimplência interna: pendentes vencendo em ≤3 dias + vencidas.
+  let alertasFaturas: Alerta[] = []
+  try {
+    const limiteFatura = format(addDays(hoje, DIAS_AVISO_FATURA), 'yyyy-MM-dd')
+    const cobrancasRows: CobrancaInput[] = await db
+      .select({
+        id: cobrancas.id,
+        clienteId: cobrancas.clienteId,
+        clienteNome: clientes.nome,
+        valor: cobrancas.valor,
+        status: cobrancas.status,
+        vencimento: cobrancas.vencimento,
+      })
+      .from(cobrancas)
+      .innerJoin(clientes, eq(cobrancas.clienteId, clientes.id))
+      .where(
+        or(
+          and(eq(cobrancas.status, 'pendente'), lte(cobrancas.vencimento, limiteFatura)),
+          eq(cobrancas.status, 'vencida'),
+        ),
+      )
+    alertasFaturas = avaliarCobrancas(cobrancasRows, hoje)
+  } catch (erro) {
+    console.error('[calcularAlertasAtuais] falha ao avaliar cobrancas — ignorando', erro)
+  }
+
+  // (b) Contratos parados em aguardando_assinatura.
+  let alertasAssinatura: Alerta[] = []
+  try {
+    const assinaturaRows: ContratoAssinaturaInput[] = await db
+      .select({
+        id: contratos.id,
+        clienteId: contratos.clienteId,
+        clienteNome: clientes.nome,
+        statusFluxo: contratos.statusFluxo,
+        enviadoParaAssinaturaEm: contratos.enviadoParaAssinaturaEm,
+        createdAt: contratos.createdAt,
+      })
+      .from(contratos)
+      .innerJoin(clientes, eq(contratos.clienteId, clientes.id))
+      .where(eq(contratos.statusFluxo, 'aguardando_assinatura'))
+    alertasAssinatura = avaliarAssinaturaPendente(assinaturaRows, hoje)
+  } catch (erro) {
+    console.error('[calcularAlertasAtuais] falha ao avaliar assinaturas pendentes — ignorando', erro)
+  }
+
+  // (c) SLA de 1º contato do CRM. try/catch OBRIGATÓRIO: a coluna
+  // primeiro_contato_em (migration 0034) pode ainda não existir no banco —
+  // degradação graciosa no padrão do getWorkspaceAtual.
+  let alertasSla: Alerta[] = []
+  try {
+    const slaRows = await db
+      .select({
+        id: crmOportunidades.id,
+        titulo: crmOportunidades.titulo,
+        contatoNome: crmContatos.nome,
+        status: crmOportunidades.status,
+        criadaEm: crmOportunidades.createdAt,
+        primeiroContatoEm: crmOportunidades.primeiroContatoEm,
+      })
+      .from(crmOportunidades)
+      .leftJoin(crmContatos, eq(crmOportunidades.contatoId, crmContatos.id))
+      .where(
+        and(
+          eq(crmOportunidades.status, 'aberta'),
+          isNull(crmOportunidades.primeiroContatoEm),
+          // Corte grosso no banco: só leads criados há mais de 24h importam.
+          lte(crmOportunidades.createdAt, addDays(hoje, -1)),
+        ),
+      )
+    const slaInputs: OportunidadeSlaInput[] = slaRows.map((r) => ({
+      id: r.id,
+      titulo: r.titulo,
+      contatoNome: r.contatoNome,
+      status: r.status,
+      criadaEm: r.criadaEm instanceof Date ? r.criadaEm : new Date(r.criadaEm),
+      primeiroContatoEm: r.primeiroContatoEm,
+    }))
+    alertasSla = avaliarSlaPrimeiroContato(slaInputs, hoje)
+  } catch (erro) {
+    console.error(
+      '[calcularAlertasAtuais] falha ao avaliar SLA de 1º contato (migration 0034 pendente?) — ignorando',
+      erro,
+    )
+  }
+
   // Unificar e ordenar
   return ordenarPorSeveridade([
     ...alertasContratos,
@@ -126,5 +233,8 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
     ...alertasSaldo,
     ...alertasCampanhas,
     ...alertasDiarios,
+    ...alertasFaturas,
+    ...alertasAssinatura,
+    ...alertasSla,
   ])
 }

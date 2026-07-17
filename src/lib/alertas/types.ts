@@ -16,6 +16,12 @@ export type TipoAlerta =
   | 'gasto_disparado'
   | 'entrega_parada'
   | 'conta_com_problema'
+  // Alertas operacionais internos (quick-260717-qq6): régua de inadimplência
+  // sobre `cobrancas`, contrato parado em assinatura e SLA de 1º contato do CRM.
+  | 'fatura_vencendo'
+  | 'fatura_vencida'
+  | 'assinatura_pendente'
+  | 'sla_primeiro_contato'
 
 export type SeveridadeAlerta = 'critico' | 'atencao' | 'info'
 
