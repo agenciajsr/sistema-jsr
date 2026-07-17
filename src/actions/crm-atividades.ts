@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
@@ -25,6 +25,31 @@ import { atividadeSchema, type AtividadeInput } from '@/lib/validations/crm'
  * exportar helper de arquivo 'use server' criaria endpoint público). */
 function primeiroErro(e: { issues: { message: string }[] }): string {
   return e.issues[0]?.message ?? 'Dados invalidos.'
+}
+
+// --- Carimbo do 1º contato (quick-260717-qq6) ---
+
+/** Tipos de atividade que representam CONTATO REAL com o lead. */
+const TIPOS_CONTATO = new Set(['ligacao', 'whatsapp', 'email', 'reuniao'])
+
+/**
+ * Carimba crm_oportunidades.primeiro_contato_em UMA única vez (WHERE ... IS NULL
+ * = idempotente; só a primeira atividade conclui o carimbo). try/catch que SÓ
+ * loga de propósito: a coluna é da migration 0034 (aplicação manual pendente) —
+ * o fluxo principal NUNCA pode quebrar por causa do carimbo.
+ */
+async function carimbarPrimeiroContato(oportunidadeId: string | null | undefined) {
+  if (!oportunidadeId) return
+  try {
+    await db
+      .update(crmOportunidades)
+      .set({ primeiroContatoEm: new Date() })
+      .where(
+        and(eq(crmOportunidades.id, oportunidadeId), isNull(crmOportunidades.primeiroContatoEm)),
+      )
+  } catch (e) {
+    console.error('[carimbarPrimeiroContato] falha (migration 0034 pendente?) — ignorando', e)
+  }
 }
 
 /** Cria uma atividade agendada para o lead (e opcionalmente para um negócio). */
@@ -67,6 +92,13 @@ export async function criarAtividadeCrm(input: AtividadeInput) {
       oportunidadeId: v.oportunidadeId ?? null,
       detalhe: v.titulo,
     })
+
+    // Carimbo do 1º contato: só quando a atividade é de CONTATO REAL
+    // (ligação/whatsapp/e-mail/reunião) e JÁ ACONTECEU (início <= agora) —
+    // agendar uma tarefa FUTURA não conta como contato feito.
+    if (TIPOS_CONTATO.has(v.tipo) && dataInicio.getTime() <= Date.now()) {
+      await carimbarPrimeiroContato(v.oportunidadeId)
+    }
 
     revalidatePath('/crm')
     return { data: { id: tarefa.id } }
@@ -226,6 +258,10 @@ export async function concluirAtividadeCrm(id: string) {
       oportunidadeId: tarefa.oportunidadeId,
       detalhe: tarefa.titulo,
     })
+
+    // Concluir a 1ª atividade comercial do lead carimba o 1º contato
+    // (idempotente: o UPDATE só pega quando primeiro_contato_em é null).
+    await carimbarPrimeiroContato(tarefa.oportunidadeId)
 
     revalidatePath('/crm')
     return { data: { ok: true } }
