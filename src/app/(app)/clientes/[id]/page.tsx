@@ -20,6 +20,8 @@ import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
 import { CobrancaCliente } from '@/components/ficha/cobranca-cliente'
 import { FaturasCliente } from '@/components/ficha/faturas-cliente'
 import { getFaturasDoCliente } from '@/lib/cobrancas/dados'
+import { getTarefasDoClienteFicha } from '@/lib/tarefas/ficha-cliente'
+import { TarefasCliente } from '@/components/ficha/tarefas-cliente'
 import { asaasDisponivel } from '@/lib/asaas/client'
 import { VincularContaFicha } from '@/components/ficha/vincular-conta-ficha'
 import { MetasCliente } from '@/components/ficha/metas-cliente'
@@ -161,6 +163,9 @@ export default async function ClienteDetalhePage({
   // Faturas (tabela cobrancas — Fase 5): query SEQUENCIAL após o lote acima
   // (pool max=3, memória do projeto — não inflar o Promise.all).
   const faturas = await getFaturasDoCliente(id)
+  // Tarefas do cliente: também SEQUENCIAL (2 queries agregadas internas,
+  // nunca em Promise.all — quick-260717-i26).
+  const tarefasFicha = await getTarefasDoClienteFicha(id)
   const asaasConfigurado = asaasDisponivel()
 
   // D-03: exclusão de cliente/contrato é exclusiva do Admin.
@@ -311,6 +316,9 @@ export default async function ClienteDetalhePage({
           <TabsTrigger value="faturas">💰 Faturas</TabsTrigger>
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>
           <TabsTrigger value="checklist">✅ Checklist</TabsTrigger>
+          <TabsTrigger value="tarefas">
+            🗒️ Tarefas{tarefasFicha.abertas.length > 0 && ` (${tarefasFicha.abertas.length})`}
+          </TabsTrigger>
           <TabsTrigger value="acompanhamento">📝 Acompanhamento</TabsTrigger>
           <TabsTrigger value="documentos">📎 Documentos</TabsTrigger>
         </TabsList>
@@ -605,6 +613,11 @@ export default async function ClienteDetalhePage({
               concluido: i.concluido,
             }))}
           />
+        </TabsContent>
+
+        {/* Aba: Tarefas do cliente (dados REAIS — tabela tarefas) */}
+        <TabsContent value="tarefas" className="space-y-4">
+          <TarefasCliente abertas={tarefasFicha.abertas} historico={tarefasFicha.historico} />
         </TabsContent>
 
         {/* Aba: Acompanhamento (dados REAIS, persistidos) */}
