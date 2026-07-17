@@ -74,14 +74,24 @@ import { rotuloServico, SERVICOS_JSR, type ServicoJsr } from '@/lib/crm/servicos
 import type { CrmVisaoGeral } from '@/lib/crm/dados'
 
 // Orquestrador da /crm: header compacto + seletor de pipelines (multi-pipeline)
-// + abas Kanban/Lista + busca + filtros por servico/origem + gerenciamento de
-// pipelines (criar/renomear/padrao/excluir). O periodo continua inerte (honesto).
+// + abas Kanban/Lista + busca + filtros por servico/origem + filtro de período
+// (client-side, por data de criação) + gerenciamento de pipelines.
+
+// Opções do filtro de período do header: null = todo o período.
+const OPCOES_PERIODO: { dias: number | null; rotulo: string }[] = [
+  { dias: null, rotulo: 'Todo o período' },
+  { dias: 7, rotulo: 'Últimos 7 dias' },
+  { dias: 30, rotulo: 'Últimos 30 dias' },
+  { dias: 90, rotulo: 'Últimos 90 dias' },
+]
 
 export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const router = useRouter()
   const [busca, setBusca] = useState('')
   const [filtroServicos, setFiltroServicos] = useState<Set<string>>(new Set())
   const [filtroOrigens, setFiltroOrigens] = useState<Set<string>>(new Set())
+  // Período em dias (null = todo o período): recorta os cards pela data de criação.
+  const [filtroPeriodo, setFiltroPeriodo] = useState<number | null>(null)
 
   // Gerenciamento de pipelines.
   const [dialogPipeline, setDialogPipeline] = useState<'nova' | 'renomear' | null>(null)
@@ -105,7 +115,10 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   // => mostra tudo. Varre TAMBEM as colunasFechadas.
   const oportunidadesVisiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    if (!termo && !temFiltro) return undefined
+    if (!termo && !temFiltro && filtroPeriodo == null) return undefined
+    // Data-limite do período: criadas antes dela saem do recorte.
+    const limite =
+      filtroPeriodo != null ? Date.now() - filtroPeriodo * 24 * 60 * 60 * 1000 : null
     const ids = new Set<string>()
     const todas = [
       ...dados.colunas.map((c) => c.oportunidades),
@@ -121,11 +134,20 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
         }
         if (filtroServicos.size > 0 && !filtroServicos.has(o.servico ?? '')) continue
         if (filtroOrigens.size > 0 && !filtroOrigens.has(o.origem ?? 'outro')) continue
+        if (limite != null && new Date(o.createdAt).getTime() < limite) continue
         ids.add(o.id)
       }
     }
     return ids
-  }, [busca, temFiltro, filtroServicos, filtroOrigens, dados.colunas, dados.colunasFechadas])
+  }, [
+    busca,
+    temFiltro,
+    filtroPeriodo,
+    filtroServicos,
+    filtroOrigens,
+    dados.colunas,
+    dados.colunasFechadas,
+  ])
 
   function alternarNoSet(set: Set<string>, valor: string): Set<string> {
     const novo = new Set(set)
@@ -299,17 +321,32 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
           </DropdownMenu>
         </div>
 
-        {/* Periodo: inerte por ora (o recorte por data ainda nao existe). */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="cursor-not-allowed text-muted-foreground"
-          title="Em breve"
-        >
-          <CalendarDays className="size-4" />
-          Selecione um periodo
-        </Button>
+        {/* Período: recorta os cards pela data de criação (client-side). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant={filtroPeriodo != null ? 'default' : 'outline'}
+              size="sm"
+            >
+              <CalendarDays className="size-4" />
+              {OPCOES_PERIODO.find((op) => op.dias === filtroPeriodo)?.rotulo ??
+                'Todo o período'}
+              <ChevronDown className="size-4 opacity-60" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {OPCOES_PERIODO.map((op) => (
+              <DropdownMenuItem
+                key={op.rotulo}
+                onClick={() => setFiltroPeriodo(op.dias)}
+              >
+                <span className="flex-1">{op.rotulo}</span>
+                {op.dias === filtroPeriodo && <Check className="size-4 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <Tabs defaultValue="kanban" className="space-y-4">

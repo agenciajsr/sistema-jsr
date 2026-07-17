@@ -131,11 +131,7 @@ export default async function CampanhasPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <SeletorCampanhas
-            clientes={clientesComContas.map((c) => ({ id: c.id, nome: c.nome }))}
-            clienteAtual={cliente}
-            periodoAtual={periodo as string}
-          />
+          <SeletorCampanhas periodoAtual={periodo as string} />
           {ultimaSync && (
             <span className="text-xs text-muted-foreground">
               Última sync: {formatDistanceToNow(ultimaSync, { addSuffix: true, locale: ptBR })}

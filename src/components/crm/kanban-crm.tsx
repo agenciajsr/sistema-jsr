@@ -12,7 +12,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Plus, Trophy, XCircle } from 'lucide-react'
+import { Trophy, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -23,7 +23,6 @@ import {
 } from '@/actions/crm'
 import { criarReuniaoCrm } from '@/actions/crm-atividades'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CardOportunidade } from '@/components/crm/card-oportunidade'
 import { ConverterClienteDialog } from '@/components/crm/converter-cliente-dialog'
@@ -112,7 +111,7 @@ function BoardComPan({ children }: { children: React.ReactNode }) {
       onPointerCancel={aoSoltar}
       // Altura fixa pela viewport: a PÁGINA não cresce com os cards — cada
       // coluna rola por dentro. Ajuste fino do desconto se o header mudar.
-      className="flex h-[calc(100dvh-350px)] min-h-[420px] cursor-grab gap-4 overflow-x-auto overflow-y-hidden pb-2 active:cursor-grabbing"
+      className="flex h-[calc(100dvh-230px)] min-h-[540px] cursor-grab gap-4 overflow-x-auto overflow-y-hidden pb-2 active:cursor-grabbing"
     >
       {children}
     </div>
@@ -123,7 +122,6 @@ export function KanbanCrm({
   colunas,
   colunasFechadas,
   oportunidadesVisiveis,
-  onAdicionar,
 }: {
   colunas: ColunaKanban[]
   colunasFechadas: ColunaFechada[]
@@ -131,7 +129,6 @@ export function KanbanCrm({
   // A contagem e o valor do header seguem os dados da coluna — o header
   // descreve a etapa inteira, nao o recorte da busca.
   oportunidadesVisiveis?: Set<string>
-  onAdicionar?: (etapaId: string) => void
 }) {
   const router = useRouter()
   const [quadro, setQuadro] = useState<Quadro>(() => montarQuadro(colunas, colunasFechadas))
@@ -426,21 +423,6 @@ export function KanbanCrm({
                     ))
                   )}
                 </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'h-8 w-full justify-start text-xs text-muted-foreground',
-                    !onAdicionar && 'cursor-not-allowed opacity-60',
-                  )}
-                  title={onAdicionar ? undefined : 'Em breve'}
-                  onClick={onAdicionar ? () => onAdicionar(coluna.etapa.id) : undefined}
-                >
-                  <Plus className="size-3.5" />
-                  Adicionar negocio
-                </Button>
               </Coluna>
             )
           })}

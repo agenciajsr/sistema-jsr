@@ -1,5 +1,3 @@
-import { BarChart3 } from 'lucide-react'
-
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { corOrigem, nomeOrigem } from '@/lib/crm/origem'
@@ -34,15 +32,6 @@ export function BarraOrigemLeads({ origens }: { origens: OrigemDistrib[] }) {
           ))}
         </div>
       )}
-
-      {/* Inerte por ora: o relatorio completo de origem ainda nao existe. */}
-      <span
-        className="flex cursor-not-allowed items-center gap-1.5 text-xs font-medium text-muted-foreground/70"
-        title="Em breve"
-      >
-        <BarChart3 className="size-3.5" />
-        Ver relatorio completo
-      </span>
     </Card>
   )
 }
