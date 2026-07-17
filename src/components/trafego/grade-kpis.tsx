@@ -47,7 +47,23 @@ import {
 } from '@/actions/trafego'
 import type { ClasseObjetivo } from '@/lib/trafego/aggregate'
 import { presetsKpis, resolverPreferencias } from '@/lib/trafego/presets-kpis'
+import { resolverMetas, statusDaMetrica, type StatusMeta } from '@/lib/trafego/semaforo'
 import { OrganizarSheet } from './organizar-sheet'
+
+// Semáforo (Feature 1): cor da borda esquerda + chip por status da meta.
+const SEMAFORO_BORDA: Record<StatusMeta, string> = {
+  bom: 'border-l-[3px] border-l-chart-success',
+  atencao: 'border-l-[3px] border-l-chart-warning',
+  ruim: 'border-l-[3px] border-l-destructive',
+  sem_dados: 'border-l-[3px] border-l-muted-foreground/30',
+}
+
+const SEMAFORO_CHIP: Record<StatusMeta, { label: string; classes: string }> = {
+  bom: { label: 'Bom', classes: 'bg-chart-success/10 text-chart-success ring-chart-success/25' },
+  atencao: { label: 'Atenção', classes: 'bg-chart-warning/10 text-chart-warning ring-chart-warning/25' },
+  ruim: { label: 'Ruim', classes: 'bg-destructive/10 text-destructive ring-destructive/25' },
+  sem_dados: { label: 'Sem dados', classes: 'bg-muted text-muted-foreground ring-border' },
+}
 
 const ICONE_POR_METRICA: Partial<Record<MetricaId, LucideIcon>> = {
   investimento: DollarSign,
@@ -160,6 +176,10 @@ export function GradeKpis({
 
   const ativas = prefs.filter((p) => p.ativo)
 
+  // Metas efetivas do semáforo: salvas no Organizar vencem; sem salvas, defaults
+  // do objetivo. Recalculado quando o usuário edita metas (prefs muda).
+  const metas = useMemo(() => resolverMetas(prefs, classe), [prefs, classe])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -236,18 +256,38 @@ export function GradeKpis({
           const valorAtual = metricasAtual[meta.id]
           const delta = variacao(valorAtual, metricasAnterior[meta.id])
           const boa = delta !== null ? variacaoEBoa(meta.id, delta) : null
+          // Semáforo: null = métrica sem meta monitorada (aparência atual).
+          const status = statusDaMetrica(meta.id, valorAtual, metas.get(meta.id), {
+            impressions: totaisAtual.impressions,
+            spend: totaisAtual.spend,
+          })
 
           return (
             <Card
               key={p.id}
-              className="gap-2 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
+              className={cn(
+                'gap-2 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]',
+                status && SEMAFORO_BORDA[status],
+              )}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-xs font-medium text-muted-foreground" title={meta.label}>
                   {meta.label}
                 </span>
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-inset ring-primary/15">
-                  <Icone className="size-4" />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {status && (
+                    <span
+                      className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset',
+                        SEMAFORO_CHIP[status].classes,
+                      )}
+                    >
+                      {SEMAFORO_CHIP[status].label}
+                    </span>
+                  )}
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-inset ring-primary/15">
+                    <Icone className="size-4" />
+                  </div>
                 </div>
               </div>
               <div className="flex items-baseline gap-2">
@@ -288,6 +328,7 @@ export function GradeKpis({
         prefs={prefs}
         onPrefsChange={aplicarPrefs}
         clienteNome={clienteNome}
+        classe={classe}
       />
     </div>
   )

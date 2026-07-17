@@ -5,7 +5,24 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
-import { adAccounts, adInsights, campaignInsights, clientes, demografiaInsights, regiaoInsights } from '@/lib/db/schema'
+import {
+  adAccounts,
+  adInsights,
+  campaignInsights,
+  clientes,
+  demografiaInsights,
+  preferenciasCampanhas,
+  regiaoInsights,
+} from '@/lib/db/schema'
+import { classificarObjetivo } from './aggregate'
+import {
+  breakdownDoCliente,
+  piorStatus,
+  resolverMetas,
+  type ItemComMeta,
+  type StatusMeta,
+} from './semaforo'
+import { calcularMetricas } from './metricas'
 import { getCurrentUser } from '@/lib/auth/session'
 import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 // parseActionsExtendido/parseActionValues vêm de ./aggregate (fonte única —
@@ -199,6 +216,110 @@ function resultadoDaChave(r: { leads: number; vendas: number; conversas: number 
   if (chave === 'vendas') return r.vendas
   if (chave === 'conversas') return r.conversas
   return r.leads
+}
+
+// --- Cards da home de /campanhas (Feature 1, item 3) ---
+
+export type ResumoLandingCliente = {
+  spend: number
+  resultado: number
+  heroiLabel: string
+  custoPorResultado: number | null
+  /** Pior status entre as métricas monitoradas (anel do avatar). null = sem semáforo. */
+  statusPior: StatusMeta | null
+}
+
+/**
+ * Agregado LEVE por cliente para os cards da tela inicial: investido, resultado
+ * principal do período, custo por resultado e o pior status do semáforo.
+ * 4 queries agregadas SEQUENCIAIS no total (nunca por cliente). Nunca lança.
+ */
+export async function getResumoLandingPorCliente(
+  periodo: Periodo = '30d',
+): Promise<Map<string, ResumoLandingCliente>> {
+  const resultado = new Map<string, ResumoLandingCliente>()
+  try {
+    const contas = await db
+      .select({ id: adAccounts.id, clienteId: adAccounts.clienteId })
+      .from(adAccounts)
+      .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
+    const contaParaCliente = new Map<string, string>()
+    for (const c of contas) if (c.clienteId) contaParaCliente.set(c.id, c.clienteId)
+    if (contaParaCliente.size === 0) return resultado
+
+    const clienteIds = [...new Set(contaParaCliente.values())]
+    const infoClientes = await db
+      .select({ id: clientes.id, nicho: clientes.nicho, objetivoPrincipal: clientes.objetivoPrincipal })
+      .from(clientes)
+      .where(inArray(clientes.id, clienteIds))
+    const infoPorCliente = new Map(infoClientes.map((c) => [c.id, c]))
+
+    const prefsRows = await db
+      .select({ clienteId: preferenciasCampanhas.clienteId, kpis: preferenciasCampanhas.kpis })
+      .from(preferenciasCampanhas)
+      .where(inArray(preferenciasCampanhas.clienteId, clienteIds))
+    const prefsPorCliente = new Map(prefsRows.map((r) => [r.clienteId, r.kpis as ItemComMeta[] | null]))
+
+    const { inicioAtual, fimAtual } = janelasDoPeriodo(periodo)
+    const insights = await db
+      .select({
+        adAccountId: campaignInsights.adAccountId,
+        spend: campaignInsights.spend,
+        impressions: campaignInsights.impressions,
+        clicks: campaignInsights.clicks,
+        reach: campaignInsights.reach,
+        actions: campaignInsights.actions,
+        actionValues: campaignInsights.actionValues,
+      })
+      .from(campaignInsights)
+      .where(
+        and(
+          inArray(campaignInsights.adAccountId, [...contaParaCliente.keys()]),
+          gte(campaignInsights.date, inicioAtual),
+          lte(campaignInsights.date, fimAtual),
+        ),
+      )
+
+    const totaisPorCliente = new Map<string, TotaisPeriodo>()
+    for (const i of insights) {
+      const clienteId = contaParaCliente.get(i.adAccountId)
+      if (!clienteId) continue
+      let t = totaisPorCliente.get(clienteId)
+      if (!t) {
+        t = totaisVazios()
+        totaisPorCliente.set(clienteId, t)
+      }
+      const r = parseActionsExtendido(i.actions)
+      somarNoTotal(t, Number(i.spend) || 0, i.impressions ?? 0, i.clicks ?? 0, i.reach ?? 0, r, parseActionValues(i.actionValues))
+    }
+
+    for (const clienteId of clienteIds) {
+      const info = infoPorCliente.get(clienteId)
+      const heroi = heroiDoObjetivo(
+        info?.objetivoPrincipal ?? null,
+        (info?.nicho ?? 'infoproduto') as Nicho,
+      )
+      const t = totaisPorCliente.get(clienteId) ?? totaisVazios()
+      t.resultadoHeroi = resultadoDaChave(t, heroi.chave)
+
+      const classe = classificarObjetivo(info?.objetivoPrincipal ?? null)
+      const metas = resolverMetas(prefsPorCliente.get(clienteId) ?? null, classe)
+      const itens = breakdownDoCliente(calcularMetricas(t), metas, {
+        impressions: t.impressions,
+        spend: t.spend,
+      })
+      resultado.set(clienteId, {
+        spend: t.spend,
+        resultado: t.resultadoHeroi,
+        heroiLabel: heroi.label,
+        custoPorResultado: t.resultadoHeroi > 0 ? t.spend / t.resultadoHeroi : null,
+        statusPior: piorStatus(itens.map((i) => i.status)),
+      })
+    }
+  } catch {
+    // Tela inicial nunca quebra por causa do resumo — cards caem no básico.
+  }
+  return resultado
 }
 
 /**

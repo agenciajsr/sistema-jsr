@@ -29,8 +29,15 @@ import {
   type CriativoRanking,
   type Periodo,
 } from '@/lib/trafego/aggregate'
-import { getPainelCampanhas } from '@/lib/trafego/painel'
+import { getPainelCampanhas, getResumoLandingPorCliente } from '@/lib/trafego/painel'
 import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
+import {
+  breakdownDoCliente,
+  resolverMetas,
+  scoreSemaforo,
+  type MetaMetrica,
+} from '@/lib/trafego/semaforo'
+import { calcularMetricas } from '@/lib/trafego/metricas'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 60s. Coerente com connect_timeout(10s) + statement_timeout(12s).
@@ -62,13 +69,31 @@ export default async function CampanhasPage({
   // SEQUENCIAL de propósito (pool max=5, decisão 260714-ita): painel -> preferências -> saúde.
   const painel = cliente ? await getPainelCampanhas(cliente, periodo) : null
   const preferencias = cliente ? await getPreferenciasCampanhas(cliente) : null
-  const saude = cliente && painel?.temDados ? await getSaudeDoCliente(cliente) : null
-
-  // Tela inicial (sem cliente): UMA query agregada leve p/ os cards — nunca rodar
-  // getResumoCliente/getSaude por cliente aqui (pesadas, pool max=5).
-  const investido30d = !cliente ? await getInvestido30dPorCliente() : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
+
+  // Semáforo (Feature 1): metas efetivas do cliente (salvas no Organizar ou
+  // defaults do objetivo). Score de Saúde agora é função dos status do semáforo
+  // (ponderado por gasto); sem metas/dado avaliável cai no score legado.
+  const classeCliente = classificarObjetivo(clienteSelecionado?.objetivoPrincipal ?? null)
+  const metas = resolverMetas(preferencias?.kpis ?? null, classeCliente)
+  const saudeSemaforo = painel?.temDados ? scoreSemaforo(painel.campanhas, metas) : null
+  const saude =
+    saudeSemaforo ??
+    (cliente && painel?.temDados ? await getSaudeDoCliente(cliente) : null)
+  const breakdownSaude =
+    painel?.temDados && saudeSemaforo
+      ? breakdownDoCliente(calcularMetricas(painel.totaisAtual), metas, {
+          impressions: painel.totaisAtual.impressions,
+          spend: painel.totaisAtual.spend,
+        })
+      : []
+  const metasRecord: Record<string, MetaMetrica> = Object.fromEntries(metas)
+
+  // Tela inicial (sem cliente): 2 chamadas agregadas leves p/ os cards — nunca rodar
+  // getResumoCliente/getSaude por cliente aqui (pesadas, pool max=5).
+  const investido30d = !cliente ? await getInvestido30dPorCliente() : null
+  const resumoLanding = !cliente ? await getResumoLandingPorCliente(periodo) : null
   const semNada = clientesComContas.length === 0 && contasNaoVinculadas.length === 0
 
   // Criativos campeões derivados do nível anúncios do painel.
@@ -142,6 +167,7 @@ export default async function CampanhasPage({
           }))}
           investido30d={investido30d ?? new Map()}
           periodo={periodo}
+          resumo={resumoLanding ?? undefined}
         />
       )}
 
@@ -168,7 +194,9 @@ export default async function CampanhasPage({
               {painel.contasUnificadas}{' '}
               {painel.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
             </p>
-            {saude && <HealthScoreCliente score={saude.score} rotulo={saude.rotulo} />}
+            {saude && (
+              <HealthScoreCliente score={saude.score} rotulo={saude.rotulo} breakdown={breakdownSaude} />
+            )}
           </div>
 
           <GradeKpis
@@ -192,6 +220,7 @@ export default async function CampanhasPage({
             conjuntos={painel.conjuntos}
             anuncios={painel.anuncios}
             labelHeroi={painel.heroi.label}
+            metas={metasRecord}
           />
 
           {painel.campanhas.length > 0 && (

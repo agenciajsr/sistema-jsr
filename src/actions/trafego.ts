@@ -251,7 +251,13 @@ export async function vincularContaAoCliente(
 
 // --- Preferências do painel /campanhas (por cliente) ---
 
-export type PreferenciaKpi = { id: string; ativo: boolean }
+// `meta` é aditiva (semáforo, Feature 1 — 17/jul/2026): vive no MESMO jsonb
+// `kpis` — linhas antigas sem meta continuam válidas, zero migration.
+export type PreferenciaKpi = {
+  id: string
+  ativo: boolean
+  meta?: { bom: number; ruim: number; ativa: boolean } | null
+}
 export type PreferenciaFunil = { campanhas: string[] | null; etapas: string[] }
 export type PreferenciasCampanhas = {
   kpis: PreferenciaKpi[] | null

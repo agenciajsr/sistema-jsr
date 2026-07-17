@@ -231,7 +231,14 @@ export function rankingDeRegioes(
     }
   }
 
-  const linhas = Array.from(porRegiao.values())
+  // Fix (17/jul/2026): "Unknown" do Meta vira "Outros/não identificado" e só
+  // aparece quando tem RESULTADO (> 0); com zero resultado é ruído — some.
+  let linhas = Array.from(porRegiao.values())
+  for (const l of linhas) {
+    if (l.region === 'Unknown' || l.region === 'unknown') l.region = 'Outros/não identificado'
+  }
+  linhas = linhas.filter((l) => l.region !== 'Outros/não identificado' || l.resultados > 0)
+
   const somaPorRegiao = linhas.reduce((soma, l) => soma + l.resultados, 0)
 
   let motivo: MotivoRegiao

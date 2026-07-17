@@ -9,6 +9,24 @@ import { ArrowRight, Target } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { classificarObjetivo, type ClasseObjetivo, type Nicho } from '@/lib/trafego/aggregate'
+import type { ResumoLandingCliente } from '@/lib/trafego/painel'
+import type { StatusMeta } from '@/lib/trafego/semaforo'
+
+// Anel de status do semáforo no "avatar" do cliente (Feature 1, item 3):
+// cor do PIOR status entre as métricas monitoradas — verde se tudo ok.
+const ANEL_STATUS: Record<StatusMeta, string> = {
+  bom: 'ring-chart-success bg-chart-success/10 text-chart-success',
+  atencao: 'ring-chart-warning bg-chart-warning/10 text-chart-warning',
+  ruim: 'ring-destructive bg-destructive/10 text-destructive',
+  sem_dados: 'ring-muted-foreground/40 bg-muted text-muted-foreground',
+}
+
+const TITULO_STATUS: Record<StatusMeta, string> = {
+  bom: 'Métricas dentro da meta',
+  atencao: 'Alguma métrica em atenção',
+  ruim: 'Métrica fora da meta',
+  sem_dados: 'Sem dados suficientes no período',
+}
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -41,9 +59,11 @@ type LandingClientesProps = {
   clientes: ClienteCard[]
   investido30d: Map<string, number>
   periodo: string
+  /** Resumo do semáforo por cliente (resultado, custo/resultado, pior status). */
+  resumo?: Map<string, ResumoLandingCliente>
 }
 
-export function LandingClientes({ clientes, investido30d, periodo }: LandingClientesProps) {
+export function LandingClientes({ clientes, investido30d, periodo, resumo }: LandingClientesProps) {
   return (
     <div className="space-y-4">
       <div>
@@ -59,6 +79,13 @@ export function LandingClientes({ clientes, investido30d, periodo }: LandingClie
           const objetivoLabel = classe ? LABEL_CLASSE[classe] : LABEL_NICHO[c.nicho]
           const investido = investido30d.get(c.id) ?? 0
           const ativo = investido > 0
+          const r = resumo?.get(c.id)
+          const status: StatusMeta | null = r?.statusPior ?? null
+          const iniciais = c.nome
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((p) => p[0]?.toUpperCase() ?? '')
+            .join('')
 
           return (
             <Link
@@ -68,14 +95,21 @@ export function LandingClientes({ clientes, investido30d, periodo }: LandingClie
             >
               <Card className="h-full gap-3 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-md)]">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    {/* Avatar com ANEL do pior status do semáforo (verde se tudo ok). */}
                     <span
                       className={cn(
-                        'size-2 shrink-0 rounded-full',
-                        ativo ? 'bg-chart-success' : 'bg-muted-foreground/40',
+                        'flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ring-2',
+                        status
+                          ? ANEL_STATUS[status]
+                          : ativo
+                            ? ANEL_STATUS.bom
+                            : 'bg-muted text-muted-foreground ring-muted-foreground/30',
                       )}
-                      title={ativo ? 'Ativo nos últimos 30 dias' : 'Sem gasto nos últimos 30 dias'}
-                    />
+                      title={status ? TITULO_STATUS[status] : ativo ? 'Ativo no período' : 'Sem gasto no período'}
+                    >
+                      {iniciais}
+                    </span>
                     <span className="truncate font-medium" title={c.nome}>
                       {c.nome}
                     </span>
@@ -90,11 +124,27 @@ export function LandingClientes({ clientes, investido30d, periodo }: LandingClie
                   </span>
                 </div>
 
-                <div className="mt-auto">
-                  <p className="text-xs text-muted-foreground">Investido (30 dias)</p>
-                  <p className="text-xl font-semibold tracking-tight tabular-nums">
-                    {formatadorMoeda.format(investido)}
-                  </p>
+                <div className="mt-auto grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Investido</p>
+                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                      {formatadorMoeda.format(r?.spend ?? investido)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="truncate text-xs text-muted-foreground" title={r?.heroiLabel ?? 'Resultado'}>
+                      {r?.heroiLabel ?? 'Resultado'}
+                    </p>
+                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                      {r ? new Intl.NumberFormat('pt-BR').format(r.resultado) : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Custo/result.</p>
+                    <p className="text-base font-semibold tracking-tight tabular-nums">
+                      {r?.custoPorResultado != null ? formatadorMoeda.format(r.custoPorResultado) : '—'}
+                    </p>
+                  </div>
                 </div>
               </Card>
             </Link>

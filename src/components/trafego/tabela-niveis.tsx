@@ -29,6 +29,34 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { LinhaAnuncio, LinhaCampanha, LinhaConjunto, ObjetivoChip } from '@/lib/trafego/painel'
+import {
+  MIN_GASTO_LINHA,
+  statusDaMetrica,
+  type MetaMetrica,
+  type StatusMeta,
+} from '@/lib/trafego/semaforo'
+import type { MetricaId } from '@/lib/trafego/metricas'
+
+// Semáforo (Feature 1): fundo suave na CÉLULA que viola a meta — só em linhas
+// com gasto >= R$20 no período (evita falso alarme em campanha recém-criada).
+const FUNDO_STATUS: Partial<Record<StatusMeta, string>> = {
+  atencao: 'bg-chart-warning/15',
+  ruim: 'bg-destructive/15',
+}
+
+function classeCelula(
+  id: MetricaId,
+  valor: number | null,
+  metas: Record<string, MetaMetrica> | undefined,
+  linha: { spend: number; impressions: number },
+): string | undefined {
+  if (!metas || linha.spend < MIN_GASTO_LINHA) return undefined
+  const status = statusDaMetrica(id, valor, metas[id], {
+    impressions: linha.impressions,
+    spend: linha.spend,
+  })
+  return status ? FUNDO_STATUS[status] : undefined
+}
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatadorNumero = new Intl.NumberFormat('pt-BR')
@@ -69,9 +97,11 @@ type TabelaNiveisProps = {
   conjuntos: LinhaConjunto[]
   anuncios: LinhaAnuncio[]
   labelHeroi: string
+  /** Metas efetivas do semáforo (resolvidas no server) — opcional. */
+  metas?: Record<string, MetaMetrica>
 }
 
-export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: TabelaNiveisProps) {
+export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas }: TabelaNiveisProps) {
   const [nivel, setNivel] = useState<Nivel>('campanhas')
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
@@ -338,14 +368,21 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi }: Tab
                       <TableCell className="text-right tabular-nums">
                         {d.ctr === null ? '—' : `${formatadorPct.format(d.ctr)}%`}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{moeda(d.cpm)}</TableCell>
+                      <TableCell className={cn('text-right tabular-nums', classeCelula('cpm', d.cpm, metas, l))}>
+                        {moeda(d.cpm)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatadorNumero.format(l.impressions)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatadorNumero.format(l.resultadoHeroi)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell
+                        className={cn(
+                          'text-right tabular-nums',
+                          classeCelula('custoPorResultado', d.custoPorResultado, metas, l),
+                        )}
+                      >
                         {moeda(d.custoPorResultado)}
                       </TableCell>
                     </TableRow>
