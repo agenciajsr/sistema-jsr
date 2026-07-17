@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-17 - Completed quick task 260716-wgs: fatura paga vira receita no /financeiro; E2E Asaas sandbox validado de ponta a ponta
+Last activity: 2026-07-17 - Completed quick task 260717-00n: spec Semáforo de metas + Alertas proativos diários + painel Ações do dia em /campanhas
 
 Progress: [████████░░] 83%
 
@@ -172,6 +172,7 @@ None yet.
 | 260716-sr5 | Fase 5 Parte 2 — Cobrança POR CLIENTE: coluna clientes.modo_cobranca (automatico_asaas x manual_pix, migration 0033 GERADA e NÃO aplicada, default seguro manual_pix + backfill de usa_asaas); manual_pix NUNCA toca o Asaas mas a fatura local mensal nasce pendente; deveUsarAsaas sob TDD (3 testes, 418 total); fix do botão de /contratos (não duplica fatura, retenta o Asaas na MESMA linha via retentarAsaasNaFatura, todo desfecho vira toast); modo escolhido na conversão do lead ganho + editável na aba Faturas (usa_asaas depreciada, espelhada); aba Cobranças consolidada em /financeiro (getVisaoCobrancas, ações por linha) | 2026-07-16 | 9d7abb1 | [260716-sr5-cobranca-por-cliente-modo-asaas-manual-f](./quick/260716-sr5-cobranca-por-cliente-modo-asaas-manual-f/) |
 | 260716-ux6 | Cobrança Asaas só com Pix e boleto — billingType 'BOLETO' no lugar de 'UNDEFINED' em criarCobranca (fatura Asaas mostra boleto+Pix, cartão some); causa do 401 no teste E2E era env na Vercel (ASAAS_ENV=production + chave sandbox) — corrigida no painel (sandbox) + redeploy | 2026-07-17 | e929a65 | [260716-ux6-cobranca-asaas-restringir-pagamento-a-pi](./quick/260716-ux6-cobranca-asaas-restringir-pagamento-a-pi/) |
 | 260716-wgs | Fatura paga vira RECEITA no /financeiro — módulo receita.ts (transação receita/mensalidade/pago, dedup por marcador [cobranca:id] em notas, sem migration) chamado no webhook Asaas (paga registra; estorno remove) e no PIX manual; backfill da fatura do teste E2E (R$1.500) executado direto no banco; E2E completo do Asaas sandbox VALIDADO nesta sessão (assinatura→cobrança→pagamento→webhook→paga) — atenção: webhook precisa estar ATIVO no painel Asaas (evento gerado com webhook desativado se perde, não há reconciliação) | 2026-07-17 | 01c534a | [260716-wgs-fatura-paga-vira-receita-no-financeiro-t](./quick/260716-wgs-fatura-paga-vira-receita-no-financeiro-t/) |
+| 260717-00n | Spec Semáforo/Alertas/Ações (3 features + fixes): semáforo de metas por métrica (chips nos KPIs, metas no Organizar salvas no jsonb kpis, células da tabela, cards da home com anel, health score por semáforo c/ popover, fix regiões Unknown); alertas proativos diários (gasto sem resultado, custo x meta 3d, CTR baixo, pico de gasto, entrega parada, conta com problema) + silenciar 7d/resolver/ver campanha + /alertas agrupado por cliente; status oficial de campanha no sync e na tabela; painel Ações do dia (cortar/escalar/renovar) — colunas effective_status e silenciado_ate APLICADAS; 31 testes novos | 2026-07-17 | fc6938d..c3940d7 | [260717-00n-feature-1-semaforo-de-metas-por-metrica-](./quick/260717-00n-feature-1-semaforo-de-metas-por-metrica-/) |
 
 ## Session Continuity
 
