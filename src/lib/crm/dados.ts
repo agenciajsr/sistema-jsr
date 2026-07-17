@@ -14,6 +14,7 @@ import {
   profiles,
 } from '@/lib/db/schema'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
+import { horasAguardando } from '@/lib/crm/sla-contato'
 
 // Módulo server comum — SEM 'use server': é chamado direto pelo Server Component
 // da página /crm, não pelo client. Evita expor um endpoint desnecessário.
@@ -55,6 +56,12 @@ export type OportunidadeCard = {
   // Adicionados para o mockup: tempo relativo e aviso "Nao contatado".
   createdAt: string // ISO
   semContato: boolean
+  // SLA de 1º contato (quick-260717-qq6, sinal mais FINO e independente da
+  // heurística semContato +7d): true = aberta E primeiro_contato_em null.
+  // horas = tempo aguardando (para o textoAguardando do card). Quando a
+  // migration 0034 ainda não foi aplicada, fica false/null (degradação graciosa).
+  aguardando1oContato: boolean
+  horasAguardando1oContato: number | null
   // Preenchido quando o negócio GANHO já virou cliente da agência — o kanban
   // usa para NÃO reoferecer a conversão (dialog Converter em cliente).
   clienteId: string | null
@@ -197,6 +204,9 @@ type InsumosCard = {
   tarefasAbertasPorOportunidade: Map<string, number>
   numeroPorOportunidade: Map<string, number>
   tagsPorContato: Map<string, { id: string; nome: string; cor: string }[]>
+  // Ids das oportunidades ABERTAS ainda SEM 1º contato (primeiro_contato_em
+  // null). Vazio quando a migration 0034 não foi aplicada (query em try/catch).
+  semPrimeiroContato: Set<string>
 }
 
 // Helper LOCAL (não exportado): a montagem do card mora num lugar só — senão
@@ -226,6 +236,11 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
     dataPrevistaFechamento: o.dataPrevistaFechamento,
     createdAt: criada.toISOString(),
     semContato,
+    aguardando1oContato: o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id),
+    horasAguardando1oContato:
+      o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id)
+        ? horasAguardando(criada)
+        : null,
     clienteId: o.clienteId,
   }
 }
@@ -465,11 +480,34 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
       }
     }
 
+    // (15) SLA de 1º contato — query SEPARADA e sequencial de propósito: a
+    // coluna primeiro_contato_em é da migration 0034 (aplicação manual). Se ela
+    // ainda não existe no banco, o catch devolve Set vazio e os cards seguem
+    // sem o indicador — mesma degradação graciosa do getWorkspaceAtual. NÃO
+    // entra no CAMPOS_CARD para o board inteiro não quebrar junto.
+    const semPrimeiroContato = new Set<string>()
+    try {
+      const slaRows = await db
+        .select({ id: crmOportunidades.id })
+        .from(crmOportunidades)
+        .where(
+          and(
+            eq(crmOportunidades.pipelineId, pipeline.id),
+            eq(crmOportunidades.status, 'aberta'),
+            sql`${crmOportunidades.primeiroContatoEm} IS NULL`,
+          ),
+        )
+      for (const r of slaRows) semPrimeiroContato.add(r.id)
+    } catch (e) {
+      console.error('[getCrmVisaoGeral] SLA 1º contato indisponivel (migration 0034 pendente?)', e)
+    }
+
     const insumos: InsumosCard = {
       atividadesPorOportunidade,
       tarefasAbertasPorOportunidade,
       numeroPorOportunidade,
       tagsPorContato,
+      semPrimeiroContato,
     }
 
     // Merge em memória: monta os cards preenchendo createdAt e semContato.

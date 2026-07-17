@@ -4,6 +4,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { AlertTriangle, Banknote, Calendar, CalendarClock, User } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { SLA_PRIMEIRO_CONTATO_HORAS, textoAguardando } from '@/lib/crm/sla-contato'
 import { rotuloOrigem } from '@/lib/crm/origem'
 import { rotuloServico } from '@/lib/crm/servicos'
 import { classesCorTag } from '@/lib/crm/tags'
@@ -64,6 +65,12 @@ export function CardOportunidade({
   const nome = oportunidade.contatoNome ?? oportunidade.titulo
   const inicial = nome.trim().charAt(0).toUpperCase() || '?'
 
+  // SLA de 1º contato (quick-260717-qq6): linha discreta enquanto aguarda;
+  // ao estourar 24h o texto fica vermelho e o card ganha um anel sutil.
+  const horasSla = oportunidade.horasAguardando1oContato
+  const aguardandoSla = oportunidade.aguardando1oContato && horasSla != null
+  const slaEstourado = aguardandoSla && horasSla >= SLA_PRIMEIRO_CONTATO_HORAS
+
   return (
     <div
       ref={setNodeRef}
@@ -78,6 +85,7 @@ export function CardOportunidade({
         'space-y-2 rounded-lg border bg-card p-3 text-left shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]',
         podeAbrir && 'cursor-pointer',
         arrastando && 'opacity-40',
+        slaEstourado && 'ring-1 ring-red-500/40 dark:ring-red-400/40',
       )}
     >
       {/* Cabecalho da imagem03: avatar + nome + linha azul de servico/origem + #N. */}
@@ -99,8 +107,24 @@ export function CardOportunidade({
         )}
       </div>
 
-      {/* Aviso do mockup anterior (preservado): aberta ha +7d sem tarefa concluida. */}
-      {oportunidade.semContato && (
+      {/* SLA de 1º contato: discreto enquanto aguarda, vermelho ao estourar 24h. */}
+      {aguardandoSla && (
+        <p
+          className={cn(
+            'flex items-center gap-1.5 text-[10px]',
+            slaEstourado
+              ? 'font-medium text-red-600 dark:text-red-400'
+              : 'text-muted-foreground',
+          )}
+        >
+          {slaEstourado && <AlertTriangle className="size-3 shrink-0" />}
+          {textoAguardando(horasSla)}
+        </p>
+      )}
+
+      {/* Aviso do mockup anterior (preservado): aberta ha +7d sem tarefa concluida.
+          Quando o indicador de SLA esta ativo, ele PREVALECE — nao duplica aviso. */}
+      {oportunidade.semContato && !aguardandoSla && (
         <p className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600">
           <AlertTriangle className="size-3 shrink-0" />
           Nao contatado
