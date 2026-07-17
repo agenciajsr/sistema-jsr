@@ -17,6 +17,7 @@ import {
   gerarCobrancaDoMes,
   retentarAsaasNaFatura,
 } from '@/lib/cobrancas/gerar'
+import { registrarReceitaDaCobranca } from '@/lib/cobrancas/receita'
 import { asaasDisponivel, confirmarRecebimentoEmDinheiro } from '@/lib/asaas/client'
 
 export type ResultadoAcaoCobranca =
@@ -252,6 +253,21 @@ export async function confirmarRecebimentoManual(cobrancaId: string): Promise<Re
     .set({ status: 'paga', pagoEm: new Date(), formaQuitacao: 'pix_manual', updatedAt: new Date() })
     .where(eq(cobrancas.id, cobrancaId))
 
+  // Fatura quitada vira receita no financeiro (idempotente pelo marcador).
+  try {
+    await registrarReceitaDaCobranca(
+      {
+        id: cobranca.id,
+        clienteId: cobranca.clienteId,
+        valor: cobranca.valor,
+        competencia: cobranca.competencia,
+      },
+      { forma: 'pix_manual', dataPagamento: hojeBrasilia() },
+    )
+  } catch (erro) {
+    console.warn('[cobrancas] fatura quitada, mas falhou ao registrar a receita no financeiro:', erro)
+  }
+
   // Ativa o cliente se ainda não estiver ativo (idempotente, sequencial).
   const cliente = await db.query.clientes.findFirst({
     where: eq(clientes.id, cobranca.clienteId),
@@ -278,6 +294,7 @@ export async function confirmarRecebimentoManual(cobrancaId: string): Promise<Re
 
   revalidatePath(`/clientes/${cobranca.clienteId}`)
   revalidatePath('/contratos')
+  revalidatePath('/financeiro')
 
   return { ok: true, aviso }
 }

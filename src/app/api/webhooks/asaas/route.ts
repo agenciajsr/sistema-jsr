@@ -14,6 +14,7 @@ import { z } from 'zod'
 
 import { db } from '@/lib/db'
 import { clientes, cobrancas } from '@/lib/db/schema'
+import { registrarReceitaDaCobranca, removerReceitaDaCobranca } from '@/lib/cobrancas/receita'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -61,7 +62,13 @@ export async function POST(request: Request) {
     const { event, payment } = parsed.data
 
     const [cobranca] = await db
-      .select({ id: cobrancas.id, clienteId: cobrancas.clienteId, status: cobrancas.status })
+      .select({
+        id: cobrancas.id,
+        clienteId: cobrancas.clienteId,
+        status: cobrancas.status,
+        valor: cobrancas.valor,
+        competencia: cobrancas.competencia,
+      })
       .from(cobrancas)
       .where(eq(cobrancas.asaasPaymentId, payment.id))
 
@@ -81,6 +88,17 @@ export async function POST(request: Request) {
           updatedAt: new Date(),
         })
         .where(eq(cobrancas.id, cobranca.id))
+
+      // Fatura paga vira receita no financeiro (idempotente pelo marcador em
+      // notas). Falha aqui NÃO desfaz a quitação — só loga.
+      try {
+        await registrarReceitaDaCobranca(cobranca, {
+          forma: 'asaas',
+          dataPagamento: payment.paymentDate || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }),
+        })
+      } catch (erro) {
+        console.warn('[webhook asaas] fatura paga, mas falhou ao registrar a receita no financeiro:', erro)
+      }
 
       // Primeira fatura paga confirma a ativação do cliente (idempotente,
       // dois updates SEQUENCIAIS — pool max=3).
@@ -104,6 +122,13 @@ export async function POST(request: Request) {
         .update(cobrancas)
         .set({ status: 'cancelada', updatedAt: new Date() })
         .where(eq(cobrancas.id, cobranca.id))
+      // Se a fatura já tinha virado receita, o estorno tira do financeiro
+      // (só remove transação criada por nós — lançamento manual fica intacto).
+      try {
+        await removerReceitaDaCobranca(cobranca.id)
+      } catch (erro) {
+        console.warn('[webhook asaas] fatura cancelada, mas falhou ao remover a receita vinculada:', erro)
+      }
     }
 
     return NextResponse.json({ ok: true })
