@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowDown,
@@ -69,6 +69,8 @@ import { KanbanCrm } from '@/components/crm/kanban-crm'
 import { ListaCrm } from '@/components/crm/lista-crm'
 import { BarraOrigemLeads } from '@/components/crm/barra-origem-leads'
 import { NovoLeadDialog } from '@/components/crm/novo-lead-dialog'
+import { useRefreshPeriodico } from '@/hooks/use-refresh-periodico'
+import { detectarNovasOportunidades, rotuloNovidade } from '@/lib/crm/novidades'
 import { nomeOrigem } from '@/lib/crm/origem'
 import { rotuloServico, SERVICOS_JSR, type ServicoJsr } from '@/lib/crm/servicos'
 import type { CrmVisaoGeral } from '@/lib/crm/dados'
@@ -104,6 +106,39 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const [nomesEtapas, setNomesEtapas] = useState<Record<string, string>>({})
   const [novaEtapaNome, setNovaEtapaNome] = useState('')
   const [salvandoEtapa, setSalvandoEtapa] = useState(false)
+
+  // --- Quase tempo real (quick 260717-pvr) ---
+  // Drag ativo no kanban e dialog de novo lead aberto pausam o polling — um
+  // router.refresh() no meio do arrasto/digitação destruiria a interação.
+  const [arrastando, setArrastando] = useState(false)
+  const [novoLeadAberto, setNovoLeadAberto] = useState(false)
+  const pausado =
+    arrastando ||
+    novoLeadAberto ||
+    dialogPipeline !== null ||
+    dialogEtapas ||
+    confirmarExcluirPipeline
+  useRefreshPeriodico({ pausado })
+
+  // Toast "Novo lead" quando um id inédito aparece entre renders (lead chegou
+  // via webhook/polling). Ref null = primeira carga → só popula, nunca toasta.
+  const idsAnterioresRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const atuais = [
+      ...dados.colunas.flatMap((c) => c.oportunidades),
+      ...dados.colunasFechadas.flatMap((c) => c.oportunidades),
+    ].map((o) => ({ id: o.id, titulo: o.titulo, contatoNome: o.contatoNome }))
+
+    const novas = detectarNovasOportunidades(idsAnterioresRef.current, atuais)
+    idsAnterioresRef.current = new Set(atuais.map((o) => o.id))
+
+    // Enxurrada (importação em massa) vira um toast-resumo em vez de spam.
+    if (novas.length > 3) {
+      toast.info(`${novas.length} novos leads chegaram no CRM.`)
+    } else {
+      for (const o of novas) toast.info(`Novo lead: ${rotuloNovidade(o)}`)
+    }
+  }, [dados.colunas, dados.colunasFechadas])
 
   // Origens presentes no board (para o filtro) — vem da distribuicao ja carregada.
   const origensDisponiveis = dados.origens.map((o) => o.origem)
@@ -352,7 +387,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
       <Tabs defaultValue="kanban" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <NovoLeadDialog etapas={dados.etapas} />
+            <NovoLeadDialog etapas={dados.etapas} onOpenChange={setNovoLeadAberto} />
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -504,6 +539,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
             colunas={dados.colunas}
             colunasFechadas={dados.colunasFechadas}
             oportunidadesVisiveis={oportunidadesVisiveis}
+            onArrastandoChange={setArrastando}
           />
           <BarraOrigemLeads origens={dados.origens} />
         </TabsContent>

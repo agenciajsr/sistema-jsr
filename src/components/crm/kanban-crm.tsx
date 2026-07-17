@@ -122,6 +122,7 @@ export function KanbanCrm({
   colunas,
   colunasFechadas,
   oportunidadesVisiveis,
+  onArrastandoChange,
 }: {
   colunas: ColunaKanban[]
   colunasFechadas: ColunaFechada[]
@@ -129,6 +130,9 @@ export function KanbanCrm({
   // A contagem e o valor do header seguem os dados da coluna — o header
   // descreve a etapa inteira, nao o recorte da busca.
   oportunidadesVisiveis?: Set<string>
+  // Sinaliza ao pai (CrmView) que um drag esta ativo — usado para PAUSAR o
+  // polling de quase tempo real durante o arrasto (quick 260717-pvr).
+  onArrastandoChange?: (ativo: boolean) => void
 }) {
   const router = useRouter()
   const [quadro, setQuadro] = useState<Quadro>(() => montarQuadro(colunas, colunasFechadas))
@@ -189,10 +193,14 @@ export function KanbanCrm({
 
   function onDragStart(event: DragStartEvent) {
     setArrastandoId(String(event.active.id))
+    onArrastandoChange?.(true)
   }
 
   async function onDragEnd(event: DragEndEvent) {
+    // Sinaliza o fim do drag ANTES de qualquer early-return: todo caminho
+    // (sem destino, mesma coluna, dialogs pendentes) despausa o polling.
     setArrastandoId(null)
+    onArrastandoChange?.(false)
     const { active, over } = event
     if (!over) return
 
@@ -369,7 +377,16 @@ export function KanbanCrm({
 
   return (
     <>
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        // Drag cancelado (Esc, perda de foco) tambem despausa o polling.
+        onDragCancel={() => {
+          setArrastandoId(null)
+          onArrastandoChange?.(false)
+        }}
+      >
         <BoardComPan>
           {/* As etapas REAIS do pipeline. */}
           {colunas.map((coluna) => {

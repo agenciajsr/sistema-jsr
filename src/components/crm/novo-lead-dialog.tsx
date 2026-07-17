@@ -49,9 +49,23 @@ const ERRO_PADRAO = 'Nao foi possivel salvar. Verifique os dados e tente novamen
 
 type LeadExistente = { id: string; nome: string; qtdNegocios: number }
 
-export function NovoLeadDialog({ etapas }: { etapas: EtapaKanban[] }) {
+export function NovoLeadDialog({
+  etapas,
+  onOpenChange,
+}: {
+  etapas: EtapaKanban[]
+  // Notifica o pai (CrmView) quando o dialog abre/fecha — usado para PAUSAR o
+  // polling de quase tempo real enquanto o usuário digita (quick 260717-pvr).
+  onOpenChange?: (open: boolean) => void
+}) {
   const router = useRouter()
   const [aberto, setAberto] = useState(false)
+
+  // Único ponto de mudança do open: estado interno + aviso ao pai.
+  function mudarAberto(open: boolean) {
+    setAberto(open)
+    onOpenChange?.(open)
+  }
   const [isPending, startTransition] = useTransition()
   // Aviso NAO bloqueante: o lead repetido e um caso ESPERADO (a mesma pessoa
   // volta pedindo outro servico) — avisamos e seguimos.
@@ -106,7 +120,7 @@ export function NovoLeadDialog({ etapas }: { etapas: EtapaKanban[] }) {
   function fechar() {
     reset(valoresPadrao)
     setLeadExistente(null)
-    setAberto(false)
+    mudarAberto(false)
   }
 
   // O refine "email OU telefone" nao pertence a NENHUM campo, entao o zodResolver
@@ -144,8 +158,8 @@ export function NovoLeadDialog({ etapas }: { etapas: EtapaKanban[] }) {
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={(open) => (open ? setAberto(true) : fechar())}>
-      <Button type="button" onClick={() => setAberto(true)} disabled={etapas.length === 0}>
+    <Dialog open={aberto} onOpenChange={(open) => (open ? mudarAberto(true) : fechar())}>
+      <Button type="button" onClick={() => mudarAberto(true)} disabled={etapas.length === 0}>
         <Plus className="size-4" />
         Novo Lead
       </Button>
