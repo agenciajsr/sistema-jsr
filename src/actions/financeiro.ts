@@ -464,6 +464,32 @@ export async function getContasAPagar() {
     .orderBy(transacoes.data)
 }
 
+// Previsão de receita por mês FUTURO (quick-260717-i26): agregada no banco
+// (GROUP BY mês) — a visão de MRR futuro vira somas mensais, não N linhas.
+export async function getPrevisaoReceitaPorMes(): Promise<{ mes: string; total: number }[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  const hoje = hojeBrasilia()
+  const rows = await db
+    .select({
+      mes: sql<string>`to_char(${transacoes.data}, 'YYYY-MM')`,
+      total: sql<string>`sum(${transacoes.valor})`,
+    })
+    .from(transacoes)
+    .where(
+      and(
+        eq(transacoes.tipo, 'receita'),
+        inArray(transacoes.status, ['pendente', 'vencido']),
+        gt(transacoes.data, hoje),
+      ),
+    )
+    .groupBy(sql`to_char(${transacoes.data}, 'YYYY-MM')`)
+    .orderBy(sql`to_char(${transacoes.data}, 'YYYY-MM')`)
+
+  return rows.map((r) => ({ mes: r.mes, total: Number(r.total) }))
+}
+
 export async function uploadComprovante(transacaoId: string, url: string) {
   const currentUser = await getCurrentUser()
   if (!currentUser) {

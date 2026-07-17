@@ -14,6 +14,7 @@ import {
   getContasAPagar,
   getPrevisaoCaixa,
   getVisaoAnalitica,
+  getPrevisaoReceitaPorMes,
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
 import { getVisaoCobrancas } from '@/lib/cobrancas/dados'
@@ -88,6 +89,9 @@ export default async function FinanceiroPage({
     // Fetch SEQUENCIAL depois do lote 2 (não engordar os Promise.all): visão
     // consolidada da aba Cobranças (quick-260716-sr5).
     const visaoCobrancas = await getVisaoCobrancas()
+    // Também SEQUENCIAL (regra do pool max=5 — nunca engordar os Promise.all):
+    // previsão de receita por mês futuro, agregada no banco (quick-260717-i26).
+    const previsaoMeses = await getPrevisaoReceitaPorMes()
     return [
       resumo,
       mrr,
@@ -99,6 +103,7 @@ export default async function FinanceiroPage({
       profilesList,
       visaoAnalitica,
       visaoCobrancas,
+      previsaoMeses,
     ] as const
   }
 
@@ -141,6 +146,7 @@ export default async function FinanceiroPage({
     profilesList,
     visaoAnalitica,
     visaoCobrancas,
+    previsaoMeses,
   ] = dados
 
   // Contagem do badge da aba: clientes que precisam de atenção este mês
