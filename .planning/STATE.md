@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260717-dyb (agenda +x mais/visual + fix cobrança duplicada + cancelamento no sandbox)"
-last_updated: "2026-07-17T12:56:16.588Z"
-last_activity: "2026-07-17 - Completed quick task 260717-00n: spec Semáforo de metas + Alertas proativos diários + painel Ações do dia em /campanhas"
+stopped_at: "Concluído quick 260717-i26 (A Receber filtro 30 dias + Previsão por mês + aba Tarefas na ficha)"
+last_updated: "2026-07-17T16:20:00.000Z"
+last_activity: "2026-07-17 - Completed quick task 260717-i26: A Receber com filtro 30 dias + Previsão por mês + Tarefas na ficha do cliente"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -173,9 +173,10 @@ None yet.
 | 260716-ux6 | Cobrança Asaas só com Pix e boleto — billingType 'BOLETO' no lugar de 'UNDEFINED' em criarCobranca (fatura Asaas mostra boleto+Pix, cartão some); causa do 401 no teste E2E era env na Vercel (ASAAS_ENV=production + chave sandbox) — corrigida no painel (sandbox) + redeploy | 2026-07-17 | e929a65 | [260716-ux6-cobranca-asaas-restringir-pagamento-a-pi](./quick/260716-ux6-cobranca-asaas-restringir-pagamento-a-pi/) |
 | 260716-wgs | Fatura paga vira RECEITA no /financeiro — módulo receita.ts (transação receita/mensalidade/pago, dedup por marcador [cobranca:id] em notas, sem migration) chamado no webhook Asaas (paga registra; estorno remove) e no PIX manual; backfill da fatura do teste E2E (R$1.500) executado direto no banco; E2E completo do Asaas sandbox VALIDADO nesta sessão (assinatura→cobrança→pagamento→webhook→paga) — atenção: webhook precisa estar ATIVO no painel Asaas (evento gerado com webhook desativado se perde, não há reconciliação) | 2026-07-17 | 01c534a | [260716-wgs-fatura-paga-vira-receita-no-financeiro-t](./quick/260716-wgs-fatura-paga-vira-receita-no-financeiro-t/) |
 | 260717-00n | Spec Semáforo/Alertas/Ações (3 features + fixes): semáforo de metas por métrica (chips nos KPIs, metas no Organizar salvas no jsonb kpis, células da tabela, cards da home com anel, health score por semáforo c/ popover, fix regiões Unknown); alertas proativos diários (gasto sem resultado, custo x meta 3d, CTR baixo, pico de gasto, entrega parada, conta com problema) + silenciar 7d/resolver/ver campanha + /alertas agrupado por cliente; status oficial de campanha no sync e na tabela; painel Ações do dia (cortar/escalar/renovar) — colunas effective_status e silenciado_ate APLICADAS; 31 testes novos | 2026-07-17 | fc6938d..c3940d7 | [260717-00n-feature-1-semaforo-de-metas-por-metrica-](./quick/260717-00n-feature-1-semaforo-de-metas-por-metrica-/) || 260717-dyb | Agenda "+x mais" clicável (Popover com todos os compromissos do dia abrindo o dialog de edição) + polimento visual do calendário (hoje destacado, hover, chips com borda primary, dark mode, estado vazio); fix cobrança duplicada — queries de gerar.ts trocam criadoVia='automatico' por ne(status,'cancelada') (manual bloqueia duplicata; cancelada regera) + testes de regressão; cancelarCobranca (DELETE) no client Asaas e script executado: duplicata cba003b1/pay_alt9pinbxw0rlwaq CANCELADA no sandbox e no banco | 2026-07-17 | f434879..3b9e2e9 | [260717-dyb-agenda-x-mais-e-visual-do-calendario-fix](./quick/260717-dyb-agenda-x-mais-e-visual-do-calendario-fix/) |
+| 260717-i26 | Financeiro A Receber: filtro padrão 30 dias + vencidas com toggle "Mostrar todas" (filtrarAReceber puro sob TDD, 12 testes) + card "Previsão por mês" (getPrevisaoReceitaPorMes agregada GROUP BY, sequencial pós-getVisaoCobrancas); ficha do cliente ganha aba 🗒️ Tarefas (abertas + histórico, 2 queries agregadas sequenciais, moldes excluídos); zero migration, getContasAReceber intocada | 2026-07-17 | 15129c0..2054329 | [260717-i26-financeiro-a-receber-com-filtro-30-dias-](./quick/260717-i26-financeiro-a-receber-com-filtro-30-dias-/) |
 
 ## Session Continuity
 
-Last session: 2026-07-17T12:56:16.583Z
-Stopped at: Concluído quick 260717-dyb (agenda +x mais/visual + fix cobrança duplicada + cancelamento no sandbox)
+Last session: 2026-07-17T16:20:00.000Z
+Stopped at: Concluído quick 260717-i26 (A Receber filtro 30 dias + Previsão por mês + aba Tarefas na ficha)
 Resume file: None
