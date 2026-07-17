@@ -30,6 +30,8 @@ import {
   type Periodo,
 } from '@/lib/trafego/aggregate'
 import { getPainelCampanhas, getResumoLandingPorCliente } from '@/lib/trafego/painel'
+import { getAcoesDoDia } from '@/lib/trafego/acoes-dia'
+import { AcoesDoDia } from '@/components/trafego/acoes-do-dia'
 import { getSaudeDoCliente } from '@/lib/saude/avaliar-campanhas'
 import {
   breakdownDoCliente,
@@ -89,6 +91,9 @@ export default async function CampanhasPage({
         })
       : []
   const metasRecord: Record<string, MetaMetrica> = Object.fromEntries(metas)
+
+  // Ações do dia (Feature 3) — sequencial, depois das chamadas acima.
+  const acoesDoDia = cliente && painel?.temDados ? await getAcoesDoDia(cliente) : []
 
   // Tela inicial (sem cliente): 2 chamadas agregadas leves p/ os cards — nunca rodar
   // getResumoCliente/getSaude por cliente aqui (pesadas, pool max=5).
@@ -242,6 +247,9 @@ export default async function CampanhasPage({
             heroiChave={painel.heroi.chave}
             labelHeroi={painel.heroi.label}
           />
+
+          {/* Ações do dia (Feature 3) — acima dos Criativos campeões, como na spec */}
+          <AcoesDoDia clienteId={cliente} acoes={acoesDoDia} />
 
           <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
         </div>
