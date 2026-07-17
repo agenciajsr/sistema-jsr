@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-15 - Completed quick task 260715-la8: Relatórios configuráveis (blocos por conta, cron diário único, dialog Novo Relatório)
+Last activity: 2026-07-17 - Completed quick task 260716-ux6: Cobrança Asaas só com Pix e boleto (billingType BOLETO) + fix envs ASAAS na Vercel
 
 Progress: [████████░░] 83%
 
@@ -170,6 +170,7 @@ None yet.
 | 260716-ky2 | Contratos — serviços contratados estruturados: checklist de 4 serviços (Tráfego pago c/ plataformas Meta/Google, Social media, CRM, Landing page/site) com valor individual na conversão e edição; valorMensal = soma no servidor; texto/PDF do contrato monta cláusulas pelos serviços marcados (legado byte-idêntico); badges na tabela /contratos; coluna contratos.servicos jsonb — migration 0031 APLICADA via script manual | 2026-07-16 | df23219 | [260716-ky2-contratos-servicos-contratados-como-chec](./quick/260716-ky2-contratos-servicos-contratados-como-chec/) |
 | 260716-qzu | Fase 5 Parte 1 — Cobrança via Asaas: tabela cobrancas (fonte da verdade) + clientes.asaas_customer_id (migration 0032 GERADA e NÃO aplicada); client REST Asaas sandbox-first (Zod, billingType UNDEFINED, degradação sem env); 1ª cobrança no gatilho de assinatura (nunca bloqueia ativação), geração mensal por carona no cron sync-meta (sem cron novo), webhook /api/webhooks/asaas (paga/vencida/cancelada, 1ª paga ativa o cliente), PIX manual com receivedInCash; aba Faturas na ficha + botão Cobrança em /contratos; regras puras sob TDD (13 testes, 415 total) | 2026-07-16 | 3ef4ba7 | [260716-qzu-fase-5-parte-1-cobranca-asaas-cliente-co](./quick/260716-qzu-fase-5-parte-1-cobranca-asaas-cliente-co/) |
 | 260716-sr5 | Fase 5 Parte 2 — Cobrança POR CLIENTE: coluna clientes.modo_cobranca (automatico_asaas x manual_pix, migration 0033 GERADA e NÃO aplicada, default seguro manual_pix + backfill de usa_asaas); manual_pix NUNCA toca o Asaas mas a fatura local mensal nasce pendente; deveUsarAsaas sob TDD (3 testes, 418 total); fix do botão de /contratos (não duplica fatura, retenta o Asaas na MESMA linha via retentarAsaasNaFatura, todo desfecho vira toast); modo escolhido na conversão do lead ganho + editável na aba Faturas (usa_asaas depreciada, espelhada); aba Cobranças consolidada em /financeiro (getVisaoCobrancas, ações por linha) | 2026-07-16 | 9d7abb1 | [260716-sr5-cobranca-por-cliente-modo-asaas-manual-f](./quick/260716-sr5-cobranca-por-cliente-modo-asaas-manual-f/) |
+| 260716-ux6 | Cobrança Asaas só com Pix e boleto — billingType 'BOLETO' no lugar de 'UNDEFINED' em criarCobranca (fatura Asaas mostra boleto+Pix, cartão some); causa do 401 no teste E2E era env na Vercel (ASAAS_ENV=production + chave sandbox) — corrigida no painel (sandbox) + redeploy | 2026-07-17 | e929a65 | [260716-ux6-cobranca-asaas-restringir-pagamento-a-pi](./quick/260716-ux6-cobranca-asaas-restringir-pagamento-a-pi/) |
 
 ## Session Continuity
 
