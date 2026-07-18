@@ -140,7 +140,11 @@ function Rodape() {
 }
 
 function ContratoPdf({ vars }: { vars: VariaveisContrato }) {
-  const secoes = montarSecoesContrato(vars)
+  const todas = montarSecoesContrato(vars)
+  // O FECHO ("E assim... Salvador - BA, data") sai do fluxo do corpo e vai
+  // para o TOPO da página de assinaturas — senão fica órfão páginas antes.
+  const secoes = todas.filter((s) => !s.fecho)
+  const fecho = todas.filter((s) => s.fecho)
   const assinaturas = montarBlocoAssinaturas(vars)
   return (
     <Document title={tituloContrato(vars)} language="pt-BR">
@@ -156,8 +160,16 @@ function ContratoPdf({ vars }: { vars: VariaveisContrato }) {
         ))}
         <Rodape />
       </Page>
-      {/* Página FINAL de assinaturas — posições absolutas fixas (ver POSICAO_ASSINATURA). */}
+      {/* Página FINAL de assinaturas — posições absolutas fixas (ver POSICAO_ASSINATURA).
+          O fecho fica no topo em fluxo normal; NÃO afeta o top das linhas. */}
       <Page size="A4" style={estilos.pagina}>
+        {fecho.map((secao, i) => (
+          <View key={i}>
+            {secao.paragrafos.map((p, j) => (
+              <Paragrafo key={j} p={p} />
+            ))}
+          </View>
+        ))}
         <View style={[estilos.blocoAssinatura, { top: TOP_LINHA_CONTRATANTE - 120 }]}>
           <Text style={estilos.rotuloParte}>{assinaturas.contratante.rotulo}</Text>
           <Text>Neste ato representada por:</Text>

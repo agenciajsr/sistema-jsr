@@ -19,6 +19,10 @@ export type ParagrafoContrato = string | TrechoContrato[]
 export type SecaoContrato = {
   titulo?: string
   paragrafos: ParagrafoContrato[]
+  /** true = fecho ("E assim... Salvador - BA, data"): o PDF renderiza esta
+   * seção na PÁGINA DE ASSINATURAS, não no fim do corpo — senão o local/data
+   * fica órfão páginas antes das assinaturas. */
+  fecho?: boolean
 }
 
 /** Normaliza um parágrafo para lista de trechos (consumo uniforme em PDF/HTML). */
@@ -349,6 +353,7 @@ export function montarSecoesContrato(vars: VariaveisContrato): SecaoContrato[] {
     // própria (determinística) pelo pdf.tsx e no fim do preview HTML, usando
     // montarBlocoAssinaturas().
     {
+      fecho: true,
       paragrafos: [
         'E assim, por estarem de justo acordo, as partes assinam este instrumento em 02 (duas) vias de idêntico teor e forma.',
         [{ texto: `Salvador - BA, ${vars.dataInicioFormatada}.`, negrito: true }],
