@@ -37,8 +37,12 @@ export function KpisFinanceiros({
 }: Props) {
   const [visivel, setVisivel] = useState(false)
 
+  // Timeout 0: evita setState síncrono no effect (regra react-hooks).
   useEffect(() => {
-    setVisivel(localStorage.getItem(CHAVE_STORAGE) === '1')
+    const t = setTimeout(() => {
+      setVisivel(localStorage.getItem(CHAVE_STORAGE) === '1')
+    }, 0)
+    return () => clearTimeout(t)
   }, [])
 
   function alternar() {

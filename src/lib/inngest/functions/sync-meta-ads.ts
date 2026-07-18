@@ -14,7 +14,7 @@ export const syncMetaAds = inngest.createFunction(
       { event: 'meta-ads/sync.requested' },
     ],
   },
-  async ({ step }: { step: any }) => {
+  async ({ step }) => {
     // Step 1: Sincronizar contas de anuncio
     const accounts = await step.run('sync-ad-accounts', async () => {
       const metaAccounts = await fetchMetaAdAccounts()

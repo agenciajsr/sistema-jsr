@@ -177,9 +177,9 @@ export default async function ClienteDetalhePage({
 
   // Processos (Onboarding/Retenção — Fase 6): query SEQUENCIAL; try/catch
   // porque as tabelas são da migration 0035 (degradação graciosa).
-  let itensOnboarding: ItemProcesso[] = []
-  let itensRetencao: ItemProcesso[] = []
-  let itensSaida: ItemProcesso[] = []
+  const itensOnboarding: ItemProcesso[] = []
+  const itensRetencao: ItemProcesso[] = []
+  const itensSaida: ItemProcesso[] = []
   try {
     const processos = await db
       .select({

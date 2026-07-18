@@ -163,9 +163,11 @@ function formatarDataHoraBr(iso: string): string {
 
 interface AlertasClientProps {
   alertas: AlertaPersistido[]
+  /** Timestamp do render no SERVIDOR (Date.now() é impuro em render de client). */
+  agora: number
 }
 
-export function AlertasClient({ alertas }: AlertasClientProps) {
+export function AlertasClient({ alertas, agora }: AlertasClientProps) {
   const router = useRouter()
   const [abaAtiva, setAbaAtiva] = useState<StatusAlerta>('novo')
   const [isPending, startTransition] = useTransition()
@@ -228,8 +230,6 @@ export function AlertasClient({ alertas }: AlertasClientProps) {
     }
     itens.push(a)
   }
-
-  const agora = Date.now()
 
   return (
     <div className="space-y-6">

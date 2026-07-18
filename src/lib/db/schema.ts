@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index, boolean, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, pgEnum, uuid, text, timestamp, date, numeric, integer, index, boolean, jsonb, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['admin', 'membro'])
@@ -157,7 +157,7 @@ export const transacoes = pgTable('transacoes', {
   notas: text('notas'),
   centroCusto: centroCustoEnum('centro_custo'),
   recorrencia: recorrenciaEnum('recorrencia').notNull().default('avulsa'),
-  transacaoPaiId: uuid('transacao_pai_id').references((): any => transacoes.id, { onDelete: 'set null' }),
+  transacaoPaiId: uuid('transacao_pai_id').references((): AnyPgColumn => transacoes.id, { onDelete: 'set null' }),
   formaPagamento: formaPagamentoEnum('forma_pagamento_transacao'),
   responsavelId: uuid('responsavel_id').references(() => profiles.id, { onDelete: 'set null' }),
   comprovanteUrl: text('comprovante_url'),
@@ -323,7 +323,7 @@ export const tarefas = pgTable('tarefas', {
   recorrencia: tarefaRecorrenciaEnum('recorrencia').notNull().default('nenhuma'),
   recorrenciaDias: jsonb('recorrencia_dias'), // number[] p/ 'personalizada' (0=dom..6=sab)
   ehMolde: boolean('eh_molde').notNull().default(false),
-  tarefaMaeId: uuid('tarefa_mae_id').references((): any => tarefas.id, { onDelete: 'cascade' }),
+  tarefaMaeId: uuid('tarefa_mae_id').references((): AnyPgColumn => tarefas.id, { onDelete: 'cascade' }),
   ativa: boolean('ativa').notNull().default(true), // no MOLDE: false = série encerrada
   concluidaEm: timestamp('concluida_em', { withTimezone: true }),
   descricao: text('descricao'),

@@ -59,10 +59,14 @@ export default function ChatIaPage() {
   const [carregando, setCarregando] = useState(false)
   const fimRef = useRef<HTMLDivElement>(null)
 
-  // Restaurar histórico do localStorage na montagem
+  // Restaurar histórico do localStorage na montagem — via timeout 0 para não
+  // fazer setState SÍNCRONO dentro do effect (regra react-hooks).
   useEffect(() => {
-    const salvo = carregarHistorico()
-    if (salvo.length > 0) setMensagens(salvo)
+    const t = setTimeout(() => {
+      const salvo = carregarHistorico()
+      if (salvo.length > 0) setMensagens(salvo)
+    }, 0)
+    return () => clearTimeout(t)
   }, [])
 
   // Persistir mensagens no localStorage sempre que mudam

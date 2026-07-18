@@ -49,17 +49,22 @@ export function BuscaGlobal() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  // Debounce da busca (300ms).
+  // Debounce da busca (300ms). Todo setState acontece DENTRO do timeout
+  // (assíncrono) — nada de setState síncrono em effect (regra react-hooks).
   useEffect(() => {
-    if (termo.trim().length < 2) {
-      setResultado(null)
-      return
-    }
-    const t = setTimeout(async () => {
-      const r = await buscarGlobal(termo)
-      setResultado(r)
-      setAberto(true)
-    }, 300)
+    const curto = termo.trim().length < 2
+    const t = setTimeout(
+      async () => {
+        if (curto) {
+          setResultado(null)
+          return
+        }
+        const r = await buscarGlobal(termo)
+        setResultado(r)
+        setAberto(true)
+      },
+      curto ? 0 : 300,
+    )
     return () => clearTimeout(t)
   }, [termo])
 

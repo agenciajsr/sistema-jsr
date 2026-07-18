@@ -20,17 +20,22 @@ export function useRefreshPeriodico({
 } = {}) {
   const router = useRouter()
 
-  // `pausado` lido via ref atualizada a cada render: o interval e os listeners
-  // são criados UMA vez — mudar o estado do CrmView não recria nada.
+  // `pausado` lido via ref (atualizada em effect, não durante o render —
+  // regra react-hooks/refs): o interval e os listeners são criados UMA vez.
   const pausadoRef = useRef(pausado)
-  pausadoRef.current = pausado
+  useEffect(() => {
+    pausadoRef.current = pausado
+  }, [pausado])
 
   // Timestamp do último refresh (throttle): evita refresh duplo quando focus e
-  // visibilitychange disparam juntos ao voltar para a aba.
-  const ultimoRefreshRef = useRef(Date.now())
+  // visibilitychange disparam juntos. Inicializado no effect (Date.now() é
+  // impuro para inicializador de render — regra react-hooks/purity).
+  const ultimoRefreshRef = useRef(0)
 
   useEffect(() => {
     const THROTTLE_MS = 5_000
+    // Monta "agora": o throttle vale desde o mount (o dado acabou de vir do server).
+    ultimoRefreshRef.current = Date.now()
 
     function refrescar() {
       if (pausadoRef.current) return

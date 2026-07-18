@@ -172,9 +172,11 @@ export function NovoRelatorioDialog({ open, onOpenChange, clientes, configParaEd
   const compiladoRef = useRef<HTMLTextAreaElement>(null)
   const blocoRefs = useRef<(HTMLTextAreaElement | null)[]>([])
 
-  // (Re)carregar estado ao abrir
+  // (Re)carregar estado ao abrir — timeout 0 para o reset em lote não ser
+  // setState síncrono dentro do effect (regra react-hooks).
   useEffect(() => {
     if (!open) return
+    const t = setTimeout(() => {
     setEtapa('config')
     setBuscaCampanhas('')
     if (configParaEditar) {
@@ -216,19 +218,25 @@ export function NovoRelatorioDialog({ open, onOpenChange, clientes, configParaEd
     }
     setPreview(null)
     setAvisosPreview([])
+    }, 0)
+    return () => clearTimeout(t)
   }, [open, configParaEditar])
 
-  // Carregar contas + campanhas quando o cliente muda
+  // Carregar contas + campanhas quando o cliente muda (timeout 0: sem
+  // setState síncrono no effect — regra react-hooks).
   useEffect(() => {
-    if (!clienteId) {
-      setContas([])
-      return
-    }
-    setCarregandoContas(true)
-    listarContasComCampanhas(clienteId)
-      .then(setContas)
-      .catch(() => setContas([]))
-      .finally(() => setCarregandoContas(false))
+    const t = setTimeout(() => {
+      if (!clienteId) {
+        setContas([])
+        return
+      }
+      setCarregandoContas(true)
+      listarContasComCampanhas(clienteId)
+        .then(setContas)
+        .catch(() => setContas([]))
+        .finally(() => setCarregandoContas(false))
+    }, 0)
+    return () => clearTimeout(t)
   }, [clienteId])
 
   function inserirNoTextarea(
