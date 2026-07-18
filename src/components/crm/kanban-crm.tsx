@@ -361,6 +361,10 @@ export function KanbanCrm({
       toast.error(`Card movido, mas a reunião não foi criada: ${result.error}`)
     } else if ('data' in result && result.data?.avisoCalendar) {
       toast.warning(result.data.avisoCalendar)
+    } else if ('data' in result && result.data?.meetLink) {
+      toast.success('Reunião agendada — Meet criado e convite enviado ao lead.', {
+        description: result.data.meetLink,
+      })
     } else {
       toast.success('Reunião agendada e evento criado no Google Calendar.')
     }

@@ -29,6 +29,7 @@ export type EventoAgenda = {
   local?: string
   descricao?: string
   link?: string
+  meetLink?: string
 }
 
 /** Chamada autenticada ao Calendar. Lança NAO_CONECTADO quando não há token. */
@@ -68,6 +69,7 @@ function mapEvento(ev: GoogleEvent): EventoAgenda {
     local: ev.location,
     descricao: ev.description,
     link: ev.htmlLink,
+    meetLink: ev.hangoutLink,
   }
 }
 
@@ -134,18 +136,40 @@ type CriarInput = {
   local?: string
   inicio: string // RFC3339 com offset de Brasília
   fim: string // RFC3339 com offset de Brasília
+  /** E-mails convidados — o Google envia o convite (sendUpdates=all). */
+  convidados?: string[]
+  /** true = evento nasce com sala do Google Meet (conferenceDataVersion=1). */
+  criarMeet?: boolean
 }
 
-/** Cria um evento no Google Calendar. */
+/** Cria um evento no Google Calendar (opcionalmente com Meet + convidados). */
 export async function criarEvento(input: CriarInput): Promise<EventoAgenda> {
-  const body = {
+  const convidados = (input.convidados ?? []).filter(Boolean)
+  const body: Record<string, unknown> = {
     summary: input.titulo,
     description: input.descricao,
     location: input.local,
     start: { dateTime: input.inicio, timeZone: TZ_BRASILIA },
     end: { dateTime: input.fim, timeZone: TZ_BRASILIA },
   }
-  const raw = await calendarFetch('', { method: 'POST', body: JSON.stringify(body) })
+  if (convidados.length > 0) {
+    body.attendees = convidados.map((email) => ({ email }))
+  }
+  if (input.criarMeet) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    }
+  }
+
+  const params = new URLSearchParams()
+  if (input.criarMeet) params.set('conferenceDataVersion', '1')
+  if (convidados.length > 0) params.set('sendUpdates', 'all')
+  const query = params.size > 0 ? `?${params.toString()}` : ''
+
+  const raw = await calendarFetch(query, { method: 'POST', body: JSON.stringify(body) })
   return mapEvento(googleEventSchema.parse(raw))
 }
 

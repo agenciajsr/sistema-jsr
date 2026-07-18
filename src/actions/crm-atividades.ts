@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { db } from '@/lib/db'
-import { crmOportunidades, crmTarefas } from '@/lib/db/schema'
+import { crmContatos, crmOportunidades, crmTarefas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
@@ -187,18 +187,40 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
       detalhe: titulo,
     })
 
-    // Evento no Google Calendar — try/catch PRÓPRIO: NAO_CONECTADO ou erro da
-    // API nunca falham a action (a atividade já está criada e fica).
+    // E-mail do lead (se cadastrado) — vira convidado do evento e o Google
+    // envia o convite automaticamente (sendUpdates=all).
+    let emailLead: string | null = null
+    if (oportunidade.contatoId) {
+      const [contato] = await db
+        .select({ email: crmContatos.email })
+        .from(crmContatos)
+        .where(eq(crmContatos.id, oportunidade.contatoId))
+        .limit(1)
+      emailLead = contato?.email ?? null
+    }
+
+    // Evento no Google Calendar COM sala do Meet — try/catch PRÓPRIO:
+    // NAO_CONECTADO ou erro da API nunca falham a action (a atividade fica).
     let eventoCriado = false
+    let meetLink: string | undefined
     let avisoCalendar: string | undefined
     try {
-      await criarEvento({
+      const evento = await criarEvento({
         titulo,
         descricao: v.observacao,
         inicio: `${v.data}T${v.horaInicio}:00-03:00`,
         fim: `${v.data}T${v.horaFim}:00-03:00`,
+        criarMeet: true,
+        convidados: emailLead ? [emailLead] : [],
       })
       eventoCriado = true
+      meetLink = evento.meetLink
+
+      // Guarda o link do Meet nas notas da atividade (visível na ficha).
+      if (meetLink) {
+        const notas = v.observacao ? `${v.observacao}\n\nLink do Meet: ${meetLink}` : `Link do Meet: ${meetLink}`
+        await db.update(crmTarefas).set({ notas }).where(eq(crmTarefas.id, tarefa.id))
+      }
     } catch (e) {
       console.error('[criarReuniaoCrm] Google Calendar', e)
       avisoCalendar =
@@ -206,7 +228,7 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
     }
 
     revalidatePath('/crm')
-    return { data: { id: tarefa.id, eventoCriado, avisoCalendar } }
+    return { data: { id: tarefa.id, eventoCriado, meetLink, avisoCalendar } }
   } catch (e) {
     console.error('[criarReuniaoCrm]', e)
     return { error: 'Não foi possível criar a reunião.' }

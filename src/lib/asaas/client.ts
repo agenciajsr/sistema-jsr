@@ -31,7 +31,7 @@ const erroAsaasSchema = z
   })
   .passthrough()
 
-async function requisicao(path: string, init: { method: 'GET' | 'POST' | 'DELETE'; body?: unknown }): Promise<unknown> {
+async function requisicao(path: string, init: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown }): Promise<unknown> {
   const chave = process.env.ASAAS_API_KEY
   if (!chave) throw new AsaasIndisponivelError()
 
@@ -77,12 +77,52 @@ export async function criarCliente({
     body: {
       name: nome,
       cpfCnpj,
+      // Explícito: notificações do Asaas LIGADAS para o customer.
+      notificationDisabled: false,
       ...(email ? { email } : {}),
       ...(telefone ? { mobilePhone: telefone } : {}),
     },
   })
   const dados = clienteAsaasSchema.parse(json)
+
+  // Best-effort: liga e-mail + SMS + WhatsApp em todas as notificações do
+  // customer (os 3 canais são grátis no Asaas; o cliente que não olha e-mail
+  // vê o WhatsApp). Falha aqui NUNCA quebra o cadastro.
+  try {
+    await ativarCanaisNotificacao(dados.id)
+  } catch (e) {
+    console.warn('[asaas] customer criado, mas falhou ao ligar os canais de notificação:', e)
+  }
+
   return { id: dados.id }
+}
+
+const notificacoesSchema = z.object({
+  data: z.array(z.object({ id: z.string() }).passthrough()).optional().default([]),
+})
+
+/**
+ * Liga e-mail, SMS e WhatsApp em TODAS as notificações do customer
+ * (GET /customers/{id}/notifications → PUT /notifications/batch).
+ */
+export async function ativarCanaisNotificacao(customerId: string): Promise<void> {
+  const raw = await requisicao(`/customers/${customerId}/notifications`, { method: 'GET' })
+  const lista = notificacoesSchema.parse(raw)
+  if (lista.data.length === 0) return
+
+  await requisicao('/notifications/batch', {
+    method: 'PUT',
+    body: {
+      customer: customerId,
+      notifications: lista.data.map((n) => ({
+        id: n.id,
+        enabled: true,
+        emailEnabledForCustomer: true,
+        smsEnabledForCustomer: true,
+        whatsappEnabledForCustomer: true,
+      })),
+    },
+  })
 }
 
 const cobrancaAsaasSchema = z

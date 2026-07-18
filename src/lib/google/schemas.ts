@@ -33,6 +33,8 @@ export const googleEventSchema = z.object({
   description: z.string().optional(),
   location: z.string().optional(),
   htmlLink: z.string().optional(),
+  // Link do Google Meet quando o evento nasce com conferência (createRequest).
+  hangoutLink: z.string().optional(),
   start: googleEventDateTimeSchema.optional().default({}),
   end: googleEventDateTimeSchema.optional().default({}),
 })
