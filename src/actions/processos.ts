@@ -25,7 +25,7 @@ export async function gerarChecklistProcesso(clienteId: string, tipo: TipoProces
   if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
 
   const criados = await gerarProcessoParaCliente(clienteId, tipo)
-  if (criados === 0) return { error: 'Checklist ja existe ou o modelo esta vazio.' }
+  if (criados === 0) return { error: 'Tarefa do processo ja existe ou o modelo esta vazio.' }
 
   revalidarFicha(clienteId)
   return { data: { criados } }
