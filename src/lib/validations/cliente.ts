@@ -11,6 +11,9 @@ export const clienteSchema = z.object({
     message: 'Selecione um nicho válido',
   }),
   status: z.enum(['ativo', 'pausado', 'encerrado', 'aguardando_inicio', 'em_aviso']).default('ativo'),
+  // Obrigatório quando status = encerrado (validado no superRefine abaixo) —
+  // fica documentado NO cliente por que ele saiu.
+  motivoEncerramento: z.string().optional(),
   // Contato
   contatoNome: z.string().optional(),
   contatoTelefone: z.string().optional(),
@@ -44,6 +47,14 @@ export const clienteSchema = z.object({
   origemCliente: z.string().optional(),
   objetivoPrincipal: z.string().optional(),
   linkDrive: z.string().url('Link inválido').optional().or(z.literal('')),
+}).superRefine((v, ctx) => {
+  if (v.status === 'encerrado' && !v.motivoEncerramento?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['motivoEncerramento'],
+      message: 'Informe o motivo do encerramento',
+    })
+  }
 })
 
 export type ClienteInput = z.infer<typeof clienteSchema>

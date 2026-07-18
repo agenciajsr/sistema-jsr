@@ -3,7 +3,7 @@
 // timeline do CRM, transações financeiras e clientes novos.
 // Queries SEQUENCIAIS (pool max=3, memória do projeto), cada uma com LIMIT.
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gte, lt } from 'drizzle-orm'
 
 import { db } from '@/lib/db'
 import {
@@ -22,7 +22,9 @@ export type ItemFeed = {
   quando: Date
 }
 
-const LIMITE_POR_FONTE = 40
+const LIMITE_POR_FONTE = 60
+
+export type JanelaFeed = { de: Date; ate: Date }
 
 // Rótulos pt-BR dos tipos da timeline do CRM (os mais comuns; desconhecido
 // cai no próprio tipo com underscores trocados por espaço).
@@ -46,8 +48,9 @@ function rotuloCrm(tipo: string): string {
   return ROTULO_CRM[tipo] ?? tipo.replaceAll('_', ' ')
 }
 
-export async function getFeedAtividades(): Promise<ItemFeed[]> {
+export async function getFeedAtividades(janela: JanelaFeed): Promise<ItemFeed[]> {
   const itens: ItemFeed[] = []
+  const { de, ate } = janela
 
   // (1) Acompanhamentos por cliente.
   try {
@@ -61,6 +64,7 @@ export async function getFeedAtividades(): Promise<ItemFeed[]> {
       })
       .from(acompanhamentos)
       .innerJoin(clientes, eq(acompanhamentos.clienteId, clientes.id))
+      .where(and(gte(acompanhamentos.createdAt, de), lt(acompanhamentos.createdAt, ate)))
       .orderBy(desc(acompanhamentos.createdAt))
       .limit(LIMITE_POR_FONTE)
     for (const r of rows) {
@@ -91,6 +95,7 @@ export async function getFeedAtividades(): Promise<ItemFeed[]> {
       })
       .from(crmAtividades)
       .leftJoin(crmContatos, eq(crmAtividades.contatoId, crmContatos.id))
+      .where(and(gte(crmAtividades.createdAt, de), lt(crmAtividades.createdAt, ate)))
       .orderBy(desc(crmAtividades.createdAt))
       .limit(LIMITE_POR_FONTE)
     for (const r of rows) {
@@ -119,6 +124,7 @@ export async function getFeedAtividades(): Promise<ItemFeed[]> {
         createdAt: transacoes.createdAt,
       })
       .from(transacoes)
+      .where(and(gte(transacoes.createdAt, de), lt(transacoes.createdAt, ate)))
       .orderBy(desc(transacoes.createdAt))
       .limit(LIMITE_POR_FONTE)
     for (const r of rows) {
@@ -140,6 +146,7 @@ export async function getFeedAtividades(): Promise<ItemFeed[]> {
     const rows = await db
       .select({ id: clientes.id, nome: clientes.nome, createdAt: clientes.createdAt })
       .from(clientes)
+      .where(and(gte(clientes.createdAt, de), lt(clientes.createdAt, ate)))
       .orderBy(desc(clientes.createdAt))
       .limit(LIMITE_POR_FONTE)
     for (const r of rows) {
@@ -155,5 +162,5 @@ export async function getFeedAtividades(): Promise<ItemFeed[]> {
     console.error('[feed] clientes indisponiveis', e)
   }
 
-  return itens.sort((a, b) => b.quando.getTime() - a.quando.getTime()).slice(0, 80)
+  return itens.sort((a, b) => b.quando.getTime() - a.quando.getTime()).slice(0, 150)
 }

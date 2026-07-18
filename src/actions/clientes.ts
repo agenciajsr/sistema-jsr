@@ -22,6 +22,9 @@ function clienteParaDb(data: ClienteInput) {
     verbaMensal: data.verbaMensal != null ? String(data.verbaMensal) : null,
     ticketMedio: data.ticketMedio != null ? String(data.ticketMedio) : null,
     servicosContratados: data.servicosContratados ?? [],
+    // Só clientes ENCERRADOS carregam motivo de encerramento (reativar limpa).
+    motivoEncerramento:
+      data.status === 'encerrado' ? (data.motivoEncerramento?.trim() ?? null) : null,
   }
 }
 

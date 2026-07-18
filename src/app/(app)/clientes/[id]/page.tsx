@@ -684,6 +684,7 @@ export default async function ClienteDetalhePage({
           <SaidaCliente
             clienteId={cliente.id}
             encerrado={cliente.status === 'encerrado'}
+            motivoEncerramento={cliente.motivoEncerramento}
             itens={itensSaida}
           />
         </TabsContent>

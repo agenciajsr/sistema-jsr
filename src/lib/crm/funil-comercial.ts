@@ -2,9 +2,17 @@
 // e merge dos agregados em estrutura pronta para a UI.
 // Módulo puro: zero imports de db/auth/react (decisão 260714-ita).
 
-export type PresetPeriodo = 'este-mes' | 'mes-passado' | 'ultimos-30' | 'este-ano'
+export type PresetPeriodo =
+  | 'hoje'
+  | 'ontem'
+  | 'este-mes'
+  | 'mes-passado'
+  | 'ultimos-30'
+  | 'este-ano'
 
 export const PRESETS_PERIODO: PresetPeriodo[] = [
+  'hoje',
+  'ontem',
   'este-mes',
   'mes-passado',
   'ultimos-30',
@@ -49,6 +57,17 @@ export function calcularPeriodo(preset: PresetPeriodo, hojeISO: string): Periodo
   const ano = hoje.getUTCFullYear()
   const mes = hoje.getUTCMonth()
   const dia = hoje.getUTCDate()
+
+  if (preset === 'hoje') {
+    const ontem = somarDias(hojeISO, -1)
+    return { inicio: hojeISO, fim: hojeISO, inicioAnterior: ontem, fimAnterior: ontem }
+  }
+
+  if (preset === 'ontem') {
+    const ontem = somarDias(hojeISO, -1)
+    const anteontem = somarDias(hojeISO, -2)
+    return { inicio: ontem, fim: ontem, inicioAnterior: anteontem, fimAnterior: anteontem }
+  }
 
   if (preset === 'este-mes') {
     const anoAnt = mes === 0 ? ano - 1 : ano

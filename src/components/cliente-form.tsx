@@ -558,6 +558,7 @@ function ClienteFormEditar({
 
   const tipoPessoa = watch('tipoPessoa')
   const agendamento = watch('agendamentoPosts')
+  const statusAtual = watch('status')
 
   function onSubmit(values: ClienteInput) {
     startTransition(async () => {
@@ -668,6 +669,22 @@ function ClienteFormEditar({
               )}
             />
           </div>
+
+          {/* Encerrar é decisão séria: exige o MOTIVO documentado no cliente
+              (aparece na ficha; alimenta o aprendizado de churn). */}
+          {statusAtual === 'encerrado' && (
+            <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <Label htmlFor="motivoEncerramento">Motivo do encerramento *</Label>
+              <Textarea
+                id="motivoEncerramento"
+                {...register('motivoEncerramento')}
+                placeholder="Ex.: corte de orçamento, insatisfação com resultados, fechou a empresa…"
+              />
+              {errors.motivoEncerramento && (
+                <p className="text-sm text-destructive">{errors.motivoEncerramento.message}</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

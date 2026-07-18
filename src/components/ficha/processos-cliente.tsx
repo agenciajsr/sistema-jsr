@@ -343,10 +343,12 @@ export function OnboardingCliente({
 export function SaidaCliente({
   clienteId,
   encerrado,
+  motivoEncerramento,
   itens,
 }: {
   clienteId: string
   encerrado: boolean
+  motivoEncerramento: string | null
   itens: ItemProcesso[]
 }) {
   if (!encerrado && itens.length === 0) return null
@@ -357,6 +359,12 @@ export function SaidaCliente({
         <h2 className="text-[20px] leading-tight font-semibold">Saída do cliente</h2>
         <ModeloDialog tipo="saida" />
       </div>
+      {motivoEncerramento && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium">Motivo do encerramento</p>
+          <p className="text-muted-foreground">{motivoEncerramento}</p>
+        </div>
+      )}
       <ChecklistProcesso
         clienteId={clienteId}
         tipo="saida"

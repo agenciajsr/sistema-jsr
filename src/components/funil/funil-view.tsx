@@ -18,6 +18,8 @@ import type { DashboardComercial } from '@/lib/crm/dados-funil'
 import type { KpiComVariacao, PresetPeriodo } from '@/lib/crm/funil-comercial'
 
 const ROTULOS_PERIODO: Record<PresetPeriodo, string> = {
+  hoje: 'Hoje',
+  ontem: 'Ontem',
   'este-mes': 'Este mês',
   'mes-passado': 'Mês passado',
   'ultimos-30': 'Últimos 30 dias',

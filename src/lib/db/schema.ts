@@ -68,6 +68,9 @@ export const clientes = pgTable('clientes', {
   // Por que o cliente está "em atenção" (status em_aviso) — gestão de crise.
   // Migration 0035. Nulo quando o cliente não está em atenção.
   motivoAtencao: text('motivo_atencao'),
+  // Por que o cliente foi encerrado — obrigatório ao mudar o status para
+  // 'encerrado' (migration 0036); alimenta o aprendizado de churn.
+  motivoEncerramento: text('motivo_encerramento'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

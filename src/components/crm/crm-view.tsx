@@ -79,21 +79,54 @@ import type { CrmVisaoGeral } from '@/lib/crm/dados'
 // + abas Kanban/Lista + busca + filtros por servico/origem + filtro de período
 // (client-side, por data de criação) + gerenciamento de pipelines.
 
-// Opções do filtro de período do header: null = todo o período.
-const OPCOES_PERIODO: { dias: number | null; rotulo: string }[] = [
-  { dias: null, rotulo: 'Todo o período' },
-  { dias: 7, rotulo: 'Últimos 7 dias' },
-  { dias: 30, rotulo: 'Últimos 30 dias' },
-  { dias: 90, rotulo: 'Últimos 90 dias' },
+// Filtro de período do header: null = todo o período; presets relativos
+// (hoje/ontem/últimos N dias) ou um DIA específico escolhido no calendário.
+type FiltroPeriodoCrm =
+  | null
+  | { tipo: 'hoje' }
+  | { tipo: 'ontem' }
+  | { tipo: 'dias'; dias: number }
+  | { tipo: 'dia'; iso: string }
+
+const OPCOES_PERIODO: { valor: FiltroPeriodoCrm; rotulo: string }[] = [
+  { valor: null, rotulo: 'Todo o período' },
+  { valor: { tipo: 'hoje' }, rotulo: 'Hoje' },
+  { valor: { tipo: 'ontem' }, rotulo: 'Ontem' },
+  { valor: { tipo: 'dias', dias: 7 }, rotulo: 'Últimos 7 dias' },
+  { valor: { tipo: 'dias', dias: 30 }, rotulo: 'Últimos 30 dias' },
+  { valor: { tipo: 'dias', dias: 90 }, rotulo: 'Últimos 90 dias' },
 ]
+
+const MS_DIA = 24 * 60 * 60 * 1000
+
+/** Janela [de, ate) em ms do filtro; null = sem recorte. */
+function janelaDoFiltro(f: FiltroPeriodoCrm): [number, number] | null {
+  if (f == null) return null
+  const agora = new Date()
+  const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime()
+  if (f.tipo === 'hoje') return [inicioHoje, inicioHoje + MS_DIA]
+  if (f.tipo === 'ontem') return [inicioHoje - MS_DIA, inicioHoje]
+  if (f.tipo === 'dias') return [agora.getTime() - f.dias * MS_DIA, agora.getTime() + MS_DIA]
+  const de = new Date(`${f.iso}T00:00:00`).getTime()
+  return [de, de + MS_DIA]
+}
+
+function rotuloDoFiltro(f: FiltroPeriodoCrm): string {
+  if (f == null) return 'Todo o período'
+  if (f.tipo === 'dia') return f.iso.split('-').reverse().join('/')
+  return (
+    OPCOES_PERIODO.find((op) => JSON.stringify(op.valor) === JSON.stringify(f))?.rotulo ??
+    'Período'
+  )
+}
 
 export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const router = useRouter()
   const [busca, setBusca] = useState('')
   const [filtroServicos, setFiltroServicos] = useState<Set<string>>(new Set())
   const [filtroOrigens, setFiltroOrigens] = useState<Set<string>>(new Set())
-  // Período em dias (null = todo o período): recorta os cards pela data de criação.
-  const [filtroPeriodo, setFiltroPeriodo] = useState<number | null>(null)
+  // Período (null = todo o período): recorta os cards pela data de criação.
+  const [filtroPeriodo, setFiltroPeriodo] = useState<FiltroPeriodoCrm>(null)
 
   // Gerenciamento de pipelines.
   const [dialogPipeline, setDialogPipeline] = useState<'nova' | 'renomear' | null>(null)
@@ -151,9 +184,8 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
   const oportunidadesVisiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     if (!termo && !temFiltro && filtroPeriodo == null) return undefined
-    // Data-limite do período: criadas antes dela saem do recorte.
-    const limite =
-      filtroPeriodo != null ? Date.now() - filtroPeriodo * 24 * 60 * 60 * 1000 : null
+    // Janela [de, ate) do período: criadas fora dela saem do recorte.
+    const janela = janelaDoFiltro(filtroPeriodo)
     const ids = new Set<string>()
     const todas = [
       ...dados.colunas.map((c) => c.oportunidades),
@@ -169,7 +201,10 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
         }
         if (filtroServicos.size > 0 && !filtroServicos.has(o.servico ?? '')) continue
         if (filtroOrigens.size > 0 && !filtroOrigens.has(o.origem ?? 'outro')) continue
-        if (limite != null && new Date(o.createdAt).getTime() < limite) continue
+        if (janela != null) {
+          const t = new Date(o.createdAt).getTime()
+          if (t < janela[0] || t >= janela[1]) continue
+        }
         ids.add(o.id)
       }
     }
@@ -365,21 +400,36 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
               size="sm"
             >
               <CalendarDays className="size-4" />
-              {OPCOES_PERIODO.find((op) => op.dias === filtroPeriodo)?.rotulo ??
-                'Todo o período'}
+              {rotuloDoFiltro(filtroPeriodo)}
               <ChevronDown className="size-4 opacity-60" aria-hidden />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-56">
             {OPCOES_PERIODO.map((op) => (
               <DropdownMenuItem
                 key={op.rotulo}
-                onClick={() => setFiltroPeriodo(op.dias)}
+                onClick={() => setFiltroPeriodo(op.valor)}
               >
                 <span className="flex-1">{op.rotulo}</span>
-                {op.dias === filtroPeriodo && <Check className="size-4 text-primary" />}
+                {JSON.stringify(op.valor) === JSON.stringify(filtroPeriodo) && (
+                  <Check className="size-4 text-primary" />
+                )}
               </DropdownMenuItem>
             ))}
+            {/* Data específica (personalizado): recorta um único dia. */}
+            <div className="border-t px-2 py-1.5">
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Data específica
+                <input
+                  type="date"
+                  value={filtroPeriodo?.tipo === 'dia' ? filtroPeriodo.iso : ''}
+                  onChange={(e) =>
+                    setFiltroPeriodo(e.target.value ? { tipo: 'dia', iso: e.target.value } : null)
+                  }
+                  className="h-7 flex-1 rounded-md border border-border bg-background px-1.5 text-xs outline-none"
+                />
+              </label>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

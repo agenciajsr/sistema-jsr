@@ -37,6 +37,7 @@ export default async function EditarClientePage({
           nome: cliente.nome,
           nicho: cliente.nicho,
           status: cliente.status,
+          motivoEncerramento: cliente.motivoEncerramento ?? '',
           contatoNome: cliente.contatoNome ?? '',
           contatoTelefone: cliente.contatoTelefone ?? '',
           contatoEmail: cliente.contatoEmail ?? '',

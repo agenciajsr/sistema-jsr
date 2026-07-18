@@ -4,7 +4,8 @@ import { ptBR } from 'date-fns/locale/pt-BR'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getFeedAtividades, type ItemFeed } from '@/lib/acompanhamento/feed'
+import { FiltroFeed } from '@/components/acompanhamento/filtro-feed'
+import { getFeedAtividades, type ItemFeed, type JanelaFeed } from '@/lib/acompanhamento/feed'
 import { cn } from '@/lib/utils'
 
 // Backstop contra o timeout de 300s da Vercel (padrão das páginas do grupo app).
@@ -26,8 +27,31 @@ function rotuloDia(d: Date): string {
   return format(d, "dd/MM/yyyy (EEEE)", { locale: ptBR })
 }
 
-export default async function AcompanhamentoPage() {
-  const itens = await getFeedAtividades()
+// Resolve o período da URL numa janela [de, ate). Dias no fuso LOCAL do
+// servidor (São Paulo na Vercel — memória vercel-regiao-saopaulo).
+function resolverJanela(periodo?: string, dia?: string): JanelaFeed {
+  const umDia = 24 * 60 * 60 * 1000
+  if (dia && /^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+    const de = new Date(`${dia}T00:00:00-03:00`)
+    return { de, ate: new Date(de.getTime() + umDia) }
+  }
+  const hoje = new Date()
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+  const amanha = new Date(inicioHoje.getTime() + umDia)
+  if (periodo === 'hoje') return { de: inicioHoje, ate: amanha }
+  if (periodo === 'ontem') return { de: new Date(inicioHoje.getTime() - umDia), ate: inicioHoje }
+  if (periodo === '30d') return { de: new Date(inicioHoje.getTime() - 29 * umDia), ate: amanha }
+  // default: 7 dias
+  return { de: new Date(inicioHoje.getTime() - 6 * umDia), ate: amanha }
+}
+
+export default async function AcompanhamentoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ periodo?: string; dia?: string }>
+}) {
+  const sp = await searchParams
+  const itens = await getFeedAtividades(resolverJanela(sp.periodo, sp.dia))
 
   // Agrupa por dia preservando a ordem (mais recente primeiro).
   const grupos: [string, ItemFeed[]][] = []
@@ -46,6 +70,8 @@ export default async function AcompanhamentoPage() {
           Tudo que aconteceu na agência — clientes, CRM e financeiro em ordem cronológica.
         </p>
       </div>
+
+      <FiltroFeed />
 
       <Card className="border-none shadow-[var(--shadow-sm)]">
         <CardHeader className="flex flex-row items-center gap-2">
