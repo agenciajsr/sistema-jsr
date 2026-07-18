@@ -15,6 +15,7 @@ import {
   ListChecks,
   Megaphone,
   Plug,
+  Radar,
   Target,
   TrendingUp,
   Users,
@@ -88,6 +89,7 @@ const secoes: NavSecao[] = [
       { title: 'Tarefas', url: '/tarefas', icon: ListChecks },
       { title: 'Agenda', url: '/agenda', icon: CalendarDays },
       // "Checklists" saiu do menu: o checklist agora vive DENTRO da tarefa (/tarefas).
+      { title: 'Acompanhamento', url: '/acompanhamento', icon: Radar },
       { title: 'Documentos', url: '/documentos', icon: Folder },
     ],
   },
