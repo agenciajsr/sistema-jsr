@@ -18,6 +18,7 @@ import {
   retentarAsaasNaFatura,
 } from '@/lib/cobrancas/gerar'
 import { registrarReceitaDaCobranca } from '@/lib/cobrancas/receita'
+import { gerarProcessoParaCliente } from '@/lib/processos/gerar'
 import { asaasDisponivel, confirmarRecebimentoEmDinheiro } from '@/lib/asaas/client'
 
 export type ResultadoAcaoCobranca =
@@ -275,6 +276,8 @@ export async function confirmarRecebimentoManual(cobrancaId: string): Promise<Re
   })
   if (cliente && cliente.status !== 'ativo') {
     await db.update(clientes).set({ status: 'ativo' }).where(eq(clientes.id, cobranca.clienteId))
+    // Fase 6: ativação gera o checklist de onboarding (idempotente).
+    await gerarProcessoParaCliente(cobranca.clienteId, 'onboarding')
   }
 
   let aviso: string | undefined

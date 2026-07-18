@@ -22,6 +22,9 @@ export type TipoAlerta =
   | 'fatura_vencida'
   | 'assinatura_pendente'
   | 'sla_primeiro_contato'
+  // Processos do cliente (17/jul/2026): onboarding parado e sinal de churn.
+  | 'onboarding_parado'
+  | 'risco_churn'
 
 export type SeveridadeAlerta = 'critico' | 'atencao' | 'info'
 

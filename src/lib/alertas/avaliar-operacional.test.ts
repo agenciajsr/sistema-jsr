@@ -4,9 +4,13 @@ import {
   avaliarAssinaturaPendente,
   avaliarCobrancas,
   avaliarSlaPrimeiroContato,
+  avaliarOnboardingParado,
+  avaliarRiscoChurn,
   type CobrancaInput,
   type ContratoAssinaturaInput,
   type OportunidadeSlaInput,
+  type OnboardingInput,
+  type RiscoChurnInput,
 } from './avaliar-operacional'
 
 const HOJE = new Date('2026-07-17T12:00:00-03:00')
@@ -177,5 +181,76 @@ describe('avaliarSlaPrimeiroContato', () => {
   it('sem nome de contato usa o titulo do negocio', () => {
     const alertas = avaliarSlaPrimeiroContato([oportunidade({ contatoNome: null })], HOJE)
     expect(alertas[0].clienteNome).toBe('Trafego Pago - Loja X')
+  })
+})
+
+function onboarding(extra: Partial<OnboardingInput>): OnboardingInput {
+  return {
+    clienteId: 'cli-1',
+    clienteNome: 'Cliente Teste',
+    pendentes: 3,
+    iniciadoEm: new Date('2026-07-01T12:00:00-03:00'),
+    ...extra,
+  }
+}
+
+describe('avaliarOnboardingParado', () => {
+  it('pendentes ha mais de 7 dias → onboarding_parado', () => {
+    const alertas = avaliarOnboardingParado([onboarding({})], HOJE)
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0].tipo).toBe('onboarding_parado')
+    expect(alertas[0].severidade).toBe('atencao')
+    expect(alertas[0].id).toBe('onboarding-cli-1')
+    expect(alertas[0].detalhe).toContain('3 itens')
+  })
+
+  it('sem pendentes → nada', () => {
+    expect(avaliarOnboardingParado([onboarding({ pendentes: 0 })], HOJE)).toHaveLength(0)
+  })
+
+  it('iniciado ha menos de 7 dias → nada', () => {
+    const alertas = avaliarOnboardingParado(
+      [onboarding({ iniciadoEm: new Date('2026-07-14T12:00:00-03:00') })],
+      HOJE,
+    )
+    expect(alertas).toHaveLength(0)
+  })
+
+  it('singular: 1 item pendente', () => {
+    const alertas = avaliarOnboardingParado([onboarding({ pendentes: 1 })], HOJE)
+    expect(alertas[0].detalhe).toContain('1 item pendente')
+  })
+})
+
+function riscoChurn(extra: Partial<RiscoChurnInput>): RiscoChurnInput {
+  return {
+    clienteId: 'cli-1',
+    clienteNome: 'Cliente Teste',
+    status: 'ativo',
+    faturasVencidas: 1,
+    ...extra,
+  }
+}
+
+describe('avaliarRiscoChurn', () => {
+  it('cliente ativo com fatura vencida → risco_churn', () => {
+    const alertas = avaliarRiscoChurn([riscoChurn({})])
+    expect(alertas).toHaveLength(1)
+    expect(alertas[0].tipo).toBe('risco_churn')
+    expect(alertas[0].severidade).toBe('atencao')
+    expect(alertas[0].id).toBe('risco-churn-cli-1')
+  })
+
+  it('cliente ja em_aviso → nada (ja esta em gestao de crise)', () => {
+    expect(avaliarRiscoChurn([riscoChurn({ status: 'em_aviso' })])).toHaveLength(0)
+  })
+
+  it('sem fatura vencida → nada', () => {
+    expect(avaliarRiscoChurn([riscoChurn({ faturasVencidas: 0 })])).toHaveLength(0)
+  })
+
+  it('plural: 2 faturas vencidas', () => {
+    const alertas = avaliarRiscoChurn([riscoChurn({ faturasVencidas: 2 })])
+    expect(alertas[0].detalhe).toContain('2 faturas vencidas')
   })
 })

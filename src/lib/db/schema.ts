@@ -65,6 +65,9 @@ export const clientes = pgTable('clientes', {
   metaCpa: numeric('meta_cpa', { precision: 10, scale: 2 }),
   metaCpl: numeric('meta_cpl', { precision: 10, scale: 2 }),
   metaRoas: numeric('meta_roas', { precision: 10, scale: 2 }),
+  // Por que o cliente está "em atenção" (status em_aviso) — gestão de crise.
+  // Migration 0035. Nulo quando o cliente não está em atenção.
+  motivoAtencao: text('motivo_atencao'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -259,6 +262,38 @@ export const checklistItems = pgTable('checklist_items', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   clienteIdx: index('checklist_items_cliente_id_idx').on(table.clienteId),
+}))
+
+// --- Processos do cliente: Onboarding e Retenção (migration 0035) ---
+// Modelo editável (processo_modelo_itens) + instância por cliente
+// (processo_itens). Ao ativar um cliente, o checklist de onboarding nasce do
+// modelo vigente (idempotente); ao colocar em atenção, nasce o de retenção.
+
+export const processoModeloItens = pgTable('processo_modelo_itens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tipo: text('tipo').notNull(), // 'onboarding' | 'retencao'
+  titulo: text('titulo').notNull(),
+  ordem: integer('ordem').notNull().default(0),
+  // Item opcional (ex.: kickoff) pode ser marcado "não se aplica" sem pesar no progresso.
+  opcional: boolean('opcional').notNull().default(false),
+  ativo: boolean('ativo').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const processoItens = pgTable('processo_itens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clienteId: uuid('cliente_id').notNull().references(() => clientes.id, { onDelete: 'cascade' }),
+  tipo: text('tipo').notNull(), // 'onboarding' | 'retencao'
+  titulo: text('titulo').notNull(),
+  ordem: integer('ordem').notNull().default(0),
+  opcional: boolean('opcional').notNull().default(false),
+  status: text('status').notNull().default('pendente'), // 'pendente' | 'concluido' | 'nao_se_aplica'
+  concluidoEm: timestamp('concluido_em', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  clienteTipoIdx: index('processo_itens_cliente_tipo_idx').on(table.clienteId, table.tipo),
 }))
 
 // --- Módulo Tarefas (estilo ClickUp) ---

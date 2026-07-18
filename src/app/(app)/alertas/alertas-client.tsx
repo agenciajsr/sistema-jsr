@@ -65,6 +65,8 @@ const TIPO_ICON: Record<TipoAlerta, React.ComponentType<{ className?: string }>>
   fatura_vencida: Wallet,
   assinatura_pendente: Calendar,
   sla_primeiro_contato: UserX,
+  onboarding_parado: Repeat,
+  risco_churn: AlertTriangle,
 }
 
 const TIPO_LABEL: Record<TipoAlerta, string> = {
@@ -88,6 +90,8 @@ const TIPO_LABEL: Record<TipoAlerta, string> = {
   fatura_vencida: 'Fatura vencida',
   assinatura_pendente: 'Assinatura',
   sla_primeiro_contato: '1º contato',
+  onboarding_parado: 'Onboarding',
+  risco_churn: 'Risco de churn',
 }
 
 /** Tipos ligados a campanha/conta — ganham o atalho "Ver campanha". */

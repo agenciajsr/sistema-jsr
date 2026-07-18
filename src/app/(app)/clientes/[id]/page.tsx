@@ -46,7 +46,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getCurrentUser } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { clientes } from '@/lib/db/schema'
+import { clientes, processoItens } from '@/lib/db/schema'
+import { asc } from 'drizzle-orm'
+import {
+  OnboardingCliente,
+  RetencaoCliente,
+  type ItemProcesso,
+} from '@/components/ficha/processos-cliente'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
@@ -167,6 +173,40 @@ export default async function ClienteDetalhePage({
   // nunca em Promise.all — quick-260717-i26).
   const tarefasFicha = await getTarefasDoClienteFicha(id)
   const asaasConfigurado = asaasDisponivel()
+
+  // Processos (Onboarding/Retenção — Fase 6): query SEQUENCIAL; try/catch
+  // porque as tabelas são da migration 0035 (degradação graciosa).
+  let itensOnboarding: ItemProcesso[] = []
+  let itensRetencao: ItemProcesso[] = []
+  try {
+    const processos = await db
+      .select({
+        id: processoItens.id,
+        tipo: processoItens.tipo,
+        titulo: processoItens.titulo,
+        ordem: processoItens.ordem,
+        opcional: processoItens.opcional,
+        status: processoItens.status,
+        concluidoEm: processoItens.concluidoEm,
+      })
+      .from(processoItens)
+      .where(eq(processoItens.clienteId, id))
+      .orderBy(asc(processoItens.ordem))
+    for (const p of processos) {
+      const item: ItemProcesso = {
+        id: p.id,
+        titulo: p.titulo,
+        ordem: p.ordem,
+        opcional: p.opcional,
+        status: p.status,
+        concluidoEm: p.concluidoEm ? p.concluidoEm.toISOString() : null,
+      }
+      if (p.tipo === 'onboarding') itensOnboarding.push(item)
+      else if (p.tipo === 'retencao') itensRetencao.push(item)
+    }
+  } catch (e) {
+    console.error('[ficha] processos indisponiveis (migration 0035 pendente?)', e)
+  }
 
   // D-03: exclusão de cliente/contrato é exclusiva do Admin.
   const isAdmin = usuario?.role === 'admin'
@@ -318,6 +358,10 @@ export default async function ClienteDetalhePage({
           <TabsTrigger value="checklist">✅ Checklist</TabsTrigger>
           <TabsTrigger value="tarefas">
             🗒️ Tarefas{tarefasFicha.abertas.length > 0 && ` (${tarefasFicha.abertas.length})`}
+          </TabsTrigger>
+          <TabsTrigger value="onboarding">🚀 Onboarding</TabsTrigger>
+          <TabsTrigger value="retencao">
+            {cliente.status === 'em_aviso' ? '🚨' : '🛟'} Retenção
           </TabsTrigger>
           <TabsTrigger value="acompanhamento">📝 Acompanhamento</TabsTrigger>
           <TabsTrigger value="documentos">📎 Documentos</TabsTrigger>
@@ -618,6 +662,22 @@ export default async function ClienteDetalhePage({
         {/* Aba: Tarefas do cliente (dados REAIS — tabela tarefas) */}
         <TabsContent value="tarefas" className="space-y-4">
           <TarefasCliente abertas={tarefasFicha.abertas} historico={tarefasFicha.historico} />
+        </TabsContent>
+
+        {/* Aba: Onboarding (Fase 6 do funil) */}
+        <TabsContent value="onboarding" className="space-y-4">
+          <OnboardingCliente clienteId={cliente.id} itens={itensOnboarding} />
+        </TabsContent>
+
+        {/* Aba: Retenção / gestão de crise */}
+        <TabsContent value="retencao" className="space-y-4">
+          <RetencaoCliente
+            clienteId={cliente.id}
+            clienteNome={cliente.nome}
+            emAtencao={cliente.status === 'em_aviso'}
+            motivoAtencao={cliente.motivoAtencao}
+            itens={itensRetencao}
+          />
         </TabsContent>
 
         {/* Aba: Acompanhamento (dados REAIS, persistidos) */}

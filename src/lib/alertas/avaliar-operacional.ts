@@ -130,6 +130,84 @@ export function avaliarAssinaturaPendente(
   return alertas
 }
 
+// --- 4. Onboarding parado ---
+
+export type OnboardingInput = {
+  clienteId: string
+  clienteNome: string
+  pendentes: number
+  iniciadoEm: Date
+}
+
+/** Dias desde o início do onboarding antes de alertar itens pendentes. */
+export const DIAS_LIMITE_ONBOARDING = 7
+
+/**
+ * Cliente com checklist de onboarding iniciado há MAIS de 7 dias e ainda com
+ * itens pendentes → 'onboarding_parado' (atenção).
+ */
+export function avaliarOnboardingParado(
+  processos: OnboardingInput[],
+  agora: Date = new Date(),
+): Alerta[] {
+  const alertas: Alerta[] = []
+
+  for (const p of processos) {
+    if (p.pendentes <= 0) continue
+    const dias = Math.floor((agora.getTime() - p.iniciadoEm.getTime()) / (24 * 60 * 60 * 1000))
+    if (dias <= DIAS_LIMITE_ONBOARDING) continue
+
+    alertas.push({
+      id: `onboarding-${p.clienteId}`,
+      tipo: 'onboarding_parado',
+      severidade: 'atencao',
+      titulo: 'Onboarding parado',
+      detalhe: `${p.pendentes} ite${p.pendentes !== 1 ? 'ns' : 'm'} pendente${p.pendentes !== 1 ? 's' : ''} há ${dias} dias — retomar o onboarding do cliente`,
+      clienteNome: p.clienteNome,
+      clienteId: p.clienteId,
+      dataRelevante: p.iniciadoEm.toISOString().slice(0, 10),
+    })
+  }
+
+  return alertas
+}
+
+// --- 5. Risco de churn (sugestão de "colocar em atenção") ---
+
+export type RiscoChurnInput = {
+  clienteId: string
+  clienteNome: string
+  status: string // status do CLIENTE ('ativo' | 'em_aviso' | ...)
+  faturasVencidas: number
+}
+
+/**
+ * Cliente ATIVO (ainda não em atenção) com fatura vencida → 'risco_churn'
+ * (atenção): o sistema SUGERE colocar em atenção; quem decide é o usuário.
+ * Cliente já em_aviso não gera sugestão (já está em gestão de crise).
+ */
+export function avaliarRiscoChurn(clientesRows: RiscoChurnInput[]): Alerta[] {
+  const alertas: Alerta[] = []
+
+  for (const c of clientesRows) {
+    if (c.status !== 'ativo') continue
+    if (c.faturasVencidas <= 0) continue
+
+    alertas.push({
+      id: `risco-churn-${c.clienteId}`,
+      tipo: 'risco_churn',
+      severidade: 'atencao',
+      titulo: 'Sinal de risco de churn',
+      detalhe: `${c.faturasVencidas} fatura${c.faturasVencidas !== 1 ? 's' : ''} vencida${c.faturasVencidas !== 1 ? 's' : ''} — considerar colocar o cliente em atenção`,
+      clienteNome: c.clienteNome,
+      clienteId: c.clienteId,
+      dataRelevante: new Date().toISOString().slice(0, 10),
+    })
+  }
+
+  return alertas
+}
+
 // --- 3. SLA de 1º contato (CRM) ---
 
 export type OportunidadeSlaInput = {

@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { clientes, cobrancas } from '@/lib/db/schema'
 import { registrarReceitaDaCobranca, removerReceitaDaCobranca } from '@/lib/cobrancas/receita'
+import { gerarProcessoParaCliente } from '@/lib/processos/gerar'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -109,6 +110,8 @@ export async function POST(request: Request) {
       if (cliente && cliente.status !== 'ativo') {
         await db.update(clientes).set({ status: 'ativo' }).where(eq(clientes.id, cobranca.clienteId))
         console.log(`[webhook asaas] cliente ${cobranca.clienteId} ativado pela fatura paga.`)
+        // Fase 6: ativação gera o checklist de onboarding (idempotente).
+        await gerarProcessoParaCliente(cobranca.clienteId, 'onboarding')
       }
     } else if (event === 'PAYMENT_OVERDUE') {
       if (cobranca.status !== 'paga') {

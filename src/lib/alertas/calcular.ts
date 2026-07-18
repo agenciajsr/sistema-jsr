@@ -6,8 +6,8 @@
  * regra de negócio — apenas orquestra as queries e os avaliadores existentes.
  */
 
-import { and, eq, isNull, lte, or } from 'drizzle-orm'
-import { addDays, format } from 'date-fns'
+import { and, eq, isNull, lte, or, sql } from 'drizzle-orm'
+import { addDays, addHours, format } from 'date-fns'
 
 import { db } from '@/lib/db'
 import {
@@ -18,7 +18,9 @@ import {
   cobrancas,
   crmOportunidades,
   crmContatos,
+  processoItens,
 } from '@/lib/db/schema'
+import { SLA_PRIMEIRO_CONTATO_HORAS } from '@/lib/crm/sla-contato'
 import {
   avaliarContratos,
   avaliarTransacoes,
@@ -30,10 +32,14 @@ import {
   avaliarCobrancas,
   avaliarAssinaturaPendente,
   avaliarSlaPrimeiroContato,
+  avaliarOnboardingParado,
+  avaliarRiscoChurn,
   DIAS_AVISO_FATURA,
   type CobrancaInput,
   type ContratoAssinaturaInput,
   type OportunidadeSlaInput,
+  type OnboardingInput,
+  type RiscoChurnInput,
 } from '@/lib/alertas/avaliar-operacional'
 import { getAlertasCampanhas } from '@/lib/saude/avaliar-campanhas'
 import { getAlertasCampanhaDiarios } from '@/lib/alertas/regras-campanha'
@@ -205,8 +211,8 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
         and(
           eq(crmOportunidades.status, 'aberta'),
           isNull(crmOportunidades.primeiroContatoEm),
-          // Corte grosso no banco: só leads criados há mais de 24h importam.
-          lte(crmOportunidades.createdAt, addDays(hoje, -1)),
+          // Corte grosso no banco: só leads criados há mais tempo que o SLA importam.
+          lte(crmOportunidades.createdAt, addHours(hoje, -SLA_PRIMEIRO_CONTATO_HORAS)),
         ),
       )
     const slaInputs: OportunidadeSlaInput[] = slaRows.map((r) => ({
@@ -225,6 +231,50 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
     )
   }
 
+  // (d) Onboarding parado: clientes com itens pendentes há mais de 7 dias.
+  let alertasOnboarding: Alerta[] = []
+  try {
+    const onboardingRows = await db
+      .select({
+        clienteId: processoItens.clienteId,
+        clienteNome: clientes.nome,
+        pendentes: sql<number>`count(*) FILTER (WHERE ${processoItens.status} = 'pendente')::int`,
+        iniciadoEm: sql<Date>`min(${processoItens.createdAt})`,
+      })
+      .from(processoItens)
+      .innerJoin(clientes, eq(processoItens.clienteId, clientes.id))
+      .where(eq(processoItens.tipo, 'onboarding'))
+      .groupBy(processoItens.clienteId, clientes.nome)
+    const onboardingInputs: OnboardingInput[] = onboardingRows.map((r) => ({
+      clienteId: r.clienteId,
+      clienteNome: r.clienteNome,
+      pendentes: r.pendentes,
+      iniciadoEm: r.iniciadoEm instanceof Date ? r.iniciadoEm : new Date(r.iniciadoEm),
+    }))
+    alertasOnboarding = avaliarOnboardingParado(onboardingInputs, hoje)
+  } catch (erro) {
+    console.error('[calcularAlertasAtuais] falha ao avaliar onboarding (migration 0035 pendente?) — ignorando', erro)
+  }
+
+  // (e) Risco de churn: cliente ATIVO com fatura vencida → sugerir atenção.
+  let alertasChurn: Alerta[] = []
+  try {
+    const churnRows: RiscoChurnInput[] = await db
+      .select({
+        clienteId: clientes.id,
+        clienteNome: clientes.nome,
+        status: clientes.status,
+        faturasVencidas: sql<number>`count(*)::int`,
+      })
+      .from(cobrancas)
+      .innerJoin(clientes, eq(cobrancas.clienteId, clientes.id))
+      .where(eq(cobrancas.status, 'vencida'))
+      .groupBy(clientes.id, clientes.nome, clientes.status)
+    alertasChurn = avaliarRiscoChurn(churnRows)
+  } catch (erro) {
+    console.error('[calcularAlertasAtuais] falha ao avaliar risco de churn — ignorando', erro)
+  }
+
   // Unificar e ordenar
   return ordenarPorSeveridade([
     ...alertasContratos,
@@ -236,5 +286,7 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
     ...alertasFaturas,
     ...alertasAssinatura,
     ...alertasSla,
+    ...alertasOnboarding,
+    ...alertasChurn,
   ])
 }
