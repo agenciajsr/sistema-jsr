@@ -143,6 +143,15 @@ function formatarDia(iso: string): string {
   return `${dia}/${mes}/${d.getFullYear()}`
 }
 
+/** "16/07/2026, às 13:39:40" — data de criação com hora completa. */
+function formatarDiaHora(iso: string): string {
+  const d = new Date(iso)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${formatarDia(iso)}, às ${hh}:${mm}:${ss}`
+}
+
 function formatarHora(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -900,7 +909,7 @@ export function FichaLead({
                         <Input id="ficha-cargo" {...register('cargo')} />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Lead cadastrado em {formatarDia(ficha.perfil.createdAt)}.
+                        Lead cadastrado em {formatarDiaHora(ficha.perfil.createdAt)}.
                       </p>
                     </TabsContent>
                   </Tabs>

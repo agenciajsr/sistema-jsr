@@ -758,6 +758,20 @@ export async function atualizarAtendenteLead(contatoId: string, donoId: string |
 
     if (!salvo) return { error: 'Lead nao encontrado.' }
 
+    // O card do kanban le o atendente da OPORTUNIDADE (dono_id), nao do
+    // contato — propaga para os negocios ABERTOS do lead (fechados preservam
+    // o historico de quem atendeu).
+    await db
+      .update(crmOportunidades)
+      .set({ donoId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(crmOportunidades.contatoId, contatoId),
+          eq(crmOportunidades.workspaceId, workspace.id),
+          eq(crmOportunidades.status, 'aberta'),
+        ),
+      )
+
     revalidatePath('/crm')
     return { data: { ok: true } }
   } catch (e) {
