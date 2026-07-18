@@ -46,7 +46,7 @@ import {
   COLUNA_HELPER,
   COLUNA_PONTO,
   COLUNA_BARRA,
-  agruparPorStatus,
+  agruparPorColuna,
   estatisticasDoQuadro,
   filtrarTarefas,
   rotuloDoDia,
@@ -120,8 +120,10 @@ export function TarefasQuadro({
     () => filtrarTarefas(doDia, { busca, prioridade, clienteId, responsavelId }),
     [doDia, busca, prioridade, clienteId, responsavelId]
   )
-  const colunas = useMemo(() => agruparPorStatus(visiveis), [visiveis])
-  const stats = useMemo(() => estatisticasDoQuadro(visiveis), [visiveis])
+  // (gp5): agrupamento pela COLUNA derivada — atrasadas saem de Pendentes/Em
+  // Andamento e ganham coluna própria (vermelha), sem status novo no banco.
+  const colunas = useMemo(() => agruparPorColuna(visiveis, dados.dia), [visiveis, dados.dia])
+  const stats = useMemo(() => estatisticasDoQuadro(visiveis, dados.dia), [visiveis, dados.dia])
 
   const filtrosAtivos = (clienteId !== TODOS ? 1 : 0) + (responsavelId !== TODOS ? 1 : 0)
   const ehHoje = dados.dia === dados.hoje
@@ -330,7 +332,14 @@ export function TarefasQuadro({
                   size="sm"
                   className="mt-2 w-full justify-start text-muted-foreground"
                 >
-                  <Link href={`/tarefas/nova?status=${s}&data=${dados.dia}`}>
+                  <Link
+                    href={
+                      // 'atrasada' é derivada — não existe como status na criação.
+                      s === 'atrasada'
+                        ? `/tarefas/nova?data=${dados.dia}`
+                        : `/tarefas/nova?status=${s}&data=${dados.dia}`
+                    }
+                  >
                     <Plus className="size-4" />
                     Adicionar tarefa
                   </Link>
@@ -345,7 +354,7 @@ export function TarefasQuadro({
           (backdrop-blur, mesmo tratamento do header sticky do layout). Reflete
           o que está visível pós-filtro (D-06). */}
       <Card className="sticky bottom-0 z-20 mt-auto -mx-6 -mb-6 rounded-none border-x-0 border-b-0 border-t bg-card/95 px-6 py-3 backdrop-blur-md lg:-mx-8 lg:-mb-8 lg:px-8">
-        <div className="grid grid-cols-2 items-center gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 items-center gap-4 sm:grid-cols-3 lg:grid-cols-7">
               <div>
                 <p className="text-2xl font-semibold tabular-nums">{stats.total}</p>
                 <p className="text-xs text-muted-foreground">Total de Tarefas</p>
@@ -356,7 +365,7 @@ export function TarefasQuadro({
 
               {COLUNAS_ORDEM.map((s) => (
                 <div key={s}>
-                  <p className="text-2xl font-semibold tabular-nums">{stats.porStatus[s]}</p>
+                  <p className="text-2xl font-semibold tabular-nums">{stats.porColuna[s]}</p>
                   <p className="text-xs text-muted-foreground">{COLUNA_LABEL[s]}</p>
                   <p className="text-xs text-muted-foreground">{COLUNA_HELPER[s]}</p>
                 </div>

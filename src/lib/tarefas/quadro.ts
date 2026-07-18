@@ -19,17 +19,32 @@ import {
   type TarefaPrioridade,
 } from './recorrencia'
 
-// --- As 4 colunas (D-02) ---
+// --- As colunas do quadro ---
+// (gp5): 'atrasada' é coluna DERIVADA — nunca vira status novo no banco/enum.
+// a_fazer/em_andamento com data anterior ao dia visualizado caem nela.
 
-/** Ordem EXATA das colunas do quadro (mockup 1). */
-export const COLUNAS_ORDEM: TarefaStatus[] = [
+/** Coluna do quadro: os 4 status reais + a derivada 'atrasada'. */
+export type ColunaQuadro = TarefaStatus | 'atrasada'
+
+/** Só os STATUS reais, para selects de status (detalhe/nova) — sem 'atrasada'. */
+export const STATUS_ORDEM: TarefaStatus[] = [
   'a_fazer',
   'em_andamento',
   'concluida',
   'nao_realizada',
 ]
 
-export const COLUNA_LABEL: Record<TarefaStatus, string> = {
+/** Ordem EXATA das colunas do quadro. Atraso primeiro: é o que mais importa ver. */
+export const COLUNAS_ORDEM: ColunaQuadro[] = [
+  'atrasada',
+  'a_fazer',
+  'em_andamento',
+  'concluida',
+  'nao_realizada',
+]
+
+export const COLUNA_LABEL: Record<ColunaQuadro, string> = {
+  atrasada: 'Atrasadas',
   a_fazer: 'Pendentes',
   em_andamento: 'Em Andamento',
   concluida: 'Concluídas',
@@ -37,7 +52,8 @@ export const COLUNA_LABEL: Record<TarefaStatus, string> = {
 }
 
 /** Helper abaixo do número, na barra de estatísticas do rodapé. */
-export const COLUNA_HELPER: Record<TarefaStatus, string> = {
+export const COLUNA_HELPER: Record<ColunaQuadro, string> = {
+  atrasada: 'Vencidas e abertas',
   a_fazer: 'Para fazer',
   em_andamento: 'Em progresso',
   concluida: 'Finalizadas',
@@ -46,7 +62,8 @@ export const COLUNA_HELPER: Record<TarefaStatus, string> = {
 
 // D-02: só tokens que JÁ existem em globals.css — zero cor nova inventada.
 /** Classe da bolinha do cabeçalho da coluna. */
-export const COLUNA_PONTO: Record<TarefaStatus, string> = {
+export const COLUNA_PONTO: Record<ColunaQuadro, string> = {
+  atrasada: 'bg-destructive',
   a_fazer: 'bg-chart-warning',
   em_andamento: 'bg-primary',
   concluida: 'bg-chart-success',
@@ -54,11 +71,28 @@ export const COLUNA_PONTO: Record<TarefaStatus, string> = {
 }
 
 /** Classe da linha colorida no topo da coluna. */
-export const COLUNA_BARRA: Record<TarefaStatus, string> = {
+export const COLUNA_BARRA: Record<ColunaQuadro, string> = {
+  atrasada: 'bg-destructive',
   a_fazer: 'bg-chart-warning',
   em_andamento: 'bg-primary',
   concluida: 'bg-chart-success',
   nao_realizada: 'bg-muted-foreground',
+}
+
+/**
+ * Coluna DERIVADA da tarefa no dia visualizado: aberta (a_fazer/em_andamento)
+ * com data anterior ao dia → 'atrasada'. Comparação de STRINGS 'YYYY-MM-DD'
+ * (nunca new Date — regra de fuso do projeto). Concluída/não realizada nunca
+ * atrasam.
+ */
+export function colunaDaTarefa(
+  tarefa: { status: TarefaStatus; data: string },
+  dia: string
+): ColunaQuadro {
+  if ((tarefa.status === 'a_fazer' || tarefa.status === 'em_andamento') && tarefa.data < dia) {
+    return 'atrasada'
+  }
+  return tarefa.status
 }
 
 /** O status como chip do mockup ("▶ Em Andamento" azul). Só tokens existentes. */
@@ -97,7 +131,7 @@ export const PRIORIDADE_CLASSE: Record<TarefaPrioridade, string> = {
 
 export type EstatisticasQuadro = {
   total: number
-  porStatus: Record<TarefaStatus, number>
+  porColuna: Record<ColunaQuadro, number>
   percentualConclusao: number
 }
 
@@ -122,19 +156,46 @@ export function agruparPorStatus<T extends { status: TarefaStatus }>(
   return grupos
 }
 
+/**
+ * (gp5) Agrupa pela COLUNA derivada do dia: atrasada sai de a_fazer/em_andamento
+ * e vai para 'atrasada'. As 5 chaves existem SEMPRE (mesmo vazias).
+ */
+export function agruparPorColuna<T extends { status: TarefaStatus; data: string }>(
+  tarefas: T[],
+  dia: string
+): Record<ColunaQuadro, T[]> {
+  const grupos: Record<ColunaQuadro, T[]> = {
+    atrasada: [],
+    a_fazer: [],
+    em_andamento: [],
+    concluida: [],
+    nao_realizada: [],
+  }
+  for (const tarefa of tarefas) {
+    const coluna = grupos[colunaDaTarefa(tarefa, dia)]
+    if (coluna) coluna.push(tarefa)
+  }
+  return grupos
+}
+
 /** D-06: reflete o que está VISÍVEL (pós-filtro), coerente com os contadores. */
-export function estatisticasDoQuadro(tarefas: { status: TarefaStatus }[]): EstatisticasQuadro {
-  const porStatus: Record<TarefaStatus, number> = {
+export function estatisticasDoQuadro(
+  tarefas: { status: TarefaStatus; data: string }[],
+  dia: string
+): EstatisticasQuadro {
+  const porColuna: Record<ColunaQuadro, number> = {
+    atrasada: 0,
     a_fazer: 0,
     em_andamento: 0,
     concluida: 0,
     nao_realizada: 0,
   }
   for (const tarefa of tarefas) {
-    if (porStatus[tarefa.status] !== undefined) porStatus[tarefa.status] += 1
+    const coluna = colunaDaTarefa(tarefa, dia)
+    if (porColuna[coluna] !== undefined) porColuna[coluna] += 1
   }
-  const total = COLUNAS_ORDEM.reduce((acc, s) => acc + porStatus[s], 0)
-  return { total, porStatus, percentualConclusao: percentualConclusao(porStatus.concluida, total) }
+  const total = COLUNAS_ORDEM.reduce((acc, s) => acc + porColuna[s], 0)
+  return { total, porColuna, percentualConclusao: percentualConclusao(porColuna.concluida, total) }
 }
 
 /** Guarda de divisão por zero: lista vazia devolve 0, nunca NaN. */

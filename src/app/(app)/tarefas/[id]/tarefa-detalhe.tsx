@@ -83,7 +83,7 @@ import {
   type TarefaPrioridade,
 } from '@/lib/tarefas/recorrencia'
 import {
-  COLUNAS_ORDEM,
+  STATUS_ORDEM,
   PRIORIDADE_CLASSE,
   STATUS_CLASSE,
   agruparChecklist,
@@ -682,7 +682,7 @@ export function TarefaDetalhe({
                       </Badge>
                     </SelectTrigger>
                     <SelectContent>
-                      {COLUNAS_ORDEM.map((s) => (
+                      {STATUS_ORDEM.map((s) => (
                         <SelectItem key={s} value={s}>
                           {STATUS_LABEL[s]}
                         </SelectItem>
