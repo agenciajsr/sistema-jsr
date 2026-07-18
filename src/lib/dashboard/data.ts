@@ -88,20 +88,11 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
   const ano = anoParam ?? agora.getFullYear()
   const hoje = agora.toISOString().slice(0, 10)
 
-  // Queries paralelas para performance
-  const [
-    mrrResult,
-    finResult,
-    clientesAtivosResult,
-    campanhasResult,
-    clientesComContas,
-    atividadeAcompResult,
-    atividadeTransResult,
-    atividadeClientesResult,
-    evolucaoResult,
-    contratosHistResult,
-    novosClientesResult,
-  ] = await Promise.all([
+  // Queries em LOTES SEQUENCIAIS de até 3 — NUNCA um Promise.all de 11:
+  // o pool tem max 3-5 conexões e a disputa (com outras páginas/cron) fazia a
+  // Visão Geral travar intermitente (mesma causa do freeze do /financeiro,
+  // quick 260713-usi). 4 idas ao banco em série ainda carregam em <2s.
+  const [mrrResult, finResult, clientesAtivosResult] = await Promise.all([
     // MRR: soma de contratos ativos
     db.select({
       total: sql<string>`coalesce(sum(${contratos.valorMensal}), '0')`,
@@ -127,7 +118,9 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
     db.select({ total: count() })
       .from(clientes)
       .where(eq(clientes.status, 'ativo')),
+  ])
 
+  const [campanhasResult, clientesComContas, atividadeAcompResult] = await Promise.all([
     // Campanhas ativas (distinct campaign_id nos últimos 7 dias) + em quantos
     // clientes distintos elas rodam (helper "Em N clientes" do KPI)
     db.select({
@@ -152,7 +145,9 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       .from(acompanhamentos)
       .orderBy(desc(acompanhamentos.createdAt))
       .limit(4),
+  ])
 
+  const [atividadeTransResult, atividadeClientesResult, evolucaoResult] = await Promise.all([
     // Transações recentes pagas (receitas)
     db.select({
       id: transacoes.id,
@@ -187,7 +182,9 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       .where(sql`${transacoes.data}::date >= (current_date - interval '6 months')`)
       .groupBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`)
       .orderBy(sql`to_char(${transacoes.data}::date, 'YYYY-MM')`),
+  ])
 
+  const [contratosHistResult, novosClientesResult] = await Promise.all([
     // Contratos vigentes nos últimos 6 meses (série histórica do MRR)
     db.select({
       valorMensal: contratos.valorMensal,
