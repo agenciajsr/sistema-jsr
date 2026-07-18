@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 
 import {
   agruparPorStatus,
+  agruparPorColuna,
+  colunaDaTarefa,
   estatisticasDoQuadro,
   percentualConclusao,
   progressoChecklist,
@@ -21,6 +23,7 @@ import {
   textoAtividade,
   corDaEtiqueta,
   COLUNAS_ORDEM,
+  STATUS_ORDEM,
 } from './quadro'
 import type { TarefaStatus, TarefaPrioridade } from './recorrencia'
 
@@ -29,10 +32,14 @@ function t<E extends Record<string, unknown>>(status: TarefaStatus, extra?: E) {
   return { status, ...(extra ?? ({} as E)) }
 }
 
+// Dia de referência dos testes do quadro: tarefas com esta data NÃO estão
+// atrasadas; datas anteriores caem na coluna derivada 'atrasada'.
+const DIA_REF = '2026-07-18'
+
 function lista(counts: Record<TarefaStatus, number>) {
-  const out: { status: TarefaStatus }[] = []
-  for (const s of COLUNAS_ORDEM) {
-    for (let i = 0; i < counts[s]; i++) out.push({ status: s })
+  const out: { status: TarefaStatus; data: string }[] = []
+  for (const s of STATUS_ORDEM) {
+    for (let i = 0; i < counts[s]; i++) out.push({ status: s, data: DIA_REF })
   }
   return out
 }
@@ -68,34 +75,102 @@ describe('agruparPorStatus', () => {
   })
 })
 
+describe('colunaDaTarefa', () => {
+  it('a_fazer/em_andamento com data anterior ao dia viram atrasada', () => {
+    expect(colunaDaTarefa({ status: 'a_fazer', data: '2026-07-17' }, DIA_REF)).toBe('atrasada')
+    expect(colunaDaTarefa({ status: 'em_andamento', data: '2026-07-01' }, DIA_REF)).toBe('atrasada')
+  })
+
+  it('a_fazer/em_andamento com data igual ao dia ficam na coluna propria', () => {
+    expect(colunaDaTarefa({ status: 'a_fazer', data: DIA_REF }, DIA_REF)).toBe('a_fazer')
+    expect(colunaDaTarefa({ status: 'em_andamento', data: DIA_REF }, DIA_REF)).toBe('em_andamento')
+  })
+
+  it('concluida/nao_realizada NUNCA viram atrasada, mesmo com data passada', () => {
+    expect(colunaDaTarefa({ status: 'concluida', data: '2026-07-01' }, DIA_REF)).toBe('concluida')
+    expect(colunaDaTarefa({ status: 'nao_realizada', data: '2026-07-01' }, DIA_REF)).toBe(
+      'nao_realizada'
+    )
+  })
+})
+
+describe('agruparPorColuna', () => {
+  it('devolve as 5 chaves SEMPRE, mesmo com entrada vazia', () => {
+    expect(agruparPorColuna([], DIA_REF)).toEqual({
+      atrasada: [],
+      a_fazer: [],
+      em_andamento: [],
+      concluida: [],
+      nao_realizada: [],
+    })
+  })
+
+  it('tarefa atrasada aparece SO em atrasada (sai de a_fazer/em_andamento)', () => {
+    const dados = [
+      { id: 'v1', status: 'a_fazer' as TarefaStatus, data: '2026-07-10' },
+      { id: 'v2', status: 'em_andamento' as TarefaStatus, data: '2026-07-10' },
+      { id: 'h1', status: 'a_fazer' as TarefaStatus, data: DIA_REF },
+    ]
+    const r = agruparPorColuna(dados, DIA_REF)
+    expect(r.atrasada.map((x) => x.id)).toEqual(['v1', 'v2'])
+    expect(r.a_fazer.map((x) => x.id)).toEqual(['h1'])
+    expect(r.em_andamento).toEqual([])
+  })
+
+  it('concluida antiga NAO entra em atrasada', () => {
+    const r = agruparPorColuna(
+      [{ id: 'c', status: 'concluida' as TarefaStatus, data: '2026-07-01' }],
+      DIA_REF
+    )
+    expect(r.atrasada).toEqual([])
+    expect(r.concluida.map((x) => x.id)).toEqual(['c'])
+  })
+})
+
 describe('estatisticasDoQuadro', () => {
   it('devolve zeros para lista vazia — nunca NaN', () => {
-    const r = estatisticasDoQuadro([])
+    const r = estatisticasDoQuadro([], DIA_REF)
     expect(r.total).toBe(0)
-    expect(r.porStatus).toEqual({ a_fazer: 0, em_andamento: 0, concluida: 0, nao_realizada: 0 })
+    expect(r.porColuna).toEqual({
+      atrasada: 0,
+      a_fazer: 0,
+      em_andamento: 0,
+      concluida: 0,
+      nao_realizada: 0,
+    })
     expect(r.percentualConclusao).toBe(0)
     expect(Number.isNaN(r.percentualConclusao)).toBe(false)
   })
 
-  it('18 tarefas (6/4/5/3) devolve os numeros do mockup', () => {
+  it('18 tarefas (6/4/5/3) sem atrasadas devolve os numeros do mockup (regressao)', () => {
     const r = estatisticasDoQuadro(
-      lista({ a_fazer: 6, em_andamento: 4, concluida: 5, nao_realizada: 3 })
+      lista({ a_fazer: 6, em_andamento: 4, concluida: 5, nao_realizada: 3 }),
+      DIA_REF
     )
     expect(r.total).toBe(18)
-    expect(r.porStatus.a_fazer).toBe(6)
-    expect(r.porStatus.em_andamento).toBe(4)
-    expect(r.porStatus.concluida).toBe(5)
-    expect(r.porStatus.nao_realizada).toBe(3)
+    expect(r.porColuna.atrasada).toBe(0)
+    expect(r.porColuna.a_fazer).toBe(6)
+    expect(r.porColuna.em_andamento).toBe(4)
+    expect(r.porColuna.concluida).toBe(5)
+    expect(r.porColuna.nao_realizada).toBe(3)
     expect(r.percentualConclusao).toBe(28) // 5/18 = 27.7 → 28
   })
 
-  it('total e a soma exata das 4 colunas', () => {
-    const r = estatisticasDoQuadro(
-      lista({ a_fazer: 2, em_andamento: 7, concluida: 1, nao_realizada: 4 })
-    )
-    const soma = COLUNAS_ORDEM.reduce((acc, s) => acc + r.porStatus[s], 0)
+  it('atrasadas contam na coluna atrasada e o total soma as 5', () => {
+    const dados = [
+      ...lista({ a_fazer: 2, em_andamento: 1, concluida: 1, nao_realizada: 0 }),
+      { status: 'a_fazer' as TarefaStatus, data: '2026-07-10' },
+      { status: 'em_andamento' as TarefaStatus, data: '2026-07-11' },
+    ]
+    const r = estatisticasDoQuadro(dados, DIA_REF)
+    expect(r.porColuna.atrasada).toBe(2)
+    expect(r.porColuna.a_fazer).toBe(2)
+    expect(r.porColuna.em_andamento).toBe(1)
+    const soma = COLUNAS_ORDEM.reduce((acc, s) => acc + r.porColuna[s], 0)
     expect(r.total).toBe(soma)
-    expect(r.total).toBe(14)
+    expect(r.total).toBe(6)
+    // percentualConclusao inalterado: concluidas/total.
+    expect(r.percentualConclusao).toBe(17) // 1/6
   })
 })
 
