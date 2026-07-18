@@ -46,13 +46,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getCurrentUser } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { clientes, processoItens } from '@/lib/db/schema'
-import { asc } from 'drizzle-orm'
+import { clientes, tarefas, tarefaChecklistItems } from '@/lib/db/schema'
+import { asc, and, inArray, or, sql } from 'drizzle-orm'
 import {
   OnboardingCliente,
   RetencaoCliente,
   SaidaCliente,
-  type ItemProcesso,
+  type ProcessoDaFicha,
 } from '@/components/ficha/processos-cliente'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
@@ -175,40 +175,73 @@ export default async function ClienteDetalhePage({
   const tarefasFicha = await getTarefasDoClienteFicha(id)
   const asaasConfigurado = asaasDisponivel()
 
-  // Processos (Onboarding/Retenção — Fase 6): query SEQUENCIAL; try/catch
-  // porque as tabelas são da migration 0035 (degradação graciosa).
-  const itensOnboarding: ItemProcesso[] = []
-  const itensRetencao: ItemProcesso[] = []
-  const itensSaida: ItemProcesso[] = []
+  // Processos (gp5): a fonte única é a TAREFA do processo (etiqueta técnica
+  // processo:{tipo} em tarefas.etiquetas) + o checklist dela. 2 queries
+  // SEQUENCIAIS (padrão do repo — nunca inflar o Promise.all); try/catch de
+  // degradação graciosa.
+  let processoOnboarding: ProcessoDaFicha | null = null
+  let processoRetencao: ProcessoDaFicha | null = null
+  let processoSaida: ProcessoDaFicha | null = null
   try {
-    const processos = await db
+    const tarefasProcesso = await db
       .select({
-        id: processoItens.id,
-        tipo: processoItens.tipo,
-        titulo: processoItens.titulo,
-        ordem: processoItens.ordem,
-        opcional: processoItens.opcional,
-        status: processoItens.status,
-        concluidoEm: processoItens.concluidoEm,
+        id: tarefas.id,
+        data: tarefas.data,
+        status: tarefas.status,
+        etiquetas: tarefas.etiquetas,
       })
-      .from(processoItens)
-      .where(eq(processoItens.clienteId, id))
-      .orderBy(asc(processoItens.ordem))
-    for (const p of processos) {
-      const item: ItemProcesso = {
-        id: p.id,
-        titulo: p.titulo,
-        ordem: p.ordem,
-        opcional: p.opcional,
-        status: p.status,
-        concluidoEm: p.concluidoEm ? p.concluidoEm.toISOString() : null,
+      .from(tarefas)
+      .where(
+        and(
+          eq(tarefas.clienteId, id),
+          eq(tarefas.ehMolde, false),
+          or(
+            sql`${tarefas.etiquetas} @> '["processo:onboarding"]'::jsonb`,
+            sql`${tarefas.etiquetas} @> '["processo:retencao"]'::jsonb`,
+            sql`${tarefas.etiquetas} @> '["processo:saida"]'::jsonb`,
+          ),
+        ),
+      )
+
+    const itensPorTarefa = new Map<string, ProcessoDaFicha['itens']>()
+    if (tarefasProcesso.length > 0) {
+      const itens = await db
+        .select({
+          id: tarefaChecklistItems.id,
+          tarefaId: tarefaChecklistItems.tarefaId,
+          texto: tarefaChecklistItems.texto,
+          concluido: tarefaChecklistItems.concluido,
+          ordem: tarefaChecklistItems.ordem,
+        })
+        .from(tarefaChecklistItems)
+        .where(
+          inArray(
+            tarefaChecklistItems.tarefaId,
+            tarefasProcesso.map((t) => t.id),
+          ),
+        )
+        .orderBy(asc(tarefaChecklistItems.ordem))
+      for (const item of itens) {
+        const lista = itensPorTarefa.get(item.tarefaId) ?? []
+        lista.push({ id: item.id, texto: item.texto, concluido: item.concluido, ordem: item.ordem })
+        itensPorTarefa.set(item.tarefaId, lista)
       }
-      if (p.tipo === 'onboarding') itensOnboarding.push(item)
-      else if (p.tipo === 'retencao') itensRetencao.push(item)
-      else if (p.tipo === 'saida') itensSaida.push(item)
+    }
+
+    for (const t of tarefasProcesso) {
+      const etiquetas = Array.isArray(t.etiquetas) ? (t.etiquetas as string[]) : []
+      const processo: ProcessoDaFicha = {
+        tarefaId: t.id,
+        data: t.data,
+        status: t.status,
+        itens: itensPorTarefa.get(t.id) ?? [],
+      }
+      if (etiquetas.includes('processo:onboarding')) processoOnboarding = processo
+      else if (etiquetas.includes('processo:retencao')) processoRetencao = processo
+      else if (etiquetas.includes('processo:saida')) processoSaida = processo
     }
   } catch (e) {
-    console.error('[ficha] processos indisponiveis (migration 0035 pendente?)', e)
+    console.error('[ficha] tarefas de processo indisponiveis', e)
   }
 
   // D-03: exclusão de cliente/contrato é exclusiva do Admin.
@@ -669,7 +702,7 @@ export default async function ClienteDetalhePage({
 
         {/* Aba: Onboarding (Fase 6 do funil) */}
         <TabsContent value="onboarding" className="space-y-4">
-          <OnboardingCliente clienteId={cliente.id} itens={itensOnboarding} />
+          <OnboardingCliente clienteId={cliente.id} processo={processoOnboarding} />
         </TabsContent>
 
         {/* Aba: Retenção / gestão de crise */}
@@ -679,13 +712,13 @@ export default async function ClienteDetalhePage({
             clienteNome={cliente.nome}
             emAtencao={cliente.status === 'em_aviso'}
             motivoAtencao={cliente.motivoAtencao}
-            itens={itensRetencao}
+            processo={processoRetencao}
           />
           <SaidaCliente
             clienteId={cliente.id}
             encerrado={cliente.status === 'encerrado'}
             motivoEncerramento={cliente.motivoEncerramento}
-            itens={itensSaida}
+            processo={processoSaida}
           />
         </TabsContent>
 

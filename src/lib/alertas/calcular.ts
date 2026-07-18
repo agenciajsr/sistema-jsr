@@ -18,7 +18,8 @@ import {
   cobrancas,
   crmOportunidades,
   crmContatos,
-  processoItens,
+  tarefas,
+  tarefaChecklistItems,
 } from '@/lib/db/schema'
 import { SLA_PRIMEIRO_CONTATO_HORAS } from '@/lib/crm/sla-contato'
 import {
@@ -232,28 +233,38 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
   }
 
   // (d) Onboarding parado: clientes com itens pendentes há mais de 7 dias.
+  // (gp5): a fonte é o checklist da TAREFA do processo (etiqueta técnica
+  // processo:onboarding em tarefas.etiquetas), não mais processo_itens.
   let alertasOnboarding: Alerta[] = []
   try {
     const onboardingRows = await db
       .select({
-        clienteId: processoItens.clienteId,
+        clienteId: tarefas.clienteId,
         clienteNome: clientes.nome,
-        pendentes: sql<number>`count(*) FILTER (WHERE ${processoItens.status} = 'pendente')::int`,
-        iniciadoEm: sql<Date>`min(${processoItens.createdAt})`,
+        pendentes: sql<number>`count(*) FILTER (WHERE NOT ${tarefaChecklistItems.concluido})::int`,
+        iniciadoEm: sql<Date>`min(${tarefas.createdAt})`,
       })
-      .from(processoItens)
-      .innerJoin(clientes, eq(processoItens.clienteId, clientes.id))
-      .where(eq(processoItens.tipo, 'onboarding'))
-      .groupBy(processoItens.clienteId, clientes.nome)
-    const onboardingInputs: OnboardingInput[] = onboardingRows.map((r) => ({
-      clienteId: r.clienteId,
-      clienteNome: r.clienteNome,
-      pendentes: r.pendentes,
-      iniciadoEm: r.iniciadoEm instanceof Date ? r.iniciadoEm : new Date(r.iniciadoEm),
-    }))
+      .from(tarefas)
+      .innerJoin(tarefaChecklistItems, eq(tarefaChecklistItems.tarefaId, tarefas.id))
+      .innerJoin(clientes, eq(tarefas.clienteId, clientes.id))
+      .where(
+        and(
+          eq(tarefas.ehMolde, false),
+          sql`${tarefas.etiquetas} @> '["processo:onboarding"]'::jsonb`,
+        ),
+      )
+      .groupBy(tarefas.clienteId, clientes.nome)
+    const onboardingInputs: OnboardingInput[] = onboardingRows
+      .filter((r) => r.clienteId !== null)
+      .map((r) => ({
+        clienteId: r.clienteId as string,
+        clienteNome: r.clienteNome,
+        pendentes: r.pendentes,
+        iniciadoEm: r.iniciadoEm instanceof Date ? r.iniciadoEm : new Date(r.iniciadoEm),
+      }))
     alertasOnboarding = avaliarOnboardingParado(onboardingInputs, hoje)
   } catch (erro) {
-    console.error('[calcularAlertasAtuais] falha ao avaliar onboarding (migration 0035 pendente?) — ignorando', erro)
+    console.error('[calcularAlertasAtuais] falha ao avaliar onboarding — ignorando', erro)
   }
 
   // (e) Risco de churn: cliente ATIVO com fatura vencida → sugerir atenção.

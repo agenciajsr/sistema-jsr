@@ -8,11 +8,10 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 
 import { db } from '@/lib/db'
-import { clientes, processoItens, processoModeloItens } from '@/lib/db/schema'
+import { clientes, processoModeloItens } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { gerarProcessoParaCliente, type TipoProcesso } from '@/lib/processos/gerar'
-
-const STATUS_VALIDOS = new Set(['pendente', 'concluido', 'nao_se_aplica'])
+import { toggleChecklistItemTarefa } from '@/actions/tarefas'
 
 function revalidarFicha(clienteId: string) {
   revalidatePath(`/clientes/${clienteId}`)
@@ -31,30 +30,15 @@ export async function gerarChecklistProcesso(clienteId: string, tipo: TipoProces
   return { data: { criados } }
 }
 
-/** Muda o status de um item do checklist (pendente/concluido/nao_se_aplica). */
-export async function atualizarStatusProcessoItem(itemId: string, status: string) {
-  const currentUser = await getCurrentUser()
-  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
-  if (!STATUS_VALIDOS.has(status)) return { error: 'Status invalido.' }
-
-  try {
-    const [salvo] = await db
-      .update(processoItens)
-      .set({
-        status,
-        concluidoEm: status === 'concluido' ? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(processoItens.id, itemId))
-      .returning({ clienteId: processoItens.clienteId })
-    if (!salvo) return { error: 'Item nao encontrado.' }
-
-    revalidarFicha(salvo.clienteId)
-    return { data: { ok: true } }
-  } catch (e) {
-    console.error('[atualizarStatusProcessoItem]', e)
-    return { error: 'Nao foi possivel atualizar o item.' }
-  }
+/**
+ * (gp5): alterna um item do checklist da TAREFA do processo. Wrapper fino
+ * sobre a action de tarefas (fonte única) que também revalida a ficha do
+ * cliente — a action original só revalida /tarefas.
+ */
+export async function alternarItemProcesso(itemId: string, concluido: boolean, clienteId: string) {
+  const r = await toggleChecklistItemTarefa(itemId, concluido)
+  if (!('error' in r) || !r.error) revalidarFicha(clienteId)
+  return r
 }
 
 // --- Modelo editável ---

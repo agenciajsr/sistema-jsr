@@ -1,17 +1,19 @@
 'use client'
 
 // Abas Onboarding e Retenção da ficha do cliente (Fase 6 do funil).
-// Checklist nasce do modelo editável (processo_modelo_itens); aqui o usuário
-// conclui itens, marca "não se aplica", edita o modelo e gerencia a atenção
-// (gestão de crise) do cliente.
+// (gp5): o processo agora É uma tarefa — o checklist exibido/operado aqui é o
+// checklist da TAREFA do processo (tarefa_checklist_items), fonte única.
+// O modelo editável (processo_modelo_itens) continua sendo a origem dos itens
+// ao gerar; a gestão de atenção (crise) do cliente segue igual.
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, ListChecks, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, ListChecks, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
-  atualizarStatusProcessoItem,
+  alternarItemProcesso,
   colocarClienteEmAtencao,
   criarModeloItem,
   excluirModeloItem,
@@ -20,7 +22,6 @@ import {
   listarModeloProcesso,
   removerClienteDaAtencao,
 } from '@/actions/processos'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,13 +37,21 @@ import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
+// (gp5): item do checklist da TAREFA do processo — binário (feito/não feito).
+// Itens opcionais já vêm com o sufixo ' (opcional)' no texto.
 export type ItemProcesso = {
   id: string
-  titulo: string
+  texto: string
+  concluido: boolean
   ordem: number
-  opcional: boolean
-  status: string // 'pendente' | 'concluido' | 'nao_se_aplica'
-  concluidoEm: string | null
+}
+
+/** A tarefa do processo do cliente, com seu checklist (montada na page). */
+export type ProcessoDaFicha = {
+  tarefaId: string
+  data: string
+  status: string
+  itens: ItemProcesso[]
 }
 
 type ItemModelo = {
@@ -54,33 +63,32 @@ type ItemModelo = {
 }
 
 function calcularProgresso(itens: ItemProcesso[]): { feitos: number; total: number; pct: number } {
-  const validos = itens.filter((i) => i.status !== 'nao_se_aplica')
-  const feitos = validos.filter((i) => i.status === 'concluido').length
-  const total = validos.length
+  const feitos = itens.filter((i) => i.concluido).length
+  const total = itens.length
   return { feitos, total, pct: total === 0 ? 0 : Math.round((feitos / total) * 100) }
 }
 
-// --- Checklist genérico (usado pelo onboarding e pela retenção) ---
+// --- Checklist genérico (usado pelo onboarding, retenção e saída) ---
 
 type TipoProcessoUi = 'onboarding' | 'retencao' | 'saida'
 
 function ChecklistProcesso({
   clienteId,
   tipo,
-  itens,
+  processo,
   vazioTexto,
 }: {
   clienteId: string
   tipo: TipoProcessoUi
-  itens: ItemProcesso[]
+  processo: ProcessoDaFicha | null
   vazioTexto: string
 }) {
   const router = useRouter()
   const [pendente, startTransition] = useTransition()
 
-  function mudarStatus(itemId: string, status: string) {
+  function alternar(itemId: string, concluido: boolean) {
     startTransition(async () => {
-      const r = await atualizarStatusProcessoItem(itemId, status)
+      const r = await alternarItemProcesso(itemId, concluido, clienteId)
       if (r.error) toast.error(r.error)
       else router.refresh()
     })
@@ -91,13 +99,13 @@ function ChecklistProcesso({
       const r = await gerarChecklistProcesso(clienteId, tipo)
       if (r.error) toast.error(r.error)
       else {
-        toast.success('Checklist criado a partir do modelo.')
+        toast.success('Tarefa do processo criada a partir do modelo.')
         router.refresh()
       }
     })
   }
 
-  if (itens.length === 0) {
+  if (!processo || processo.itens.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-8 text-center">
         <ListChecks className="size-8 text-muted-foreground" />
@@ -109,75 +117,50 @@ function ChecklistProcesso({
     )
   }
 
-  const { feitos, total, pct } = calcularProgresso(itens)
+  const { feitos, total, pct } = calcularProgresso(processo.itens)
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex items-center justify-between gap-2 text-sm">
           <span className="font-medium">
             Progresso: {feitos}/{total} {pct === 100 && '🎉'}
           </span>
-          <span className="text-muted-foreground">{pct}%</span>
+          <span className="flex items-center gap-3">
+            <span className="text-muted-foreground">{pct}%</span>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/tarefas/${processo.tarefaId}`}>
+                <ExternalLink className="size-3.5" /> Abrir tarefa
+              </Link>
+            </Button>
+          </span>
         </div>
         <Progress value={pct} />
       </div>
 
       <ul className="space-y-2">
-        {itens.map((item) => {
-          const concluido = item.status === 'concluido'
-          const na = item.status === 'nao_se_aplica'
-          return (
-            <li
-              key={item.id}
-              className={`flex flex-wrap items-center gap-2 rounded-lg border p-3 ${na ? 'opacity-50' : ''}`}
+        {processo.itens.map((item) => (
+          <li key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+            <button
+              type="button"
+              aria-label={item.concluido ? 'Reabrir item' : 'Concluir item'}
+              disabled={pendente}
+              onClick={() => alternar(item.id, !item.concluido)}
+              className={`flex size-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                item.concluido
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-input hover:border-primary'
+              }`}
             >
-              <button
-                type="button"
-                aria-label={concluido ? 'Reabrir item' : 'Concluir item'}
-                disabled={pendente || na}
-                onClick={() => mudarStatus(item.id, concluido ? 'pendente' : 'concluido')}
-                className={`flex size-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                  concluido
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-input hover:border-primary'
-                }`}
-              >
-                {concluido && <Check className="size-3.5" />}
-              </button>
-              <span className={`min-w-0 flex-1 text-sm ${concluido ? 'text-muted-foreground line-through' : ''} ${na ? 'line-through' : ''}`}>
-                {item.titulo}
-              </span>
-              {item.opcional && !na && (
-                <Badge variant="outline" className="text-[10px]">
-                  Opcional
-                </Badge>
-              )}
-              {na ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={pendente}
-                  onClick={() => mudarStatus(item.id, 'pendente')}
-                >
-                  <RotateCcw className="size-3.5" /> Reativar
-                </Button>
-              ) : (
-                !concluido && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground"
-                    disabled={pendente}
-                    onClick={() => mudarStatus(item.id, 'nao_se_aplica')}
-                  >
-                    Não se aplica
-                  </Button>
-                )
-              )}
-            </li>
-          )
-        })}
+              {item.concluido && <Check className="size-3.5" />}
+            </button>
+            <span
+              className={`min-w-0 flex-1 text-sm ${item.concluido ? 'text-muted-foreground line-through' : ''}`}
+            >
+              {item.texto}
+            </span>
+          </li>
+        ))}
       </ul>
     </div>
   )
@@ -314,10 +297,10 @@ function ModeloDialog({ tipo }: { tipo: TipoProcessoUi }) {
 
 export function OnboardingCliente({
   clienteId,
-  itens,
+  processo,
 }: {
   clienteId: string
-  itens: ItemProcesso[]
+  processo: ProcessoDaFicha | null
 }) {
   return (
     <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
@@ -328,7 +311,7 @@ export function OnboardingCliente({
       <ChecklistProcesso
         clienteId={clienteId}
         tipo="onboarding"
-        itens={itens}
+        processo={processo}
         vazioTexto="Este cliente ainda não tem checklist de onboarding. Ele é criado automaticamente quando o cliente vira ativo — ou gere agora a partir do modelo."
       />
     </section>
@@ -344,14 +327,14 @@ export function SaidaCliente({
   clienteId,
   encerrado,
   motivoEncerramento,
-  itens,
+  processo,
 }: {
   clienteId: string
   encerrado: boolean
   motivoEncerramento: string | null
-  itens: ItemProcesso[]
+  processo: ProcessoDaFicha | null
 }) {
-  if (!encerrado && itens.length === 0) return null
+  if (!encerrado && (!processo || processo.itens.length === 0)) return null
 
   return (
     <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
@@ -368,7 +351,7 @@ export function SaidaCliente({
       <ChecklistProcesso
         clienteId={clienteId}
         tipo="saida"
-        itens={itens}
+        processo={processo}
         vazioTexto="Cliente encerrado sem checklist de saída — gere a partir do modelo para encerrar tudo direitinho (campanhas, acessos, cobranças)."
       />
     </section>
@@ -382,13 +365,13 @@ export function RetencaoCliente({
   clienteNome,
   emAtencao,
   motivoAtencao,
-  itens,
+  processo,
 }: {
   clienteId: string
   clienteNome: string
   emAtencao: boolean
   motivoAtencao: string | null
-  itens: ItemProcesso[]
+  processo: ProcessoDaFicha | null
 }) {
   const router = useRouter()
   const [motivo, setMotivo] = useState('')
@@ -474,7 +457,7 @@ export function RetencaoCliente({
           <ChecklistProcesso
             clienteId={clienteId}
             tipo="retencao"
-            itens={itens}
+            processo={processo}
             vazioTexto="Sem checklist de retenção ainda — gere a partir do modelo para estruturar o plano de reversão."
           />
         </>
