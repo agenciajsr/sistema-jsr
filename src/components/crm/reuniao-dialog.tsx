@@ -114,7 +114,11 @@ export function ReuniaoDialog({
               id="reuniao-titulo"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              placeholder={nomeNegocio ? `Reunião — ${nomeNegocio}` : 'Reunião'}
+              placeholder={
+                nomeNegocio
+                  ? `Reunião Agência JSR — ${nomeNegocio.replace(/^Lead: /, '').replace(/ \(.+\)$/, '')}`
+                  : 'Reunião Agência JSR'
+              }
             />
           </div>
 

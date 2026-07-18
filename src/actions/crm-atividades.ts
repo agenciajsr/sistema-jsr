@@ -159,7 +159,22 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
 
     if (!oportunidade) return { error: 'Negócio não encontrado.' }
 
-    const titulo = v.titulo ?? `Reunião — ${oportunidade.titulo}`
+    // Nome e e-mail do lead ANTES do título: o convite chega no e-mail do
+    // lead, então o título default é "Reunião Agência JSR — {nome do lead}"
+    // (não o nome interno do negócio, que confundia quem recebia).
+    let emailLead: string | null = null
+    let nomeLead: string | null = null
+    if (oportunidade.contatoId) {
+      const [contato] = await db
+        .select({ email: crmContatos.email, nome: crmContatos.nome })
+        .from(crmContatos)
+        .where(eq(crmContatos.id, oportunidade.contatoId))
+        .limit(1)
+      emailLead = contato?.email ?? null
+      nomeLead = contato?.nome ?? null
+    }
+
+    const titulo = v.titulo ?? `Reunião Agência JSR — ${nomeLead ?? oportunidade.titulo}`
     const dataInicio = new Date(`${v.data}T${v.horaInicio}`)
     const dataFim = new Date(`${v.data}T${v.horaFim}`)
 
@@ -186,18 +201,6 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
       oportunidadeId: oportunidade.id,
       detalhe: titulo,
     })
-
-    // E-mail do lead (se cadastrado) — vira convidado do evento e o Google
-    // envia o convite automaticamente (sendUpdates=all).
-    let emailLead: string | null = null
-    if (oportunidade.contatoId) {
-      const [contato] = await db
-        .select({ email: crmContatos.email })
-        .from(crmContatos)
-        .where(eq(crmContatos.id, oportunidade.contatoId))
-        .limit(1)
-      emailLead = contato?.email ?? null
-    }
 
     // Evento no Google Calendar COM sala do Meet — try/catch PRÓPRIO:
     // NAO_CONECTADO ou erro da API nunca falham a action (a atividade fica).
