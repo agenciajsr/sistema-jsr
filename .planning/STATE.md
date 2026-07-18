@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260717-qq6 (alertas: inadimplência interna + assinatura pendente + SLA 1º contato 24h no CRM)"
-last_updated: "2026-07-17T22:50:00.000Z"
+stopped_at: "Concluído quick 260718-gp5 (processos criam TAREFA como fonte única + coluna Atrasadas no quadro)"
+last_updated: "2026-07-18T15:30:00.000Z"
 last_activity: "2026-07-17 - Completed quick task 260717-qq6: 3 alertas operacionais + carimbo primeiro_contato_em + indicador de SLA no kanban (migration 0034 GERADA, NÃO aplicada)"
 progress:
   total_phases: 6
@@ -178,8 +178,10 @@ None yet.
 | 260717-qq6 | Alertas operacionais internos — régua de inadimplência sobre cobrancas (fatura_vencendo/fatura_vencida, chaves de dedup distintas), assinatura_pendente (>3d em aguardando_assinatura, fallback createdAt) e SLA de 1º contato 24h no CRM (carimbo primeiro_contato_em idempotente nas actions, indicador no card com vermelho ao estourar, alerta sla_primeiro_contato); avaliadores puros sob TDD (25 testes, 2929 total); queries sequenciais + degradação graciosa à coluna ausente; migration 0034 GERADA à mão (drizzle-kit generate quebrado por colisão de snapshots 0023/0029) e NÃO aplicada — rodar scripts/aplicar-migration-0034.ts | 2026-07-17 | ea5080a..fbce9c7 | [260717-qq6-alertas-regua-inadimplencia-interna-lemb](./quick/260717-qq6-alertas-regua-inadimplencia-interna-lemb/) |
 | 260717-i26 | Financeiro A Receber: filtro padrão 30 dias + vencidas com toggle "Mostrar todas" (filtrarAReceber puro sob TDD, 12 testes) + card "Previsão por mês" (getPrevisaoReceitaPorMes agregada GROUP BY, sequencial pós-getVisaoCobrancas); ficha do cliente ganha aba 🗒️ Tarefas (abertas + histórico, 2 queries agregadas sequenciais, moldes excluídos); zero migration, getContasAReceber intocada | 2026-07-17 | 15129c0..2054329 | [260717-i26-financeiro-a-receber-com-filtro-30-dias-](./quick/260717-i26-financeiro-a-receber-com-filtro-30-dias-/) |
 
+| 260718-gp5 | Processos criam TAREFA como fonte única — onboarding/retenção/saída viram tarefa "Onboarding — {nome}" (alta, hoje BR) com checklist do modelo, idempotente por etiqueta processo:{tipo} em tarefas.etiquetas (jsonb @>, sem migration); aba Processos e alerta onboarding_parado leem o checklist da tarefa (processo_itens abandonado na leitura, schema fica); quadro /tarefas com coluna derivada "Atrasadas" (vermelha, destructive) + stats com 5 colunas; STATUS_ORDEM separado p/ selects de status; 535 testes | 2026-07-18 | 659a844..4d08540 | [260718-gp5-processos-criam-tarefa-como-fonte-unica-](./quick/260718-gp5-processos-criam-tarefa-como-fonte-unica-/) |
+
 ## Session Continuity
 
-Last session: 2026-07-17T22:10:00.000Z
-Stopped at: Concluído quick 260717-pvr (CRM quase tempo real: polling leve + toast de novo lead)
+Last session: 2026-07-18T15:30:00.000Z
+Stopped at: Concluído quick 260718-gp5 (processos criam tarefa como fonte única + coluna Atrasadas)
 Resume file: None
