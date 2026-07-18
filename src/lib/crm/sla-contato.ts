@@ -1,7 +1,8 @@
 // SLA de 1º contato do CRM — módulo PURO (zero import de db/react/next).
 //
 // Regra de negócio: todo lead ABERTO precisa receber o 1º contato comercial
-// (ligação/WhatsApp/e-mail/reunião ou 1ª tarefa concluída) em até 24 horas.
+// (ligação/WhatsApp/e-mail/reunião, 1ª tarefa concluída ou mudança de etapa)
+// em até 1 hora — lead quente esfria em minutos (decisão do usuário, 17/jul).
 // O carimbo vive em crm_oportunidades.primeiro_contato_em (migration 0034);
 // este módulo só faz a matemática/texto — quem consulta o banco é dados.ts
 // e calcular.ts.
@@ -12,7 +13,7 @@
  * quick 260717-qq6). Ao estourar: card fica vermelho no kanban + alerta
  * persistido 'sla_primeiro_contato'.
  */
-export const SLA_PRIMEIRO_CONTATO_HORAS = 24
+export const SLA_PRIMEIRO_CONTATO_HORAS = 1
 
 const MS_POR_HORA = 60 * 60 * 1000
 
@@ -23,7 +24,7 @@ export function horasAguardando(criadaEm: Date | string, agora: Date = new Date(
   return horas > 0 ? horas : 0
 }
 
-/** true quando o lead já aguarda o SLA inteiro — 24h EM PONTO conta como estourado. */
+/** true quando o lead já aguarda o SLA inteiro — o limite EM PONTO conta como estourado. */
 export function estourouSla(criadaEm: Date | string, agora: Date = new Date()): boolean {
   return horasAguardando(criadaEm, agora) >= SLA_PRIMEIRO_CONTATO_HORAS
 }

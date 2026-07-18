@@ -143,7 +143,7 @@ function oportunidade(extra: Partial<OportunidadeSlaInput>): OportunidadeSlaInpu
 }
 
 describe('avaliarSlaPrimeiroContato', () => {
-  it('aberta sem 1º contato ha mais de 24h → sla_primeiro_contato', () => {
+  it('aberta sem 1º contato ha mais de 1h → sla_primeiro_contato', () => {
     const alertas = avaliarSlaPrimeiroContato([oportunidade({})], HOJE)
     expect(alertas).toHaveLength(1)
     expect(alertas[0].tipo).toBe('sla_primeiro_contato')
@@ -161,9 +161,9 @@ describe('avaliarSlaPrimeiroContato', () => {
     expect(alertas).toHaveLength(0)
   })
 
-  it('criada ha menos de 24h → nada', () => {
+  it('criada ha menos de 1h → nada', () => {
     const alertas = avaliarSlaPrimeiroContato(
-      [oportunidade({ criadaEm: new Date('2026-07-17T00:00:00-03:00') })],
+      [oportunidade({ criadaEm: new Date('2026-07-17T11:30:00-03:00') })],
       HOJE,
     )
     expect(alertas).toHaveLength(0)

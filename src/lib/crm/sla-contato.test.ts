@@ -14,8 +14,8 @@ function horasAtras(h: number): Date {
 }
 
 describe('SLA_PRIMEIRO_CONTATO_HORAS', () => {
-  it('e 24 horas', () => {
-    expect(SLA_PRIMEIRO_CONTATO_HORAS).toBe(24)
+  it('e 1 hora (lead quente esfria em minutos)', () => {
+    expect(SLA_PRIMEIRO_CONTATO_HORAS).toBe(1)
   })
 })
 
@@ -35,16 +35,16 @@ describe('horasAguardando', () => {
 })
 
 describe('estourouSla', () => {
-  it('menos de 24h nao estourou', () => {
-    expect(estourouSla(horasAtras(23.99), AGORA)).toBe(false)
+  it('menos de 1h nao estourou', () => {
+    expect(estourouSla(horasAtras(0.99), AGORA)).toBe(false)
   })
 
-  it('24h EM PONTO conta como estourado', () => {
-    expect(estourouSla(horasAtras(24), AGORA)).toBe(true)
+  it('1h EM PONTO conta como estourado', () => {
+    expect(estourouSla(horasAtras(1), AGORA)).toBe(true)
   })
 
-  it('mais de 24h estourou', () => {
-    expect(estourouSla(horasAtras(30), AGORA)).toBe(true)
+  it('mais de 1h estourou', () => {
+    expect(estourouSla(horasAtras(5), AGORA)).toBe(true)
   })
 })
 

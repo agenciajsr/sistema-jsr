@@ -1,6 +1,6 @@
 'use server'
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
@@ -9,6 +9,7 @@ import { crmOportunidades, crmTarefas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
+import { carimbarPrimeiroContato } from '@/lib/crm/primeiro-contato'
 import { criarEvento } from '@/lib/google/calendar'
 import { atividadeSchema, type AtividadeInput } from '@/lib/validations/crm'
 
@@ -28,29 +29,11 @@ function primeiroErro(e: { issues: { message: string }[] }): string {
 }
 
 // --- Carimbo do 1º contato (quick-260717-qq6) ---
+// carimbarPrimeiroContato mora em @/lib/crm/primeiro-contato (compartilhado
+// com moverOportunidade em crm.ts — mover de etapa também conta como contato).
 
 /** Tipos de atividade que representam CONTATO REAL com o lead. */
 const TIPOS_CONTATO = new Set(['ligacao', 'whatsapp', 'email', 'reuniao'])
-
-/**
- * Carimba crm_oportunidades.primeiro_contato_em UMA única vez (WHERE ... IS NULL
- * = idempotente; só a primeira atividade conclui o carimbo). try/catch que SÓ
- * loga de propósito: a coluna é da migration 0034 (aplicação manual pendente) —
- * o fluxo principal NUNCA pode quebrar por causa do carimbo.
- */
-async function carimbarPrimeiroContato(oportunidadeId: string | null | undefined) {
-  if (!oportunidadeId) return
-  try {
-    await db
-      .update(crmOportunidades)
-      .set({ primeiroContatoEm: new Date() })
-      .where(
-        and(eq(crmOportunidades.id, oportunidadeId), isNull(crmOportunidades.primeiroContatoEm)),
-      )
-  } catch (e) {
-    console.error('[carimbarPrimeiroContato] falha (migration 0034 pendente?) — ignorando', e)
-  }
-}
 
 /** Cria uma atividade agendada para o lead (e opcionalmente para um negócio). */
 export async function criarAtividadeCrm(input: AtividadeInput) {

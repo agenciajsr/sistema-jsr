@@ -19,6 +19,7 @@ import {
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
+import { carimbarPrimeiroContato } from '@/lib/crm/primeiro-contato'
 import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
 import { montarDadosContrato, gerarToken } from '@/lib/contratos/fluxo'
 import { servicosContratadosSchema, somaServicos } from '@/lib/contratos/servicos-contratados'
@@ -531,6 +532,11 @@ export async function moverOportunidade(id: string, etapaId: string, ordemNaEtap
         updatedAt: new Date(),
       })
       .where(eq(crmOportunidades.id, id))
+
+    // Mover de etapa manualmente implica que HOUVE contato com o lead —
+    // carimba o 1º contato (idempotente; sem isso, cards em Proposta/
+    // Negociação ficavam eternamente "aguardando 1º contato").
+    await carimbarPrimeiroContato(id)
 
     // Atividade com de/para = NOMES das etapas (legível na timeline).
     await registrarAtividadeCrm(workspace.id, currentUser, {
