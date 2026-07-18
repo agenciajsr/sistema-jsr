@@ -17,3 +17,13 @@ function normalizar(nome: string): string {
 export function ehEtapaReuniaoAgendada(nome: string): boolean {
   return normalizar(nome) === 'reuniao agendada'
 }
+
+/**
+ * Monta o instante UTC de uma data+hora escolhidas no fuso de Brasília.
+ * O offset -03:00 é FIXO e explícito: sem ele, `new Date('YYYY-MM-DDTHH:MM')`
+ * usa o fuso do processo — na Vercel (UTC) gravava a reunião 3h adiantada.
+ * Mesmo offset que o evento do Google Calendar já usa.
+ */
+export function montarInstanteBrasilia(data: string, hora: string): Date {
+  return new Date(`${data}T${hora}:00-03:00`)
+}

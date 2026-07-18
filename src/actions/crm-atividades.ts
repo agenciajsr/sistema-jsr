@@ -5,9 +5,10 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { db } from '@/lib/db'
-import { crmContatos, crmOportunidades, crmTarefas } from '@/lib/db/schema'
+import { crmContatos, crmOportunidades, crmTarefas, tarefas } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
+import { montarInstanteBrasilia } from '@/lib/crm/reuniao'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { carimbarPrimeiroContato } from '@/lib/crm/primeiro-contato'
 import { criarEvento } from '@/lib/google/calendar'
@@ -175,8 +176,8 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
     }
 
     const titulo = v.titulo ?? `Reunião Agência JSR — ${nomeLead ?? oportunidade.titulo}`
-    const dataInicio = new Date(`${v.data}T${v.horaInicio}`)
-    const dataFim = new Date(`${v.data}T${v.horaFim}`)
+    const dataInicio = montarInstanteBrasilia(v.data, v.horaInicio)
+    const dataFim = montarInstanteBrasilia(v.data, v.horaFim)
 
     const [tarefa] = await db
       .insert(crmTarefas)
@@ -228,6 +229,33 @@ export async function criarReuniaoCrm(input: ReuniaoInput) {
       console.error('[criarReuniaoCrm] Google Calendar', e)
       avisoCalendar =
         'Reunião criada, mas o evento não foi criado no Google Calendar (conta não conectada ou erro na API).'
+    }
+
+    // Tarefa ESPELHO no quadro /tarefas — try/catch próprio: falha aqui nunca
+    // quebra o agendamento. É independente: concluir/cancelar a tarefa não
+    // sincroniza de volta com o CRM. data = v.data direto (data local BR),
+    // NUNCA derivada de dataInicio (que é UTC e poderia cair no dia seguinte).
+    try {
+      const descricaoEspelho = meetLink
+        ? v.observacao
+          ? `${v.observacao}\n\nLink do Meet: ${meetLink}`
+          : `Link do Meet: ${meetLink}`
+        : (v.observacao ?? null)
+      await db.insert(tarefas).values({
+        titulo: `Reunião: ${nomeLead ?? oportunidade.titulo} (${v.horaInicio})`,
+        descricao: descricaoEspelho,
+        data: v.data,
+        prioridade: 'alta',
+        etiquetas: ['Reunião'],
+        responsavelId: currentUser.id,
+        clienteId: null,
+        ehMolde: false,
+        recorrencia: 'nenhuma',
+        tarefaMaeId: null,
+      })
+      revalidatePath('/tarefas')
+    } catch (e) {
+      console.error('[criarReuniaoCrm] tarefa espelho', e)
     }
 
     revalidatePath('/crm')
