@@ -1,15 +1,66 @@
 import Link from 'next/link'
-import { CalendarDays, CheckCircle2, Plug } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCircle2,
+  FileSignature,
+  Megaphone,
+  MessageCircle,
+  Wallet,
+  XCircle,
+} from 'lucide-react'
 
-import { EmBreve } from '@/components/em-breve'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getCredentials } from '@/lib/google/credentials'
 import { desconectarGoogle } from '@/actions/integracoes-google'
+import { asaasDisponivel } from '@/lib/asaas/client'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
 export const maxDuration = 60
+
+// Serviços externos do hub (fora o Google, que tem card próprio com OAuth).
+// `conectado` = presença de credencial no ambiente — status real, sem chute.
+const SERVICOS = [
+  {
+    nome: 'Meta Ads',
+    descricao: 'Sincroniza campanhas, verbas e resultados dos clientes.',
+    icon: Megaphone,
+    conectado: () => Boolean(process.env.META_SYSTEM_USER_TOKEN),
+    href: '/campanhas',
+    acao: 'Ver campanhas',
+    badge: undefined as (() => string) | undefined,
+  },
+  {
+    nome: 'Asaas (cobrança)',
+    descricao: 'Gera cobranças, recebe pagamentos e baixa faturas via webhook.',
+    icon: Wallet,
+    conectado: () => asaasDisponivel(),
+    href: '/financeiro',
+    acao: 'Ver financeiro',
+    badge: () => (process.env.ASAAS_ENV === 'production' ? 'Produção' : 'Sandbox'),
+  },
+  {
+    nome: 'Autentique (assinatura)',
+    descricao: 'Envia contratos para assinatura digital e recebe o retorno.',
+    icon: FileSignature,
+    conectado: () =>
+      Boolean(process.env.AUTENTIQUE_API_TOKEN || process.env.AUTENTIQUE_API_KEY),
+    href: '/contratos',
+    acao: 'Ver contratos',
+    badge: undefined,
+  },
+  {
+    nome: 'Captação de leads (webhook)',
+    descricao: 'Landing page, Meta Lead Ads (Make) e extensão de WhatsApp caindo no CRM.',
+    icon: MessageCircle,
+    conectado: () => Boolean(process.env.CRM_LEADS_TOKEN),
+    href: '/ferramentas',
+    acao: 'Ver automações',
+    badge: undefined,
+  },
+]
 
 // Mensagens de feedback vindas do callback OAuth (via searchParams).
 const MENSAGENS_ERRO: Record<string, string> = {
@@ -90,11 +141,49 @@ export default async function IntegracoesPage({
         </CardContent>
       </Card>
 
-      <EmBreve
-        titulo="Outras integrações"
-        descricao="A conexão com Meta Ads, Google Ads e demais serviços externos será configurada nesta área."
-        icon={Plug}
-      />
+      {/* Hub de conexões: status REAL de cada serviço externo (presença de
+          credencial), com atalho para a área onde a integração é usada. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {SERVICOS.map((s) => {
+          const ok = s.conectado()
+          return (
+            <Card key={s.nome} className="border-none shadow-[var(--shadow-sm)]">
+              <CardHeader className="flex flex-row items-center gap-3 space-y-0">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <s.icon className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    {s.nome}
+                    {s.badge && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {s.badge()}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">{s.descricao}</p>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                <p className="flex items-center gap-2 text-sm">
+                  {ok ? (
+                    <>
+                      <CheckCircle2 className="size-4 text-chart-success" /> Conectado
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="size-4 text-muted-foreground" /> Não configurado
+                    </>
+                  )}
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={s.href}>{s.acao}</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

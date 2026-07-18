@@ -51,6 +51,7 @@ import { asc } from 'drizzle-orm'
 import {
   OnboardingCliente,
   RetencaoCliente,
+  SaidaCliente,
   type ItemProcesso,
 } from '@/components/ficha/processos-cliente'
 
@@ -178,6 +179,7 @@ export default async function ClienteDetalhePage({
   // porque as tabelas são da migration 0035 (degradação graciosa).
   let itensOnboarding: ItemProcesso[] = []
   let itensRetencao: ItemProcesso[] = []
+  let itensSaida: ItemProcesso[] = []
   try {
     const processos = await db
       .select({
@@ -203,6 +205,7 @@ export default async function ClienteDetalhePage({
       }
       if (p.tipo === 'onboarding') itensOnboarding.push(item)
       else if (p.tipo === 'retencao') itensRetencao.push(item)
+      else if (p.tipo === 'saida') itensSaida.push(item)
     }
   } catch (e) {
     console.error('[ficha] processos indisponiveis (migration 0035 pendente?)', e)
@@ -677,6 +680,11 @@ export default async function ClienteDetalhePage({
             emAtencao={cliente.status === 'em_aviso'}
             motivoAtencao={cliente.motivoAtencao}
             itens={itensRetencao}
+          />
+          <SaidaCliente
+            clienteId={cliente.id}
+            encerrado={cliente.status === 'encerrado'}
+            itens={itensSaida}
           />
         </TabsContent>
 

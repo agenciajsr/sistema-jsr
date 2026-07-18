@@ -62,6 +62,8 @@ function calcularProgresso(itens: ItemProcesso[]): { feitos: number; total: numb
 
 // --- Checklist genérico (usado pelo onboarding e pela retenção) ---
 
+type TipoProcessoUi = 'onboarding' | 'retencao' | 'saida'
+
 function ChecklistProcesso({
   clienteId,
   tipo,
@@ -69,7 +71,7 @@ function ChecklistProcesso({
   vazioTexto,
 }: {
   clienteId: string
-  tipo: 'onboarding' | 'retencao'
+  tipo: TipoProcessoUi
   itens: ItemProcesso[]
   vazioTexto: string
 }) {
@@ -183,7 +185,13 @@ function ChecklistProcesso({
 
 // --- Dialog de edição do modelo ---
 
-function ModeloDialog({ tipo }: { tipo: 'onboarding' | 'retencao' }) {
+const NOME_MODELO: Record<TipoProcessoUi, string> = {
+  onboarding: 'onboarding',
+  retencao: 'retenção',
+  saida: 'saída do cliente',
+}
+
+function ModeloDialog({ tipo }: { tipo: TipoProcessoUi }) {
   const [aberto, setAberto] = useState(false)
   const [itens, setItens] = useState<ItemModelo[] | null>(null)
   const [novoTitulo, setNovoTitulo] = useState('')
@@ -237,9 +245,7 @@ function ModeloDialog({ tipo }: { tipo: 'onboarding' | 'retencao' }) {
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            Modelo de {tipo === 'onboarding' ? 'onboarding' : 'retenção'}
-          </DialogTitle>
+          <DialogTitle>Modelo de {NOME_MODELO[tipo]}</DialogTitle>
           <DialogDescription>
             Clientes novos nascem com os itens ATIVOS deste modelo. Mudanças aqui não
             alteram checklists já criados.
@@ -324,6 +330,38 @@ export function OnboardingCliente({
         tipo="onboarding"
         itens={itens}
         vazioTexto="Este cliente ainda não tem checklist de onboarding. Ele é criado automaticamente quando o cliente vira ativo — ou gere agora a partir do modelo."
+      />
+    </section>
+  )
+}
+
+// --- Saída do cliente (offboarding) ---
+// Aparece na aba Retenção quando o cliente foi encerrado OU quando já existe
+// checklist de saída. O checklist nasce automático ao mudar o status para
+// "Encerrado" (updateCliente) — aqui também dá pra gerar na mão.
+
+export function SaidaCliente({
+  clienteId,
+  encerrado,
+  itens,
+}: {
+  clienteId: string
+  encerrado: boolean
+  itens: ItemProcesso[]
+}) {
+  if (!encerrado && itens.length === 0) return null
+
+  return (
+    <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[20px] leading-tight font-semibold">Saída do cliente</h2>
+        <ModeloDialog tipo="saida" />
+      </div>
+      <ChecklistProcesso
+        clienteId={clienteId}
+        tipo="saida"
+        itens={itens}
+        vazioTexto="Cliente encerrado sem checklist de saída — gere a partir do modelo para encerrar tudo direitinho (campanhas, acessos, cobranças)."
       />
     </section>
   )

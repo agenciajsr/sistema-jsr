@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
-import { Search } from 'lucide-react'
 
 import { AppSidebar } from '@/components/app-sidebar'
+import { BuscaGlobal } from '@/components/layout/busca-global'
 import { AlertasBell } from '@/components/layout/alertas-bell'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
@@ -37,18 +37,7 @@ export default async function AppLayout({
           </div>
 
           <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
-            {/* Busca — placeholder visual (⌘K a ser conectado depois) */}
-            <div className="relative hidden max-w-xs flex-1 md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Buscar por cliente, campanha..."
-                className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-              />
-              <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                ⌘K
-              </kbd>
-            </div>
+            <BuscaGlobal />
 
             <ThemeToggle />
 

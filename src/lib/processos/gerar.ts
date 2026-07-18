@@ -11,7 +11,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { processoItens, processoModeloItens } from '@/lib/db/schema'
 
-export type TipoProcesso = 'onboarding' | 'retencao'
+export type TipoProcesso = 'onboarding' | 'retencao' | 'saida'
 
 /** @returns quantos itens foram criados (0 = já existia ou modelo vazio). */
 export async function gerarProcessoParaCliente(

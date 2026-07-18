@@ -9,6 +9,7 @@ import { clienteSchema, type ClienteInput } from '@/lib/validations/cliente'
 import { contratoSchema, type ContratoInput } from '@/lib/validations/contrato'
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
+import { gerarProcessoParaCliente } from '@/lib/processos/gerar'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
 
@@ -70,6 +71,12 @@ export async function updateCliente(id: string, input: ClienteInput) {
     .update(clientes)
     .set({ ...clienteParaDb(parsed.data), updatedAt: new Date() })
     .where(eq(clientes.id, id))
+
+  // Cliente encerrado ganha o checklist de SAÍDA (offboarding) — idempotente,
+  // best-effort (o helper engole falhas).
+  if (parsed.data.status === 'encerrado') {
+    await gerarProcessoParaCliente(id, 'saida')
+  }
 
   return { data: { id } }
 }
