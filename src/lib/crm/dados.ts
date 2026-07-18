@@ -401,6 +401,9 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
       .limit(TETO_FECHADAS)
 
     // (11) atividades por oportunidade — GROUP BY no banco, NUNCA N+1 por card.
+    // Conta SÓ atividades da EQUIPE (autor_id preenchido): eventos automáticos
+    // do sistema (lead_recebido/criacao, autor null) não contam — decisão do
+    // usuário em 17/jul; lead recém-chegado mostra "Sem atividades".
     const atividadesRaw = await db
       .select({
         oportunidadeId: crmAtividades.oportunidadeId,
@@ -408,7 +411,11 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
       })
       .from(crmAtividades)
       .where(
-        and(eq(crmAtividades.workspaceId, workspace.id), isNotNull(crmAtividades.oportunidadeId))
+        and(
+          eq(crmAtividades.workspaceId, workspace.id),
+          isNotNull(crmAtividades.oportunidadeId),
+          isNotNull(crmAtividades.autorId),
+        )
       )
       .groupBy(crmAtividades.oportunidadeId)
 
