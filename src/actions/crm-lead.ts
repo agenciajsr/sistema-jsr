@@ -629,6 +629,16 @@ export async function atualizarLead(id: string, input: LeadPerfilInput) {
 
     if (!salvo) return { error: 'Lead nao encontrado.' }
 
+    // O card do kanban le a origem da OPORTUNIDADE (crm_oportunidades.origem),
+    // entao a edicao na ficha do lead precisa propagar para todas as
+    // oportunidades do contato no workspace — senao a ficha e o kanban divergem.
+    if (v.origem !== undefined) {
+      await db
+        .update(crmOportunidades)
+        .set({ origem: v.origem, updatedAt: new Date() })
+        .where(and(eq(crmOportunidades.contatoId, id), eq(crmOportunidades.workspaceId, workspace.id)))
+    }
+
     revalidatePath('/crm')
     return { data: { ok: true } }
   } catch (e) {
