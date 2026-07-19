@@ -64,6 +64,10 @@ const LANDING_PAGE_VIEW_TYPES = [
 
 const LINK_CLICK_TYPES = ['link_click']
 
+const VIDEO_VIEW_TYPES = ['video_view']
+
+const CURTIDAS_PAGINA_TYPES = ['like']
+
 const ENGAJAMENTO_TYPES = [
   'post_engagement',
   'page_engagement',
@@ -81,6 +85,8 @@ export type MetricasRelatorio = {
   landingPageView: number
   linkClicks: number
   engajamento: number
+  videoViews: number
+  curtidasPagina: number
   receita: number
 }
 
@@ -89,7 +95,7 @@ export type MetricasRelatorio = {
  */
 export function parseActionsRelatorio(actions: unknown): Omit<MetricasRelatorio, 'receita'> {
   if (!Array.isArray(actions)) {
-    return { compras: 0, leads: 0, conversas: 0, addToCart: 0, checkout: 0, landingPageView: 0, linkClicks: 0, engajamento: 0 }
+    return { compras: 0, leads: 0, conversas: 0, addToCart: 0, checkout: 0, landingPageView: 0, linkClicks: 0, engajamento: 0, videoViews: 0, curtidasPagina: 0 }
   }
   const items = actions.filter(isActionItem)
   return {
@@ -101,6 +107,8 @@ export function parseActionsRelatorio(actions: unknown): Omit<MetricasRelatorio,
     landingPageView: somarGrupo(items, LANDING_PAGE_VIEW_TYPES),
     linkClicks: somarGrupo(items, LINK_CLICK_TYPES),
     engajamento: somarGrupo(items, ENGAJAMENTO_TYPES),
+    videoViews: somarGrupo(items, VIDEO_VIEW_TYPES),
+    curtidasPagina: somarGrupo(items, CURTIDAS_PAGINA_TYPES),
   }
 }
 

@@ -30,6 +30,8 @@ export type MetricasConta = {
   conversas: number
   engajamento: number
   linkClicks: number
+  videoViews: number
+  curtidasPagina: number
   receita: number
   // Derivadas
   roas: number | null
@@ -119,6 +121,7 @@ export async function agregarContaPeriodo(
   let spend = 0, reach = 0, impressions = 0, clicks = 0
   let compras = 0, leads = 0, conversas = 0, addToCart = 0, checkout = 0
   let landingPageView = 0, linkClicks = 0, engajamento = 0, receita = 0
+  let videoViews = 0, curtidasPagina = 0
 
   for (const row of rows) {
     spend += Number(row.spend) || 0
@@ -135,6 +138,8 @@ export async function agregarContaPeriodo(
     landingPageView += metrics.landingPageView
     linkClicks += metrics.linkClicks
     engajamento += metrics.engajamento
+    videoViews += metrics.videoViews
+    curtidasPagina += metrics.curtidasPagina
     receita += parseReceitaRelatorio(row.actionValues)
   }
 
@@ -153,6 +158,8 @@ export async function agregarContaPeriodo(
     conversas,
     engajamento,
     linkClicks,
+    videoViews,
+    curtidasPagina,
     receita,
     roas: spend > 0 && receita > 0 ? receita / spend : null,
     cpv: compras > 0 ? spend / compras : null,
@@ -192,7 +199,8 @@ function consolidarContas(contas: MetricasConta[]): MetricasConta {
     contaNome: 'Consolidado',
     spend: 0, reach: 0, impressions: 0, clicks: 0,
     landingPageView: 0, addToCart: 0, checkout: 0,
-    compras: 0, leads: 0, conversas: 0, engajamento: 0, linkClicks: 0, receita: 0,
+    compras: 0, leads: 0, conversas: 0, engajamento: 0, linkClicks: 0,
+    videoViews: 0, curtidasPagina: 0, receita: 0,
     roas: null, cpv: null, cpl: null, cpConv: null, ticketMedio: null,
     cpm: null, ctr: null, taxaCheckoutCompra: null,
   }
@@ -210,6 +218,8 @@ function consolidarContas(contas: MetricasConta[]): MetricasConta {
     c.conversas += conta.conversas
     c.engajamento += conta.engajamento
     c.linkClicks += conta.linkClicks
+    c.videoViews += conta.videoViews
+    c.curtidasPagina += conta.curtidasPagina
     c.receita += conta.receita
   }
 

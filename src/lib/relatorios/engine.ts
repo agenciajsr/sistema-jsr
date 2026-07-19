@@ -144,7 +144,8 @@ export function compilarBlocos(metricasPorBloco: MetricasConta[]): MetricasConta
     contaNome: 'Resumo Compilado',
     spend: 0, reach: 0, impressions: 0, clicks: 0,
     landingPageView: 0, addToCart: 0, checkout: 0,
-    compras: 0, leads: 0, conversas: 0, engajamento: 0, linkClicks: 0, receita: 0,
+    compras: 0, leads: 0, conversas: 0, engajamento: 0, linkClicks: 0,
+    videoViews: 0, curtidasPagina: 0, receita: 0,
     roas: null, cpv: null, cpl: null, cpConv: null, ticketMedio: null,
     cpm: null, ctr: null, taxaCheckoutCompra: null,
   }
@@ -162,6 +163,8 @@ export function compilarBlocos(metricasPorBloco: MetricasConta[]): MetricasConta
     c.conversas += m.conversas
     c.engajamento += m.engajamento
     c.linkClicks += m.linkClicks
+    c.videoViews += m.videoViews
+    c.curtidasPagina += m.curtidasPagina
     c.receita += m.receita
   }
 
