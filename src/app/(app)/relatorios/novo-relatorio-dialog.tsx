@@ -71,7 +71,7 @@ const DIAS_SEMANA = [
 ]
 
 const CATEGORIAS_METRICAS: CategoriaVariavel[] = [
-  'investimento', 'cliques', 'leads', 'conversas', 'vendas', 'pagina',
+  'investimento', 'cliques', 'leads', 'conversas', 'vendas', 'pagina', 'engajamento', 'video',
 ]
 
 const CABECALHO_PADRAO =
