@@ -10,6 +10,7 @@ import {
   ChevronDown,
   LayoutGrid,
   List,
+  Repeat2,
   ListOrdered,
   Loader2,
   Plus,
@@ -66,6 +67,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { KpisCrm } from '@/components/crm/kpis-crm'
 import { KanbanCrm } from '@/components/crm/kanban-crm'
+import { KanbanFollowup } from '@/components/crm/kanban-followup'
 import { ListaCrm } from '@/components/crm/lista-crm'
 import { BarraOrigemLeads } from '@/components/crm/barra-origem-leads'
 import { NovoLeadDialog } from '@/components/crm/novo-lead-dialog'
@@ -576,6 +578,10 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
               <LayoutGrid className="size-4" />
               Kanban
             </TabsTrigger>
+            <TabsTrigger value="followup">
+              <Repeat2 className="size-4" />
+              Follow-up
+            </TabsTrigger>
             <TabsTrigger value="lista">
               <List className="size-4" />
               Lista
@@ -592,6 +598,17 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
             onArrastandoChange={setArrastando}
           />
           <BarraOrigemLeads origens={dados.origens} />
+        </TabsContent>
+
+        {/* Visao de follow-up D1..D6 + Perdido (quick-260719-s3a): MESMO card
+            do kanban de vendas, coluna derivada de followup_nivel. */}
+        <TabsContent value="followup">
+          <KanbanFollowup
+            colunas={dados.colunas}
+            colunasFechadas={dados.colunasFechadas}
+            oportunidadesVisiveis={oportunidadesVisiveis}
+            onArrastandoChange={setArrastando}
+          />
         </TabsContent>
 
         <TabsContent value="lista">

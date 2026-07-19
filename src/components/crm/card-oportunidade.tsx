@@ -1,7 +1,7 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
-import { AlertTriangle, Banknote, Calendar, CalendarClock, User } from 'lucide-react'
+import { AlertTriangle, Banknote, Calendar, CalendarClock, Clock, User } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { SLA_PRIMEIRO_CONTATO_HORAS, textoAguardando } from '@/lib/crm/sla-contato'
@@ -71,6 +71,11 @@ export function CardOportunidade({
   const aguardandoSla = oportunidade.aguardando1oContato && horasSla != null
   const slaEstourado = aguardandoSla && horasSla >= SLA_PRIMEIRO_CONTATO_HORAS
 
+  // Follow-up (quick-260719-s3a): selo na MESMA familia visual do SLA.
+  // Precedencia para nao empilhar 3 avisos: SLA 1o contato > follow-up > semContato.
+  const pendenciaFup = !aguardandoSla ? oportunidade.pendenciaFollowup : null
+  const fupEsgotado = pendenciaFup?.tipo === 'esgotado'
+
   return (
     <div
       ref={setNodeRef}
@@ -85,7 +90,8 @@ export function CardOportunidade({
         'space-y-2 rounded-lg border bg-card p-3 text-left shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]',
         podeAbrir && 'cursor-pointer',
         arrastando && 'opacity-40',
-        slaEstourado && 'ring-1 ring-red-500/40 dark:ring-red-400/40',
+        // Mesmo destaque do slaEstourado: D6 vencido pede decisao humana.
+        (slaEstourado || fupEsgotado) && 'ring-1 ring-red-500/40 dark:ring-red-400/40',
       )}
     >
       {/* Cabecalho da imagem03: avatar + nome + linha azul de servico/origem + #N. */}
@@ -100,6 +106,21 @@ export function CardOportunidade({
             {rotuloServico(oportunidade.servico)} - [{rotuloOrigem(oportunidade.origem).toUpperCase()}]
           </p>
         </div>
+        {/* Chip de temperatura DERIVADA da origem (quick-260719-s3a):
+            🔥 quente (meta/LP) ou 🧊 frio (prospeccao/whatsapp). null = nada. */}
+        {oportunidade.temperatura && (
+          <span
+            title={oportunidade.temperatura === 'quente' ? 'Lead quente' : 'Lead frio'}
+            className={cn(
+              'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+              oportunidade.temperatura === 'quente'
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                : 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
+            )}
+          >
+            {oportunidade.temperatura === 'quente' ? '🔥' : '🧊'}
+          </span>
+        )}
         {oportunidade.numero > 0 && (
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
             #{oportunidade.numero}
@@ -122,9 +143,25 @@ export function CardOportunidade({
         </p>
       )}
 
+      {/* Pendencia de follow-up (quick-260719-s3a), familia visual do SLA:
+          pendente = ambar; esgotado (D6 vencido) = vermelho + anel no card. */}
+      {pendenciaFup && (
+        <p
+          className={cn(
+            'flex items-center gap-1.5 text-[10px] font-medium',
+            fupEsgotado
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-amber-600 dark:text-amber-400',
+          )}
+        >
+          <Clock className="size-3 shrink-0" />
+          {fupEsgotado ? pendenciaFup.texto : `⏰ ${pendenciaFup.texto}`}
+        </p>
+      )}
+
       {/* Aviso do mockup anterior (preservado): aberta ha +7d sem tarefa concluida.
-          Quando o indicador de SLA esta ativo, ele PREVALECE — nao duplica aviso. */}
-      {oportunidade.semContato && !aguardandoSla && (
+          Quando SLA ou pendencia de follow-up estao ativos, eles PREVALECEM. */}
+      {oportunidade.semContato && !aguardandoSla && !pendenciaFup && (
         <p className="flex items-center gap-1.5 text-[10px] font-medium text-amber-600">
           <AlertTriangle className="size-3 shrink-0" />
           Nao contatado
