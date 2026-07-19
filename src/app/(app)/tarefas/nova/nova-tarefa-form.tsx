@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft,
   ArrowUp,
   Building2,
   ChevronRight,
@@ -174,13 +173,7 @@ export function NovaTarefaForm({
       {/* Barra superior — mesma faixa branca de ponta a ponta do detalhe */}
       <div className="-mx-6 -mt-6 flex flex-wrap items-center justify-between gap-3 border-b bg-card px-6 py-3 lg:-mx-8 lg:-mt-8 lg:px-8">
         <div>
-          <Button variant="ghost" size="sm" asChild className="-ml-2">
-            <Link href="/tarefas">
-              <ArrowLeft className="size-4" />
-              Voltar
-            </Link>
-          </Button>
-          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Link href="/tarefas" className="hover:text-foreground">
               Tarefas
             </Link>
