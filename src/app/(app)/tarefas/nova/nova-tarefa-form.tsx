@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowUp,
   Building2,
+  CalendarDays,
   ChevronRight,
+  CircleDot,
   Clock,
   FileText,
+  Flag,
   History,
   ListChecks,
   MessageSquare,
@@ -16,7 +19,9 @@ import {
   Play,
   Plus,
   StickyNote,
+  Tag,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -26,7 +31,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EditorNotas } from '@/components/tarefas/editor-notas'
 import {
@@ -214,123 +218,62 @@ export function NovaTarefaForm({
                 />
               </div>
 
-              {/* A MESMA grade de 8 células com divisórias do detalhe */}
-              <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card md:grid-cols-4">
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select value={status} onValueChange={(v) => setStatus(v as TarefaStatus)}>
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <Badge variant="outline" className={STATUS_CLASSE[status]}>
-                        {status === 'em_andamento' && <Play className="size-3 fill-current" />}
-                        {STATUS_LABEL[status]}
-                      </Badge>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_ORDEM.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {STATUS_LABEL[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Responsável</Label>
-                  <Select value={responsavelId} onValueChange={setResponsavelId}>
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <SelectValue placeholder="Nenhum" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
-                      {responsaveis.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          <span className="flex items-center gap-2">
-                            <Avatar size="sm">
-                              <AvatarFallback
-                                className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}
-                              >
-                                {iniciais(r.nome)}
-                              </AvatarFallback>
-                            </Avatar>
-                            {r.nome}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Prioridade</Label>
-                  <Select
-                    value={prioridade}
-                    onValueChange={(v) => setPrioridade(v as TarefaPrioridade)}
-                  >
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        {(prioridade === 'alta' || prioridade === 'urgente') && (
-                          <ArrowUp className="size-3.5 text-destructive" />
-                        )}
-                        {PRIORIDADE_LABEL[prioridade]}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORIDADE_ORDEM.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          <span className="flex items-center gap-1.5">
-                            {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
-                            <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
-                              {PRIORIDADE_LABEL[p]}
-                            </Badge>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Etiquetas</Label>
-                  <Input
-                    value={etiquetasTexto}
-                    onChange={(e) => setEtiquetasTexto(e.target.value)}
-                    placeholder="tráfego, urgente"
-                    className="h-auto border-0 px-0 text-sm shadow-none focus-visible:ring-0"
-                    aria-label="Etiquetas separadas por vírgula"
-                  />
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Data de início</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={dataInicio}
-                      onChange={(e) => setDataInicio(e.target.value)}
-                      className={DATA_CELULA}
-                      aria-label="Data de inicio"
-                    />
+              {/* Grade de metadados estilo ClickUp: 2 colunas, ícone + rótulo à
+                  esquerda, valor à direita — mesmo desenho do detalhe (qr2). */}
+              <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+                {/* Coluna 1: Status, Datas, Estimativa */}
+                <div>
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <CircleDot className="size-4" />
+                      Status
+                    </span>
+                    <Select value={status} onValueChange={(v) => setStatus(v as TarefaStatus)}>
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <Badge variant="outline" className={STATUS_CLASSE[status]}>
+                          {status === 'em_andamento' && <Play className="size-3 fill-current" />}
+                          {STATUS_LABEL[status]}
+                        </Badge>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_ORDEM.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {STATUS_LABEL[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Prazo</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={data}
-                      onChange={(e) => setData(e.target.value)}
-                      className={DATA_CELULA}
-                      aria-label="Prazo"
-                    />
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <CalendarDays className="size-4" />
+                      Datas
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <Input
+                        type="date"
+                        value={dataInicio}
+                        onChange={(e) => setDataInicio(e.target.value)}
+                        className={`${DATA_CELULA} w-auto`}
+                        aria-label="Data de inicio"
+                      />
+                      <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        value={data}
+                        onChange={(e) => setData(e.target.value)}
+                        className={`${DATA_CELULA} w-auto`}
+                        aria-label="Prazo"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Tempo estimado</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="size-4" />
+                      Estimativa
+                    </span>
                     <Input
                       value={tempoEstimado}
                       onChange={(e) => setTempoEstimado(e.target.value)}
@@ -341,10 +284,88 @@ export function NovaTarefaForm({
                   </div>
                 </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Projeto / Cliente</Label>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="size-4 shrink-0 text-muted-foreground" />
+                {/* Coluna 2: Responsável, Prioridade, Etiquetas, Cliente */}
+                <div>
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="size-4" />
+                      Responsável
+                    </span>
+                    <Select value={responsavelId} onValueChange={setResponsavelId}>
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <SelectValue placeholder="Nenhum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                        {responsaveis.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            <span className="flex items-center gap-2">
+                              <Avatar size="sm">
+                                <AvatarFallback
+                                  className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}
+                                >
+                                  {iniciais(r.nome)}
+                                </AvatarFallback>
+                              </Avatar>
+                              {r.nome}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Flag className="size-4" />
+                      Prioridade
+                    </span>
+                    <Select
+                      value={prioridade}
+                      onValueChange={(v) => setPrioridade(v as TarefaPrioridade)}
+                    >
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <span className="flex items-center gap-1.5 text-sm font-medium">
+                          {(prioridade === 'alta' || prioridade === 'urgente') && (
+                            <ArrowUp className="size-3.5 text-destructive" />
+                          )}
+                          {PRIORIDADE_LABEL[prioridade]}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORIDADE_ORDEM.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            <span className="flex items-center gap-1.5">
+                              {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
+                              <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
+                                {PRIORIDADE_LABEL[p]}
+                              </Badge>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Tag className="size-4" />
+                      Etiquetas
+                    </span>
+                    <Input
+                      value={etiquetasTexto}
+                      onChange={(e) => setEtiquetasTexto(e.target.value)}
+                      placeholder="tráfego, urgente"
+                      className="h-auto border-0 px-0 text-sm shadow-none focus-visible:ring-0"
+                      aria-label="Etiquetas separadas por vírgula"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Building2 className="size-4" />
+                      Cliente
+                    </span>
                     <Select value={clienteId} onValueChange={setClienteId}>
                       <SelectTrigger className={SELECT_CELULA}>
                         <SelectValue placeholder="Nenhum" />
