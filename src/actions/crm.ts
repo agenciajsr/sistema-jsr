@@ -20,6 +20,7 @@ import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { carimbarPrimeiroContato } from '@/lib/crm/primeiro-contato'
+import { ehEtapaFollowup } from '@/lib/crm/followup'
 import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
 import { montarDadosContrato, gerarToken } from '@/lib/contratos/fluxo'
 import { servicosContratadosSchema, somaServicos } from '@/lib/contratos/servicos-contratados'
@@ -538,6 +539,28 @@ export async function moverOportunidade(id: string, etapaId: string, ordemNaEtap
     // Negociação ficavam eternamente "aguardando 1º contato").
     await carimbarPrimeiroContato(id)
 
+    // Entrada no fluxo de follow-up (quick-260719-s3a): mover para a etapa
+    // "Follow-up" coloca o card em D1 — SÓ se followup_nivel ainda é null.
+    // Voltar para a etapa depois de já ter nível NÃO rebaixa (histórico
+    // preservado); sair da etapa/ganhar/perder também não zera nada.
+    // try/catch próprio: degradação graciosa enquanto a migration 0037 não
+    // for aplicada (colunas ausentes não podem travar o mover).
+    if (ehEtapaFollowup(etapaPara.nome)) {
+      try {
+        await db
+          .update(crmOportunidades)
+          .set({ followupNivel: 1, ultimoFollowupEm: new Date() })
+          .where(
+            and(
+              eq(crmOportunidades.id, id),
+              sql`${crmOportunidades.followupNivel} IS NULL`,
+            ),
+          )
+      } catch (e) {
+        console.warn('[moverOportunidade] entrada no follow-up falhou (migration 0037 pendente?)', e)
+      }
+    }
+
     // Atividade com de/para = NOMES das etapas (legível na timeline).
     await registrarAtividadeCrm(workspace.id, currentUser, {
       tipo: 'mudanca_etapa',
@@ -552,6 +575,71 @@ export async function moverOportunidade(id: string, etapaId: string, ordemNaEtap
   } catch (e) {
     console.error('[moverOportunidade]', e)
     return { error: 'Nao foi possivel mover a oportunidade.' }
+  }
+}
+
+/**
+ * Avança o follow-up de um card na visão D1..D6 (quick-260719-s3a): arrastar
+ * D(n)→D(n+1) = "fiz o follow-up n+1" — incrementa o nível e carimba
+ * ultimo_followup_em (zera o relógio do próximo prazo). Card ÚNICO: nada é
+ * duplicado, a coluna da visão deriva do nível.
+ */
+export async function avancarFollowup(id: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  const workspace = await getWorkspaceAtual()
+  if (!workspace) return { error: 'Workspace nao encontrado. Aplique a migration 0019.' }
+
+  try {
+    // Queries SEQUENCIAIS: oportunidade → nome da etapa → update.
+    const [oportunidade] = await db
+      .select({
+        id: crmOportunidades.id,
+        status: crmOportunidades.status,
+        etapaId: crmOportunidades.etapaId,
+        followupNivel: crmOportunidades.followupNivel,
+      })
+      .from(crmOportunidades)
+      .where(and(eq(crmOportunidades.id, id), eq(crmOportunidades.workspaceId, workspace.id)))
+
+    if (!oportunidade) return { error: 'Oportunidade nao encontrada.' }
+    if (oportunidade.status !== 'aberta') {
+      return { error: 'So negocios ABERTOS podem avancar no follow-up.' }
+    }
+
+    const [etapa] = await db
+      .select({ nome: crmEtapas.nome })
+      .from(crmEtapas)
+      .where(eq(crmEtapas.id, oportunidade.etapaId))
+
+    if (!etapa || !ehEtapaFollowup(etapa.nome)) {
+      return { error: 'O negocio nao esta na etapa Follow-up.' }
+    }
+
+    const nivel = oportunidade.followupNivel
+    if (nivel == null) return { error: 'O negocio ainda nao entrou no fluxo de follow-up.' }
+    if (nivel >= 6) return { error: 'O negocio ja esta no ultimo nivel de follow-up (D6).' }
+
+    await db
+      .update(crmOportunidades)
+      .set({ followupNivel: nivel + 1, ultimoFollowupEm: new Date(), updatedAt: new Date() })
+      .where(eq(crmOportunidades.id, id))
+
+    // Timeline: mesmo padrao de 'mudanca_etapa', com de/para legiveis (D2→D3).
+    await registrarAtividadeCrm(workspace.id, currentUser, {
+      tipo: 'followup',
+      oportunidadeId: id,
+      campo: 'followup',
+      de: `D${nivel}`,
+      para: `D${nivel + 1}`,
+    })
+
+    revalidatePath('/crm')
+    return { data: { nivel: nivel + 1 } }
+  } catch (e) {
+    console.error('[avancarFollowup]', e)
+    return { error: 'Nao foi possivel avancar o follow-up. A migration 0037 foi aplicada?' }
   }
 }
 

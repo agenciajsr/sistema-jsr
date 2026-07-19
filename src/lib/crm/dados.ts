@@ -15,6 +15,8 @@ import {
 } from '@/lib/db/schema'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { horasAguardando } from '@/lib/crm/sla-contato'
+import { pendenciaFollowup, type PendenciaFollowup } from '@/lib/crm/followup'
+import { temperaturaOrigem, type Temperatura } from '@/lib/crm/temperatura'
 
 // Módulo server comum — SEM 'use server': é chamado direto pelo Server Component
 // da página /crm, não pelo client. Evita expor um endpoint desnecessário.
@@ -65,6 +67,15 @@ export type OportunidadeCard = {
   // Preenchido quando o negócio GANHO já virou cliente da agência — o kanban
   // usa para NÃO reoferecer a conversão (dialog Converter em cliente).
   clienteId: string | null
+  // --- Follow-up (quick-260719-s3a, migration 0037) ---
+  // Nível D1-D6 na visão Follow-up; null = fora do fluxo OU migration pendente
+  // (degradação graciosa — a query vive num try/catch separado).
+  followupNivel: number | null
+  ultimoFollowupEm: string | null // ISO
+  // Chip 🔥/🧊 DERIVADO da origem (src/lib/crm/temperatura.ts) — sem coluna.
+  temperatura: Temperatura | null
+  // Selo de pendência na família visual do SLA: 'pendente' | 'esgotado' | null.
+  pendenciaFollowup: PendenciaFollowup
 }
 
 export type EtapaKanban = {
@@ -207,12 +218,24 @@ type InsumosCard = {
   // Ids das oportunidades ABERTAS ainda SEM 1º contato (primeiro_contato_em
   // null). Vazio quando a migration 0034 não foi aplicada (query em try/catch).
   semPrimeiroContato: Set<string>
+  // Nome de cada etapa por id (do passo 3) — a pendência de follow-up depende
+  // de saber SE o card está em "Contato Feito" ou "Follow-up".
+  nomeEtapaPorId: Map<string, string>
+  // Dados de follow-up + primeiroContatoEm das ABERTAS (migration 0037/0034).
+  // Vazio quando a migration ainda não foi aplicada (query em try/catch).
+  followupPorOportunidade: Map<
+    string,
+    { followupNivel: number | null; ultimoFollowupEm: Date | null; primeiroContatoEm: Date | null }
+  >
 }
 
 // Helper LOCAL (não exportado): a montagem do card mora num lugar só — senão
 // abertas e fechadas divergem silenciosamente.
 function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): OportunidadeCard {
   const criada = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)
+  // Follow-up: dados da migration 0037 (Map vazio = pendente → campos null).
+  const fup = insumos.followupPorOportunidade.get(o.id)
+  const etapaNome = insumos.nomeEtapaPorId.get(o.etapaId) ?? null
   return {
     id: o.id,
     titulo: o.titulo,
@@ -242,6 +265,20 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
         ? horasAguardando(criada)
         : null,
     clienteId: o.clienteId,
+    followupNivel: fup?.followupNivel ?? null,
+    ultimoFollowupEm: fup?.ultimoFollowupEm ? fup.ultimoFollowupEm.toISOString() : null,
+    // Temperatura DERIVADA da origem — funciona mesmo sem a migration 0037.
+    temperatura: temperaturaOrigem(o.origem),
+    // Pendência só existe em card aberto (o módulo puro já garante); a base
+    // dos 24h em "Contato Feito" é primeiro_contato_em (carimbo do quick
+    // 260717-qq6) com fallback na criação do card.
+    pendenciaFollowup: pendenciaFollowup({
+      status: o.status,
+      etapaNome,
+      followupNivel: fup?.followupNivel ?? null,
+      ultimoFollowupEm: fup?.ultimoFollowupEm ?? null,
+      baseContatoFeito: fup ? (fup.primeiroContatoEm ?? criada) : null,
+    }),
   }
 }
 
@@ -509,12 +546,49 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
       console.error('[getCrmVisaoGeral] SLA 1º contato indisponivel (migration 0034 pendente?)', e)
     }
 
+    // (16) Follow-up (quick-260719-s3a) — query SEPARADA e sequencial de
+    // propósito: followup_nivel/ultimo_followup_em são da migration 0037
+    // (aplicação manual). Se ela ainda não existe, o catch devolve Map vazio e
+    // os cards seguem sem nível/pendência — mesma degradação graciosa do SLA.
+    // primeiroContatoEm (0034) entra na MESMA query: é a base dos 24h em
+    // "Contato Feito" e já vive protegido pelo mesmo try/catch.
+    const followupPorOportunidade: InsumosCard['followupPorOportunidade'] = new Map()
+    try {
+      const fupRows = await db
+        .select({
+          id: crmOportunidades.id,
+          followupNivel: crmOportunidades.followupNivel,
+          ultimoFollowupEm: crmOportunidades.ultimoFollowupEm,
+          primeiroContatoEm: crmOportunidades.primeiroContatoEm,
+        })
+        .from(crmOportunidades)
+        .where(
+          and(eq(crmOportunidades.pipelineId, pipeline.id), eq(crmOportunidades.status, 'aberta')),
+        )
+      for (const r of fupRows) {
+        followupPorOportunidade.set(r.id, {
+          followupNivel: r.followupNivel,
+          ultimoFollowupEm: r.ultimoFollowupEm,
+          primeiroContatoEm: r.primeiroContatoEm,
+        })
+      }
+    } catch (e) {
+      console.error('[getCrmVisaoGeral] follow-up indisponivel (migration 0037 pendente?)', e)
+    }
+
+    // Nome de cada etapa por id — a pendência de follow-up é calculada pelo
+    // NOME da etapa (Contato Feito / Follow-up), etapas já carregadas no (3).
+    const nomeEtapaPorId = new Map<string, string>()
+    for (const et of etapas) nomeEtapaPorId.set(et.id, et.nome)
+
     const insumos: InsumosCard = {
       atividadesPorOportunidade,
       tarefasAbertasPorOportunidade,
       numeroPorOportunidade,
       tagsPorContato,
       semPrimeiroContato,
+      nomeEtapaPorId,
+      followupPorOportunidade,
     }
 
     // Merge em memória: monta os cards preenchendo createdAt e semContato.
