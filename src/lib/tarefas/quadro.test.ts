@@ -18,6 +18,7 @@ import {
   rotuloDoDia,
   dataBrasiliaDeIso,
   tempoRelativo,
+  montarFeedAtividade,
   formatarTamanho,
   tipoDeArquivo,
   textoAtividade,
@@ -598,5 +599,60 @@ describe('corDaEtiqueta', () => {
     expect(corDaEtiqueta('Performance')).not.toMatch(/#|rgb/)
     expect(typeof corDaEtiqueta(null)).toBe('string')
     expect(corDaEtiqueta(null).length).toBeGreaterThan(0)
+  })
+})
+
+describe('montarFeedAtividade', () => {
+  const c = (id: string, createdAt: string) => ({
+    id,
+    createdAt,
+    texto: `texto ${id}`,
+    autorId: 'u1',
+    autorNome: 'Ana',
+  })
+  const a = (id: string, createdAt: string, tipo = 'campo_alterado') => ({
+    id,
+    createdAt,
+    tipo,
+    campo: 'status',
+    de: null,
+    para: 'concluida',
+    detalhe: null,
+    autorId: 'u1',
+    autorNome: 'Ana',
+  })
+
+  it('intercala comentários e atividades por createdAt ASCENDENTE', () => {
+    const feed = montarFeedAtividade(
+      [c('c1', '2026-07-19T12:00:00Z')],
+      [a('a1', '2026-07-19T10:00:00Z'), a('a2', '2026-07-19T14:00:00Z')]
+    )
+    expect(feed.map((i) => i.key)).toEqual(['a-a1', 'c-c1', 'a-a2'])
+  })
+
+  it("exclui atividades tipo 'comentou' do feed (o comentário real já entra)", () => {
+    const feed = montarFeedAtividade(
+      [c('c1', '2026-07-19T12:00:00Z')],
+      [a('a1', '2026-07-19T12:00:00Z', 'comentou'), a('a2', '2026-07-19T13:00:00Z')]
+    )
+    expect(feed.map((i) => i.key)).toEqual(['c-c1', 'a-a2'])
+  })
+
+  it('discrimina cada item com kind e key estável', () => {
+    const feed = montarFeedAtividade([c('c9', '2026-07-19T12:00:00Z')], [a('a7', '2026-07-19T13:00:00Z')])
+    expect(feed[0]).toMatchObject({ kind: 'comentario', key: 'c-c9', createdAt: '2026-07-19T12:00:00Z' })
+    expect(feed[0].kind === 'comentario' && feed[0].comentario.texto).toBe('texto c9')
+    expect(feed[1]).toMatchObject({ kind: 'evento', key: 'a-a7' })
+    expect(feed[1].kind === 'evento' && feed[1].atividade.tipo).toBe('campo_alterado')
+  })
+
+  it('listas vazias -> feed vazio; empate de createdAt não quebra (ordem estável)', () => {
+    expect(montarFeedAtividade([], [])).toEqual([])
+    const mesmo = '2026-07-19T12:00:00Z'
+    const feed = montarFeedAtividade([c('c1', mesmo), c('c2', mesmo)], [a('a1', mesmo)])
+    expect(feed).toHaveLength(3)
+    // Empate: comentários preservam a ordem relativa entre si (sort estável).
+    const soComentarios = feed.filter((i) => i.kind === 'comentario').map((i) => i.key)
+    expect(soComentarios).toEqual(['c-c1', 'c-c2'])
   })
 })
