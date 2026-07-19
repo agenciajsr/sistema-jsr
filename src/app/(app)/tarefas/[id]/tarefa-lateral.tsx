@@ -109,8 +109,18 @@ export function AnexoLinha({
   )
 }
 
-/** Uma linha de atividade — reusada no card lateral e na aba Atividade. */
-export function AtividadeLinha({ atv, agora }: { atv: AtividadeTarefa; agora: string }) {
+/** Uma linha de atividade — reusada no card lateral e no painel Atividade.
+ *  `compacta` (painel qr2): sem avatar, texto xs discreto — evento não disputa
+ *  atenção com os cards de comentário. */
+export function AtividadeLinha({
+  atv,
+  agora,
+  compacta = false,
+}: {
+  atv: AtividadeTarefa
+  agora: string
+  compacta?: boolean
+}) {
   const { frase, valor } = textoAtividade(atv)
   const ehBadge =
     atv.tipo === 'campo_alterado' && (atv.campo === 'status' || atv.campo === 'prioridade')
@@ -119,6 +129,28 @@ export function AtividadeLinha({ atv, agora }: { atv: AtividadeTarefa; agora: st
     atv.campo === 'status' && atv.para
       ? (STATUS_CLASSE[atv.para as TarefaStatus] ?? '')
       : ''
+
+  if (compacta) {
+    return (
+      <div className="flex flex-wrap items-center gap-1 px-1 text-xs text-muted-foreground">
+        <b className="text-foreground">{atv.autorNome}</b>
+        <span>{frase}</span>
+        {valor &&
+          atv.tipo !== 'comentou' &&
+          (ehBadge ? (
+            <Badge variant="outline" className={badgeClasse}>
+              {atv.campo === 'status' && atv.para === 'em_andamento' && (
+                <Play className="size-3 fill-current" />
+              )}
+              {valor}
+            </Badge>
+          ) : (
+            <span className="font-medium text-foreground">{valor}</span>
+          ))}
+        <span className="ml-auto">{tempoRelativo(atv.createdAt, agora)}</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex gap-2">
