@@ -1,19 +1,16 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Download,
   File,
   FileSpreadsheet,
   FileText,
-  History,
   Image as ImageIcon,
   Maximize2,
   MoreHorizontal,
-  Paperclip,
   Play,
-  Plus,
   Presentation,
   StickyNote,
   type LucideIcon,
@@ -186,23 +183,8 @@ export function AtividadeLinha({
   )
 }
 
-export function TarefaLateral({
-  tarefa,
-  agora,
-  onIrParaAba,
-  onArquivoEscolhido,
-  onBaixarAnexo,
-  onRemoverAnexo,
-  enviandoAnexo,
-}: {
-  tarefa: TarefaDetalheTipo
-  agora: string
-  onIrParaAba: (aba: string) => void
-  onArquivoEscolhido: (file: File) => void
-  onBaixarAnexo: (id: string) => void
-  onRemoverAnexo: (id: string) => void
-  enviandoAnexo: boolean
-}) {
+/** Card de Notas — vive na aba Detalhes desde o layout ClickUp (qr2). */
+export function NotasCard({ tarefa, agora }: { tarefa: TarefaDetalheTipo; agora: string }) {
   const router = useRouter()
   const [salvando, startSalvar] = useTransition()
   // `notas` guarda o HTML atual do editor (atualizado no onChange). O editor é
@@ -213,7 +195,6 @@ export function TarefaLateral({
   // Editor não-controlado: para "Limpar notas" refletir na tela, forçamos o
   // remount trocando a key.
   const [resetKey, setResetKey] = useState(0)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   function salvarNotas(valor: string) {
     if (valor === (tarefa.notas ?? '')) return
@@ -228,13 +209,8 @@ export function TarefaLateral({
     })
   }
 
-  const anexosCard = tarefa.anexos.slice(0, 4)
-  const atividadesCard = tarefa.atividades.slice(0, 5)
-
   return (
-    <div className="space-y-6">
-      {/* Notas */}
-      <Card>
+    <Card>
         <CardHeader className="flex items-center justify-between space-y-0">
           <CardTitle className="flex items-center gap-2 text-sm">
             <StickyNote className="size-4 text-muted-foreground" />
@@ -299,81 +275,6 @@ export function TarefaLateral({
             </button>
           </div>
         </CardContent>
-      </Card>
-
-      {/* Anexos */}
-      <Card>
-        <CardHeader className="flex items-center justify-between space-y-0">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Paperclip className="size-4 text-muted-foreground" />
-            Anexos
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={enviandoAnexo}
-            onClick={() => fileRef.current?.click()}
-          >
-            <Plus className="size-4" />
-            {enviandoAnexo ? 'Enviando...' : 'Adicionar'}
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) onArquivoEscolhido(f)
-              e.target.value = ''
-            }}
-          />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {anexosCard.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum arquivo anexado ainda.</p>
-          ) : (
-            anexosCard.map((a) => (
-              <AnexoLinha key={a.id} anexo={a} onBaixar={onBaixarAnexo} onRemover={onRemoverAnexo} />
-            ))
-          )}
-          {tarefa.anexos.length > 0 && (
-            <button
-              type="button"
-              className="w-full pt-1 text-center text-xs text-primary hover:underline"
-              onClick={() => onIrParaAba('anexos')}
-            >
-              Ver todos anexos
-            </button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Atividade Recente */}
-      <Card>
-        <CardHeader className="flex items-center justify-between space-y-0">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <History className="size-4 text-muted-foreground" />
-            Atividade Recente
-          </CardTitle>
-          {tarefa.atividades.length > 0 && (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => onIrParaAba('atividade')}
-            >
-              Ver tudo
-            </button>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {atividadesCard.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma atividade registrada ainda.</p>
-          ) : (
-            atividadesCard.map((a) => <AtividadeLinha key={a.id} atv={a} agora={agora} />)
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    </Card>
   )
 }

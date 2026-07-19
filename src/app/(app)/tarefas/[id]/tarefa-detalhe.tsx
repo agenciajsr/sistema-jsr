@@ -10,19 +10,21 @@ import {
   CalendarDays,
   Check,
   ChevronRight,
+  CircleDot,
   Clock,
   Copy,
   FileText,
-  History,
+  Flag,
   Link2,
   ListChecks,
-  MessageSquare,
   MoreHorizontal,
   Paperclip,
   Pin,
   Play,
   Plus,
+  Repeat,
   Share2,
+  Tag,
   Trash2,
   Users,
   X,
@@ -92,7 +94,6 @@ import {
   corDoAvatar,
   iniciais,
   progressoChecklist,
-  tempoRelativo,
 } from '@/lib/tarefas/quadro'
 import {
   atualizarTarefa,
@@ -108,7 +109,8 @@ import {
   getUrlAnexoTarefa,
 } from '@/actions/tarefas'
 import type { AtualizarTarefaInput } from '@/lib/validations/tarefa'
-import { TarefaLateral, AnexoLinha, AtividadeLinha } from './tarefa-lateral'
+import { NotasCard, AnexoLinha } from './tarefa-lateral'
+import { PainelAtividade } from './painel-atividade'
 
 const NENHUM = '__nenhum__'
 
@@ -144,13 +146,13 @@ export function TarefaDetalhe({
 
   // "Agora" calculado UMA vez no client (tempoRelativo é puro e recebe o agora).
   const [agora] = useState(() => new Date().toISOString())
-  // D-12: abas controladas — os links "Ver tudo" dos cards laterais trocam de aba.
-  const [aba, setAba] = useState('detalhes')
 
   const [titulo, setTitulo] = useState(tarefa.titulo)
   const [subtitulo, setSubtitulo] = useState(tarefa.subtitulo ?? '')
   const [descricao, setDescricao] = useState(tarefa.descricao ?? '')
   const [editandoDescricao, setEditandoDescricao] = useState(false)
+  // Descrição longa nasce recolhida (line-clamp), como no print do ClickUp.
+  const [descricaoExpandida, setDescricaoExpandida] = useState(false)
   const [novaEtiqueta, setNovaEtiqueta] = useState('')
 
   const [itens, setItens] = useState<ItemChecklist[]>(tarefa.checklist)
@@ -160,8 +162,6 @@ export function TarefaDetalhe({
   const [gruposNovos, setGruposNovos] = useState<string[]>([])
   const [nomeGrupoNovo, setNomeGrupoNovo] = useState('')
   const [criandoGrupo, setCriandoGrupo] = useState(false)
-
-  const [novoComentario, setNovoComentario] = useState('')
 
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false)
   const [recorrencia, setRecorrencia] = useState<TarefaRecorrencia>(tarefa.recorrencia)
@@ -332,16 +332,14 @@ export function TarefaDetalhe({
     salvarCampo({ etiquetas: [...tarefa.etiquetas, nova] }, () => setNovaEtiqueta(''))
   }
 
-  function enviarComentario() {
-    const texto = novoComentario.trim()
-    if (!texto) return
+  function enviarComentario(texto: string) {
+    if (!texto.trim()) return
     startSalvar(async () => {
-      const r = await criarComentario(tarefa.id, { texto })
+      const r = await criarComentario(tarefa.id, { texto: texto.trim() })
       if ('error' in r) {
         toast.error(r.error)
         return
       }
-      setNovoComentario('')
       router.refresh()
     })
   }
@@ -405,6 +403,8 @@ export function TarefaDetalhe({
   ]
 
   const responsavelDaTarefa = responsaveis.find((r) => r.id === tarefa.responsavelId)
+  // > ~8 linhas (ou texto muito longo sem quebras) nasce recolhida, como no print.
+  const descricaoLonga = descricao.split('\n').length > 8 || descricao.length > 600
 
   /** Card de grupo de checklist FIEL ao mockup: nome + "2 / 6" + barra na mesma
    *  linha, ícones de responsável/data à direita, "..." com ação real; item com
@@ -667,149 +667,80 @@ export function TarefaDetalhe({
                 />
               </div>
 
-              {/* Grade de 8 células COM BORDA e DIVISÓRIAS */}
-              <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-xl border bg-card md:grid-cols-4">
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Select
-                    value={tarefa.status}
-                    onValueChange={(v) => salvarCampo({ status: v as TarefaStatus })}
-                  >
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <Badge variant="outline" className={STATUS_CLASSE[tarefa.status]}>
-                        {tarefa.status === 'em_andamento' && <Play className="size-3 fill-current" />}
-                        {STATUS_LABEL[tarefa.status]}
-                      </Badge>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_ORDEM.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {STATUS_LABEL[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Grade de metadados estilo ClickUp: 2 colunas, ícone + rótulo à
+                  esquerda, valor à direita — sem cara de formulário (qr2). */}
+              <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+                {/* Coluna 1: Status, Datas, Tempo estimado */}
+                <div>
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <CircleDot className="size-4" />
+                      Status
+                    </span>
+                    <Select
+                      value={tarefa.status}
+                      onValueChange={(v) => salvarCampo({ status: v as TarefaStatus })}
+                    >
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <Badge variant="outline" className={STATUS_CLASSE[tarefa.status]}>
+                          {tarefa.status === 'em_andamento' && (
+                            <Play className="size-3 fill-current" />
+                          )}
+                          {STATUS_LABEL[tarefa.status]}
+                        </Badge>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_ORDEM.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {STATUS_LABEL[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Responsável</Label>
-                  <Select
-                    value={tarefa.responsavelId ?? NENHUM}
-                    onValueChange={(v) => salvarCampo({ responsavelId: v === NENHUM ? '' : v })}
-                  >
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <SelectValue placeholder="Nenhum" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NENHUM}>Nenhum</SelectItem>
-                      {responsaveis.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          <span className="flex items-center gap-2">
-                            <Avatar size="sm">
-                              <AvatarFallback
-                                className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}
-                              >
-                                {iniciais(r.nome)}
-                              </AvatarFallback>
-                            </Avatar>
-                            {r.nome}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Prioridade</Label>
-                  <Select
-                    value={tarefa.prioridade}
-                    onValueChange={(v) => salvarCampo({ prioridade: v as TarefaPrioridade })}
-                  >
-                    <SelectTrigger className={SELECT_CELULA}>
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        {(tarefa.prioridade === 'alta' || tarefa.prioridade === 'urgente') && (
-                          <ArrowUp className="size-3.5 text-destructive" />
-                        )}
-                        {PRIORIDADE_LABEL[tarefa.prioridade]}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRIORIDADE_ORDEM.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          <span className="flex items-center gap-1.5">
-                            {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
-                            <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
-                              {PRIORIDADE_LABEL[p]}
-                            </Badge>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Etiquetas</Label>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {tarefa.etiquetas.map((e) => (
-                      <Badge key={e} variant="outline" className={`gap-1 ${corDaEtiqueta(e)}`}>
-                        {e}
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <CalendarDays className="size-4" />
+                      Datas
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <Input
+                        type="date"
+                        defaultValue={tarefa.dataInicio ?? ''}
+                        onChange={(e) => salvarCampo({ dataInicio: e.target.value })}
+                        className={`${DATA_CELULA} w-auto`}
+                        aria-label="Data de inicio"
+                      />
+                      <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        defaultValue={tarefa.data}
+                        onChange={(e) => e.target.value && salvarCampo({ data: e.target.value })}
+                        className={`${DATA_CELULA} w-auto`}
+                        aria-label="Prazo"
+                      />
+                      {tarefa.recorrencia !== 'nenhuma' && (
                         <button
                           type="button"
-                          onClick={() => removerEtiqueta(e)}
-                          aria-label={`Remover etiqueta ${e}`}
+                          onClick={() => setRecorrenciaAberta(true)}
+                          aria-label="Editar recorrência"
+                          title="Editar recorrência"
                         >
-                          <X className="size-3" />
+                          <Badge variant="secondary" className="gap-1">
+                            <Repeat className="size-3" />
+                            {RECORRENCIA_LABEL[tarefa.recorrencia]}
+                          </Badge>
                         </button>
-                      </Badge>
-                    ))}
-                    <Input
-                      value={novaEtiqueta}
-                      onChange={(e) => setNovaEtiqueta(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          adicionarEtiqueta()
-                        }
-                      }}
-                      placeholder="adicionar"
-                      className="h-6 w-24 border-0 px-0 text-xs shadow-none focus-visible:ring-0"
-                      aria-label="Adicionar etiqueta"
-                    />
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Data de início</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      defaultValue={tarefa.dataInicio ?? ''}
-                      onChange={(e) => salvarCampo({ dataInicio: e.target.value })}
-                      className={DATA_CELULA}
-                      aria-label="Data de inicio"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Prazo</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      defaultValue={tarefa.data}
-                      onChange={(e) => e.target.value && salvarCampo({ data: e.target.value })}
-                      className={DATA_CELULA}
-                      aria-label="Prazo"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Tempo estimado</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="size-4 shrink-0 text-muted-foreground" />
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="size-4" />
+                      Estimativa
+                    </span>
                     <Input
                       defaultValue={tarefa.tempoEstimado ?? ''}
                       onBlur={(e) => {
@@ -824,10 +755,111 @@ export function TarefaDetalhe({
                   </div>
                 </div>
 
-                <div className="space-y-1.5 p-3">
-                  <Label className="text-xs text-muted-foreground">Projeto / Cliente</Label>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="size-4 shrink-0 text-muted-foreground" />
+                {/* Coluna 2: Responsável, Prioridade, Etiquetas, Cliente */}
+                <div>
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="size-4" />
+                      Responsável
+                    </span>
+                    <Select
+                      value={tarefa.responsavelId ?? NENHUM}
+                      onValueChange={(v) => salvarCampo({ responsavelId: v === NENHUM ? '' : v })}
+                    >
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <SelectValue placeholder="Nenhum" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NENHUM}>Nenhum</SelectItem>
+                        {responsaveis.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            <span className="flex items-center gap-2">
+                              <Avatar size="sm">
+                                <AvatarFallback
+                                  className={`text-[10px] font-semibold ${corDoAvatar(r.id)}`}
+                                >
+                                  {iniciais(r.nome)}
+                                </AvatarFallback>
+                              </Avatar>
+                              {r.nome}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Flag className="size-4" />
+                      Prioridade
+                    </span>
+                    <Select
+                      value={tarefa.prioridade}
+                      onValueChange={(v) => salvarCampo({ prioridade: v as TarefaPrioridade })}
+                    >
+                      <SelectTrigger className={SELECT_CELULA}>
+                        <span className="flex items-center gap-1.5 text-sm font-medium">
+                          {(tarefa.prioridade === 'alta' || tarefa.prioridade === 'urgente') && (
+                            <ArrowUp className="size-3.5 text-destructive" />
+                          )}
+                          {PRIORIDADE_LABEL[tarefa.prioridade]}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORIDADE_ORDEM.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            <span className="flex items-center gap-1.5">
+                              {(p === 'alta' || p === 'urgente') && <ArrowUp className="size-3" />}
+                              <Badge variant="outline" className={PRIORIDADE_CLASSE[p]}>
+                                {PRIORIDADE_LABEL[p]}
+                              </Badge>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Tag className="size-4" />
+                      Etiquetas
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      {tarefa.etiquetas.map((e) => (
+                        <Badge key={e} variant="outline" className={`gap-1 ${corDaEtiqueta(e)}`}>
+                          {e}
+                          <button
+                            type="button"
+                            onClick={() => removerEtiqueta(e)}
+                            aria-label={`Remover etiqueta ${e}`}
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      <Input
+                        value={novaEtiqueta}
+                        onChange={(e) => setNovaEtiqueta(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            adicionarEtiqueta()
+                          }
+                        }}
+                        placeholder="adicionar"
+                        className="h-6 w-24 border-0 px-0 text-xs shadow-none focus-visible:ring-0"
+                        aria-label="Adicionar etiqueta"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <span className="flex w-32 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <Building2 className="size-4" />
+                      Cliente
+                    </span>
                     <Select
                       value={tarefa.clienteId ?? NENHUM}
                       onValueChange={(v) => salvarCampo({ clienteId: v === NENHUM ? '' : v })}
@@ -850,8 +882,8 @@ export function TarefaDetalhe({
             </CardContent>
           </Card>
 
-          {/* Abas underline, 5 delas, com contador real */}
-          <Tabs value={aba} onValueChange={setAba}>
+          {/* Abas underline — Comentários/Atividade migraram para o painel direito (qr2) */}
+          <Tabs defaultValue="detalhes">
             <TabsList className="h-auto w-full justify-start gap-4 rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="detalhes"
                 className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
@@ -870,18 +902,6 @@ export function TarefaDetalhe({
               >
                 <Paperclip className="size-4" />
                 Anexos{tarefa.anexos.length > 0 && ` ${tarefa.anexos.length}`}
-              </TabsTrigger>
-              <TabsTrigger value="comentarios"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-              >
-                <MessageSquare className="size-4" />
-                Comentários{tarefa.comentarios.length > 0 && ` ${tarefa.comentarios.length}`}
-              </TabsTrigger>
-              <TabsTrigger value="atividade"
-                className="gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-1 pb-3 shadow-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-              >
-                <History className="size-4" />
-                Atividade
               </TabsTrigger>
             </TabsList>
 
@@ -904,18 +924,35 @@ export function TarefaDetalhe({
                     aria-label="Descrição da tarefa"
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className="w-full whitespace-pre-wrap rounded-md text-left text-sm leading-relaxed hover:bg-muted/50"
-                    onClick={() => setEditandoDescricao(true)}
-                    aria-label="Editar descrição"
-                  >
-                    {descricao || (
-                      <span className="text-muted-foreground">Adicionar descrição...</span>
+                  <>
+                    <button
+                      type="button"
+                      className={`w-full whitespace-pre-wrap rounded-md text-left text-sm leading-relaxed hover:bg-muted/50 ${
+                        descricaoLonga && !descricaoExpandida ? 'line-clamp-[8]' : ''
+                      }`}
+                      onClick={() => setEditandoDescricao(true)}
+                      aria-label="Editar descrição"
+                    >
+                      {descricao || (
+                        <span className="text-muted-foreground">Adicionar descrição...</span>
+                      )}
+                    </button>
+                    {descricaoLonga && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-2 text-muted-foreground"
+                        onClick={() => setDescricaoExpandida((v) => !v)}
+                      >
+                        {descricaoExpandida ? 'Recolher' : 'Expandir'}
+                      </Button>
                     )}
-                  </button>
+                  </>
                 )}
               </div>
+
+              {/* Notas — nada se perde: o card lateral vive aqui agora (qr2) */}
+              <NotasCard tarefa={tarefa} agora={agora} />
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1012,96 +1049,22 @@ export function TarefaDetalhe({
                 </div>
               )}
             </TabsContent>
-
-            {/* Comentários */}
-            <TabsContent value="comentarios" className="mt-4 space-y-4">
-              <div className="space-y-2">
-                <Textarea
-                  value={novoComentario}
-                  onChange={(e) => setNovoComentario(e.target.value)}
-                  rows={3}
-                  placeholder="Escreva um comentário..."
-                  aria-label="Novo comentário"
-                />
-                <div className="flex justify-end">
-                  <Button onClick={enviarComentario} disabled={salvando || !novoComentario.trim()}>
-                    Comentar
-                  </Button>
-                </div>
-              </div>
-
-              {tarefa.comentarios.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum comentário ainda.</p>
-              ) : (
-                <div className="space-y-4">
-                  {tarefa.comentarios.map((c) => (
-                    <div key={c.id} className="flex gap-2">
-                      <Avatar size="sm">
-                        <AvatarFallback
-                          className={`text-[10px] font-semibold ${corDoAvatar(c.autorId)}`}
-                        >
-                          {iniciais(c.autorNome)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{c.autorNome}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {tempoRelativo(c.createdAt, agora)}
-                          </span>
-                          {c.autorId === usuarioId && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="ml-auto size-7"
-                                  aria-label="Ações do comentário"
-                                >
-                                  <MoreHorizontal className="size-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => removerComentario(c.id)}
-                                >
-                                  Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                        <p className="whitespace-pre-wrap text-sm">{c.texto}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-
-            {/* Atividade — histórico completo */}
-            <TabsContent value="atividade" className="mt-4 space-y-4">
-              {tarefa.atividades.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma atividade registrada ainda.</p>
-              ) : (
-                tarefa.atividades.map((a) => <AtividadeLinha key={a.id} atv={a} agora={agora} />)
-              )}
-            </TabsContent>
           </Tabs>
         </div>
 
-        {/* Coluna direita: Notas, Anexos, Atividade Recente */}
+        {/* Coluna direita: painel Atividade estilo ClickUp — sticky no desktop
+            com scroll próprio; no mobile cai para baixo do conteúdo. */}
         <div className="lg:col-span-1">
-          <TarefaLateral
-            tarefa={tarefa}
-            agora={agora}
-            onIrParaAba={setAba}
-            onArquivoEscolhido={enviarAnexo}
-            onBaixarAnexo={baixarAnexo}
-            onRemoverAnexo={removerAnexo}
-            enviandoAnexo={enviandoAnexo}
-          />
+          <div className="lg:sticky lg:top-6 lg:h-[calc(100vh-6rem)]">
+            <PainelAtividade
+              tarefa={tarefa}
+              agora={agora}
+              usuarioId={usuarioId}
+              enviando={salvando}
+              onEnviarComentario={enviarComentario}
+              onRemoverComentario={removerComentario}
+            />
+          </div>
         </div>
       </div>
 
