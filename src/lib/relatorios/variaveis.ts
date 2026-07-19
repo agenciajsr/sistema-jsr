@@ -13,6 +13,8 @@ export type CategoriaVariavel =
   | 'conversas'
   | 'vendas'
   | 'pagina'
+  | 'engajamento'
+  | 'video'
 
 export type VariavelCatalogo = {
   chave: string
@@ -54,6 +56,15 @@ export const CATALOGO_VARIAVEIS: VariavelCatalogo[] = [
   // Página
   { chave: 'visitas_pagina', label: 'Visitas à página', categoria: 'pagina', formato: 'numero' },
   { chave: 'custo_por_visita', label: 'Custo por visita', categoria: 'pagina', formato: 'moeda' },
+  // Engajamento
+  { chave: 'engajamento', label: 'Engajamento', categoria: 'engajamento', formato: 'numero' },
+  { chave: 'custo_por_engajamento', label: 'Custo por engajamento', categoria: 'engajamento', formato: 'moeda' },
+  { chave: 'cliques_link', label: 'Cliques no link', categoria: 'engajamento', formato: 'numero' },
+  { chave: 'custo_por_clique_link', label: 'Custo por clique no link', categoria: 'engajamento', formato: 'moeda' },
+  { chave: 'curtidas_pagina', label: 'Curtidas da página', categoria: 'engajamento', formato: 'numero' },
+  // Vídeo
+  { chave: 'video_views', label: 'Visualizações de vídeo', categoria: 'video', formato: 'numero' },
+  { chave: 'custo_por_video_view', label: 'Custo por visualização', categoria: 'video', formato: 'moeda' },
 ]
 
 export const LABELS_CATEGORIA: Record<CategoriaVariavel, string> = {
@@ -64,6 +75,8 @@ export const LABELS_CATEGORIA: Record<CategoriaVariavel, string> = {
   conversas: 'Conversas',
   vendas: 'Vendas',
   pagina: 'Página',
+  engajamento: 'Engajamento',
+  video: 'Vídeo',
 }
 
 // Linha pronta de mensagem para cada métrica (usada para compor a mensagem do
@@ -89,6 +102,13 @@ export const LINHAS_METRICAS: Record<string, string> = {
   checkout: '💳 *Checkouts iniciados:* {{checkout}}',
   visitas_pagina: '📄 *Visitas à página:* {{visitas_pagina}}',
   custo_por_visita: '💰 *Custo por visita:* {{custo_por_visita}}',
+  engajamento: '🤝 *Engajamento:* {{engajamento}}',
+  custo_por_engajamento: '💰 *Custo por engajamento:* {{custo_por_engajamento}}',
+  cliques_link: '🔗 *Cliques no link:* {{cliques_link}}',
+  custo_por_clique_link: '💰 *Custo por clique no link:* {{custo_por_clique_link}}',
+  curtidas_pagina: '👍 *Curtidas da página:* {{curtidas_pagina}}',
+  video_views: '🎬 *Visualizações de vídeo:* {{video_views}}',
+  custo_por_video_view: '💰 *Custo por visualização:* {{custo_por_video_view}}',
 }
 
 /**

@@ -217,6 +217,13 @@ export function contextoDeMetricas(
     checkout: m.checkout,
     visitas_pagina: m.landingPageView,
     custo_por_visita: m.landingPageView > 0 ? m.spend / m.landingPageView : null,
+    engajamento: m.engajamento,
+    custo_por_engajamento: m.engajamento > 0 ? m.spend / m.engajamento : null,
+    cliques_link: m.linkClicks,
+    custo_por_clique_link: m.linkClicks > 0 ? m.spend / m.linkClicks : null,
+    curtidas_pagina: m.curtidasPagina,
+    video_views: m.videoViews,
+    custo_por_video_view: m.videoViews > 0 ? m.spend / m.videoViews : null,
   }
 }
 
