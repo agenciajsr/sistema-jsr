@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-17 - Completed quick task 260717-00n: spec Semáforo de metas + Alertas proativos diários + painel Ações do dia em /campanhas
+Last activity: 2026-07-19 - Completed quick task 260719-qf5: catálogo completo de métricas Meta nos relatórios + origem do lead propaga para oportunidades
 
 Progress: [████████░░] 83%
 
