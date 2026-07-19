@@ -871,6 +871,13 @@ export const crmOportunidades = pgTable('crm_oportunidades', {
   // (ligação/whatsapp/e-mail/reunião) é concluída ou registrada. Alimenta o
   // SLA de 24h (src/lib/crm/sla-contato.ts) — indicador no card + alerta.
   primeiroContatoEm: timestamp('primeiro_contato_em', { withTimezone: true }),
+  // Nível de follow-up D1-D6 (migration 0037, quick-260719-s3a): 1-6 = coluna
+  // da visão Follow-up; null = fora do fluxo. NUNCA zerado ao sair da etapa —
+  // é histórico (voltar para Follow-up não rebaixa o nível).
+  followupNivel: integer('followup_nivel'),
+  // Carimbo do ÚLTIMO follow-up feito (arrastar D(n)→D(n+1) na visão) — base
+  // dos prazos crescentes de src/lib/crm/followup.ts.
+  ultimoFollowupEm: timestamp('ultimo_followup_em', { withTimezone: true }),
   // Preenchido quando a oportunidade GANHA vira cliente da agência.
   clienteId: uuid('cliente_id').references(() => clientes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
