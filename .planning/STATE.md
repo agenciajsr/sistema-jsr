@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260719-qf5 (catálogo Engajamento/Vídeo nos relatórios + origem ficha→kanban)"
-last_updated: "2026-07-19T12:00:00.000Z"
+stopped_at: "Concluído quick 260719-qr2 (detalhe da tarefa no layout ClickUp — painel Atividade + grade 2 colunas)"
+last_updated: "2026-07-19T20:00:00.000Z"
 last_activity: "2026-07-17 - Completed quick task 260717-qq6: 3 alertas operacionais + carimbo primeiro_contato_em + indicador de SLA no kanban (migration 0034 GERADA, NÃO aplicada)"
 progress:
   total_phases: 6
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-19 - Completed quick task 260719-qf5: catálogo completo de métricas Meta nos relatórios + origem do lead propaga para oportunidades
+Last activity: 2026-07-19 - Completed quick task 260719-qr2: detalhe da tarefa no layout ClickUp (painel Atividade com feed unificado + composer fixo, grade de metadados 2 colunas)
 
 Progress: [████████░░] 83%
 
@@ -178,6 +178,7 @@ None yet.
 | 260717-qq6 | Alertas operacionais internos — régua de inadimplência sobre cobrancas (fatura_vencendo/fatura_vencida, chaves de dedup distintas), assinatura_pendente (>3d em aguardando_assinatura, fallback createdAt) e SLA de 1º contato 24h no CRM (carimbo primeiro_contato_em idempotente nas actions, indicador no card com vermelho ao estourar, alerta sla_primeiro_contato); avaliadores puros sob TDD (25 testes, 2929 total); queries sequenciais + degradação graciosa à coluna ausente; migration 0034 GERADA à mão (drizzle-kit generate quebrado por colisão de snapshots 0023/0029) e NÃO aplicada — rodar scripts/aplicar-migration-0034.ts | 2026-07-17 | ea5080a..fbce9c7 | [260717-qq6-alertas-regua-inadimplencia-interna-lemb](./quick/260717-qq6-alertas-regua-inadimplencia-interna-lemb/) |
 | 260717-i26 | Financeiro A Receber: filtro padrão 30 dias + vencidas com toggle "Mostrar todas" (filtrarAReceber puro sob TDD, 12 testes) + card "Previsão por mês" (getPrevisaoReceitaPorMes agregada GROUP BY, sequencial pós-getVisaoCobrancas); ficha do cliente ganha aba 🗒️ Tarefas (abertas + histórico, 2 queries agregadas sequenciais, moldes excluídos); zero migration, getContasAReceber intocada | 2026-07-17 | 15129c0..2054329 | [260717-i26-financeiro-a-receber-com-filtro-30-dias-](./quick/260717-i26-financeiro-a-receber-com-filtro-30-dias-/) |
 
+| 260719-qr2 | Detalhe da tarefa no layout ClickUp — painel "Atividade" fixo à direita (feed único de comentários + histórico via montarFeedAtividade pura sob TDD, composer fixo, Enter envia), grade de metadados 2 colunas com controles inline preservados, Notas migra p/ aba Detalhes, abas Comentários/Atividade removidas sem perda; 686 testes, sem migration | 2026-07-19 | 0e81888..1073f33 | [260719-qr2-detalhe-da-tarefa-no-layout-clickup-pain](./quick/260719-qr2-detalhe-da-tarefa-no-layout-clickup-pain/) |
 | 260719-qf5 | Relatórios configuráveis — categorias Engajamento e Vídeo no catálogo (engajamento, custo por engajamento, cliques no link, custo por clique, curtidas da página, video views, custo por view) com parse/agregação de videoViews e curtidasPagina em MetricasConta ponta a ponta; origem editada na ficha do lead propaga para crm_oportunidades (cards do kanban consistentes com a ficha); 136 testes de relatorios verdes, sem migration | 2026-07-19 | bf48355..4b13ae1 | [260719-qf5-relatorios-catalogo-completo-de-metricas](./quick/260719-qf5-relatorios-catalogo-completo-de-metricas/) |
 
 | 260718-gp5 | Processos criam TAREFA como fonte única — onboarding/retenção/saída viram tarefa "Onboarding — {nome}" (alta, hoje BR) com checklist do modelo, idempotente por etiqueta processo:{tipo} em tarefas.etiquetas (jsonb @>, sem migration); aba Processos e alerta onboarding_parado leem o checklist da tarefa (processo_itens abandonado na leitura, schema fica); quadro /tarefas com coluna derivada "Atrasadas" (vermelha, destructive) + stats com 5 colunas; STATUS_ORDEM separado p/ selects de status; 535 testes | 2026-07-18 | 659a844..4d08540 | [260718-gp5-processos-criam-tarefa-como-fonte-unica-](./quick/260718-gp5-processos-criam-tarefa-como-fonte-unica-/) |
