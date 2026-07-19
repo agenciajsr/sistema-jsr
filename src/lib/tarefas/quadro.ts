@@ -486,6 +486,46 @@ export function tipoDeArquivo(nome: string | null | undefined, mime?: string | n
   return ARQUIVO_POR_TIPO[chave]
 }
 
+// --- Feed unificado de Atividade (quick 260719-qr2) ---
+// Painel estilo ClickUp: comentários e eventos do histórico intercalados por
+// data, do mais antigo para o mais recente (composer fica embaixo).
+
+type ComentarioLike = { id: string; createdAt: string }
+type AtividadeLike = { id: string; createdAt: string; tipo: string }
+
+export type ItemFeed<C extends ComentarioLike, A extends AtividadeLike> =
+  | { kind: 'comentario'; key: string; createdAt: string; comentario: C }
+  | { kind: 'evento'; key: string; createdAt: string; atividade: A }
+
+/**
+ * Merge PURO de comentários + atividades num feed único, ordenado por
+ * createdAt ASCENDENTE (sort estável do JS preserva empates). Atividades
+ * `tipo === 'comentou'` são excluídas — o comentário real já entra como item
+ * próprio, e a duplicata poluiria o feed. Keys estáveis: `c-{id}` / `a-{id}`.
+ */
+export function montarFeedAtividade<C extends ComentarioLike, A extends AtividadeLike>(
+  comentarios: C[],
+  atividades: A[]
+): ItemFeed<C, A>[] {
+  const itens: ItemFeed<C, A>[] = [
+    ...comentarios.map((comentario) => ({
+      kind: 'comentario' as const,
+      key: `c-${comentario.id}`,
+      createdAt: comentario.createdAt,
+      comentario,
+    })),
+    ...atividades
+      .filter((atv) => atv.tipo !== 'comentou')
+      .map((atividade) => ({
+        kind: 'evento' as const,
+        key: `a-${atividade.id}`,
+        createdAt: atividade.createdAt,
+        atividade,
+      })),
+  ]
+  return itens.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
+}
+
 /** Tipos de atividade conhecidos. `tipo` é text livre no banco (D-03). */
 export type TipoAtividade =
   | 'criou'
