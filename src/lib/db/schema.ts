@@ -71,6 +71,10 @@ export const clientes = pgTable('clientes', {
   // Por que o cliente foi encerrado — obrigatório ao mudar o status para
   // 'encerrado' (migration 0036); alimenta o aprendizado de churn.
   motivoEncerramento: text('motivo_encerramento'),
+  // Quando o cliente foi encerrado — preenchida automaticamente ao mudar o
+  // status para 'encerrado' (migration 0038); alimenta churn e LTV da visão
+  // executiva do /financeiro.
+  dataEncerramento: date('data_encerramento'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

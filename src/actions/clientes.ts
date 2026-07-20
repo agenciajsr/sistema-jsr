@@ -10,6 +10,7 @@ import { contratoSchema, type ContratoInput } from '@/lib/validations/contrato'
 import { construirRegistroRenovacao } from '@/lib/contratos/renovacao'
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { gerarProcessoParaCliente } from '@/lib/processos/gerar'
+import { hojeBrasilia } from '@/lib/date-br'
 
 const ERRO_VALIDACAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
 
@@ -28,6 +29,15 @@ function clienteParaDb(data: ClienteInput) {
   }
 }
 
+// Migration 0038 pendente (coluna data_encerramento ausente) não pode travar o
+// cadastro de clientes: tenta gravar com a coluna e, se o banco reclamar
+// especificamente dela (42703 undefined_column), regrava sem — o churn fica
+// null até a migration ser aplicada, mas o cliente é salvo.
+function erroColunaDataEncerramento(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.includes('data_encerramento')
+}
+
 export async function createClienteComContrato(
   clienteInput: ClienteInput,
   contratoInput: ContratoInput
@@ -39,22 +49,40 @@ export async function createClienteComContrato(
     return { error: ERRO_VALIDACAO }
   }
 
-  const clienteId = await db.transaction(async (tx) => {
-    const [novoCliente] = await tx
-      .insert(clientes)
-      .values(clienteParaDb(clienteParsed.data))
-      .returning({ id: clientes.id })
+  const criar = async (incluirDataEncerramento: boolean) =>
+    db.transaction(async (tx) => {
+      // Cliente já nascendo encerrado (raro) carrega a data do encerramento.
+      const registroCliente = incluirDataEncerramento
+        ? {
+            ...clienteParaDb(clienteParsed.data),
+            dataEncerramento: clienteParsed.data.status === 'encerrado' ? hojeBrasilia() : null,
+          }
+        : clienteParaDb(clienteParsed.data)
 
-    const registro = construirRegistroRenovacao(novoCliente.id, {
-      dataInicio: contratoParsed.data.dataInicio,
-      dataVencimento: contratoParsed.data.dataVencimento,
-      valorMensal: contratoParsed.data.valorMensal,
+      const [novoCliente] = await tx
+        .insert(clientes)
+        .values(registroCliente)
+        .returning({ id: clientes.id })
+
+      const registro = construirRegistroRenovacao(novoCliente.id, {
+        dataInicio: contratoParsed.data.dataInicio,
+        dataVencimento: contratoParsed.data.dataVencimento,
+        valorMensal: contratoParsed.data.valorMensal,
+      })
+
+      await tx.insert(contratos).values(registro)
+
+      return novoCliente.id
     })
 
-    await tx.insert(contratos).values(registro)
-
-    return novoCliente.id
-  })
+  let clienteId: string
+  try {
+    clienteId = await criar(true)
+  } catch (e) {
+    if (!erroColunaDataEncerramento(e)) throw e
+    // Migration 0038 pendente — salva sem a data de encerramento.
+    clienteId = await criar(false)
+  }
 
   return { data: { clienteId } }
 }
@@ -70,10 +98,45 @@ export async function updateCliente(id: string, input: ClienteInput) {
     return { error: ERRO_VALIDACAO }
   }
 
-  await db
-    .update(clientes)
-    .set({ ...clienteParaDb(parsed.data), updatedAt: new Date() })
-    .where(eq(clientes.id, id))
+  // data_encerramento entra na MESMA normalização do motivoEncerramento:
+  // encerrar preenche com hoje (Brasília), reativar limpa. Se o cliente JÁ
+  // estava encerrado, a data original é preservada (não sobrescrever em
+  // edições posteriores) — por isso a leitura do registro atual antes.
+  let dataEncerramentoAtual: string | null = null
+  try {
+    const [atual] = await db
+      .select({ dataEncerramento: clientes.dataEncerramento })
+      .from(clientes)
+      .where(eq(clientes.id, id))
+    dataEncerramentoAtual = atual?.dataEncerramento ?? null
+  } catch (e) {
+    if (!erroColunaDataEncerramento(e)) throw e
+    // Migration 0038 pendente — segue sem a coluna.
+  }
+
+  const salvar = (incluirDataEncerramento: boolean) =>
+    db
+      .update(clientes)
+      .set({
+        ...clienteParaDb(parsed.data),
+        ...(incluirDataEncerramento
+          ? {
+              dataEncerramento:
+                parsed.data.status === 'encerrado'
+                  ? (dataEncerramentoAtual ?? hojeBrasilia())
+                  : null,
+            }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(clientes.id, id))
+
+  try {
+    await salvar(true)
+  } catch (e) {
+    if (!erroColunaDataEncerramento(e)) throw e
+    await salvar(false)
+  }
 
   // Cliente encerrado ganha o checklist de SAÍDA (offboarding) — idempotente,
   // best-effort (o helper engole falhas).
