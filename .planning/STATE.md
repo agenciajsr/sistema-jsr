@@ -107,7 +107,7 @@ Recent decisions affecting current work:
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-None yet.
+- [2026-07-20] **CAC por canal e relação LTV/CAC no Financeiro** (general) — última pendência da camada transversal (CAC · LTV · MRR · churn); os outros três já entregues na quick 260719-wwm. Bloqueio é de dado: falta onde lançar o investimento mensal em aquisição por canal. Ver `.planning/todos/pending/2026-07-20-cac-por-canal-e-relacao-ltv-cac-no-financeiro.md`
 
 ### Blockers/Concerns
 
