@@ -8,6 +8,7 @@ import {
   relacaoLtvCac,
   type ClienteGanho,
   type InvestimentoCanal,
+  type ResultadoCac,
 } from './cac'
 
 // Helpers de fábrica — cada teste sobrescreve só o que importa.
@@ -19,7 +20,7 @@ function ganho(over: Partial<ClienteGanho> = {}): ClienteGanho {
 }
 
 // Localiza o resultado de um canal específico no array porCanal.
-function canal(resultado: { porCanal: { canal: string }[] }, chave: string) {
+function canal(resultado: ResultadoCac, chave: string) {
   return resultado.porCanal.find((c) => c.canal === chave)!
 }
 

@@ -1061,3 +1061,19 @@ export const automacoes = pgTable('automacoes', {
   config: jsonb('config'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Investimento mensal em aquisição por canal (quick-260720-pev). Alimenta o
+// CAC por canal e a relação LTV/CAC da Visão Executiva do Financeiro. "canal"
+// é uma chave canônica (ver CANAIS_AQUISICAO em src/lib/financeiro/cac.ts);
+// origem do cliente (clientes.origem_cliente) é texto livre e é classificada
+// nesses mesmos canais no cálculo. O índice único (canal, competencia)
+// garante 1 lançamento por canal/mês → a action faz upsert.
+export const investimentosAquisicao = pgTable('investimentos_aquisicao', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  canal: text('canal').notNull(),
+  competencia: text('competencia').notNull(), // 'YYYY-MM'
+  valor: numeric('valor', { precision: 12, scale: 2 }).notNull(),
+  notas: text('notas'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('ux_invest_canal_competencia').on(t.canal, t.competencia)])
