@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260719-wwm (financeiro visão executiva: churn/LTV/motivos + modal de transação — migration 0038 GERADA, NÃO aplicada)"
-last_updated: "2026-07-20T02:55:00.000Z"
-last_activity: "2026-07-17 - Completed quick task 260717-qq6: 3 alertas operacionais + carimbo primeiro_contato_em + indicador de SLA no kanban (migration 0034 GERADA, NÃO aplicada)"
+stopped_at: "Concluído quick 260720-pev (financeiro: CAC por canal + relação LTV/CAC — tabela investimentos_aquisicao, migration 0039 GERADA, NÃO aplicada)"
+last_updated: "2026-07-20T21:37:00.000Z"
+last_activity: "2026-07-20 - Completed quick task 260720-pev: CAC por canal + LTV/CAC no Financeiro (aba Aquisição, cac.ts puro sob TDD 19 testes, migration 0039 NÃO aplicada)"
 progress:
   total_phases: 6
   completed_phases: 0
@@ -107,7 +107,7 @@ Recent decisions affecting current work:
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-- [2026-07-20] **CAC por canal e relação LTV/CAC no Financeiro** (general) — última pendência da camada transversal (CAC · LTV · MRR · churn); os outros três já entregues na quick 260719-wwm. Bloqueio é de dado: falta onde lançar o investimento mensal em aquisição por canal. Ver `.planning/todos/pending/2026-07-20-cac-por-canal-e-relacao-ltv-cac-no-financeiro.md`
+- (nenhum pendente)
 
 ### Blockers/Concerns
 
@@ -186,8 +186,10 @@ Recent decisions affecting current work:
 
 | 260719-wwm | Financeiro — Visão Executiva: churn mensal + acumulado 3m/6m, LTV médio (vida × ticket, premissa PREMISSA_LTV) e ranking de motivos de encerramento em módulo puro executiva.ts sob TDD (19 testes, 61 no recorte financeiro); coluna clientes.data_encerramento (migration 0038 GERADA, NÃO aplicada — rodar scripts/aplicar-migration-0038.ts) gravada no encerramento preservando a data original, com retry sem a coluna enquanto pendente; cards na aba Visão Analítica + chips no Painel (getVisaoExecutiva sequencial pós-Promise.all); formulário de transação vira Dialog centralizado no padrão do CRM com copy pt-BR acentuada | 2026-07-20 | 9d83c0a..0b3c172 | [260719-wwm-financeiro-vis-o-executiva-churn-ltv-e-m](./quick/260719-wwm-financeiro-vis-o-executiva-churn-ltv-e-m/) |
 
+| 260720-pev | Financeiro — CAC por canal + relação LTV/CAC (última peça da camada transversal): tabela investimentos_aquisicao (migration 0039 GERADA à mão + scripts/aplicar-migration-0039.ts, NÃO aplicada); módulo puro cac.ts sob TDD (19 testes, 80 no recorte financeiro) — CANAIS_AQUISICAO/PREMISSA_CAC, classificarCanal (origem_cliente texto livre → canal, fallback 'outro'), cacPorCanal/cacAcumulado (3m/6m, CAC null quando 0 clientes ganhos, nunca ÷0), relacaoLtvCac reusando ltvMedio; aba "Aquisição" (lançar investimento por competência/canal + histórico), cards CAC por canal (mês + 3m/6m) e card LTV/CAC (verde ≥3/amarelo 1–3/vermelho <1) na Visão Analítica; getCacAquisicao SEQUENCIAL fora dos Promise.all, degradação graciosa (null) até a 0039; CAC independente da 0038. Build local bloqueado por dep @react-pdf/renderer não instalada no ambiente (pré-existente, fora do escopo — rodar npm install) | 2026-07-20 | 00412b2..5d1ba6d | [260720-pev-cac-por-canal-e-relacao-ltv-cac-no-finan](./quick/260720-pev-cac-por-canal-e-relacao-ltv-cac-no-finan/) |
+
 ## Session Continuity
 
-Last session: 2026-07-20T02:55:00.000Z
-Stopped at: Concluído quick 260719-wwm (visão executiva do financeiro — pendente: aplicar migration 0038)
+Last session: 2026-07-20T21:37:00.000Z
+Stopped at: Concluído quick 260720-pev (CAC por canal + LTV/CAC no financeiro — pendente: aplicar migration 0039; e ainda a 0038)
 Resume file: None
