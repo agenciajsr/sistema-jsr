@@ -4,8 +4,10 @@ import {
   CANAIS_AQUISICAO,
   cacAcumulado,
   cacPorCanal,
+  canalDaOrigemCrm,
   classificarCanal,
   relacaoLtvCac,
+  resolverCanalCliente,
   type ClienteGanho,
   type InvestimentoCanal,
   type ResultadoCac,
@@ -56,6 +58,54 @@ describe('classificarCanal', () => {
     expect(classificarCanal(null)).toBe('outro')
     expect(classificarCanal('   ')).toBe('outro')
     expect(classificarCanal('sei lá')).toBe('outro')
+  })
+})
+
+describe('canalDaOrigemCrm', () => {
+  it('mapeia as origens estruturadas PAGAS/orgânica do CRM para o canal canônico', () => {
+    expect(canalDaOrigemCrm('meta_lead_ad')).toBe('meta_ads')
+    expect(canalDaOrigemCrm('indicacao')).toBe('indicacao')
+    expect(canalDaOrigemCrm('prospeccao_fria')).toBe('prospeccao')
+    // Instagram no CRM é o ORGÂNICO (o Meta PAGO é meta_lead_ad).
+    expect(canalDaOrigemCrm('instagram')).toBe('organico')
+  })
+
+  it('origens do CRM que não identificam canal → null (deixa a reserva decidir)', () => {
+    expect(canalDaOrigemCrm('landing_page')).toBeNull()
+    expect(canalDaOrigemCrm('whatsapp')).toBeNull()
+    expect(canalDaOrigemCrm('evento')).toBeNull()
+    expect(canalDaOrigemCrm('parceria')).toBeNull()
+    expect(canalDaOrigemCrm('manual')).toBeNull()
+    expect(canalDaOrigemCrm('outro')).toBeNull()
+  })
+
+  it('sem vínculo / valor desconhecido → null', () => {
+    expect(canalDaOrigemCrm(null)).toBeNull()
+    expect(canalDaOrigemCrm('')).toBeNull()
+    expect(canalDaOrigemCrm('valor_desconhecido')).toBeNull()
+  })
+})
+
+describe('resolverCanalCliente', () => {
+  it('origem estruturada PAGA do CRM vence o texto livre', () => {
+    expect(resolverCanalCliente('meta_lead_ad', 'Amigo')).toBe('meta_ads')
+  })
+
+  it('origem CRM que não identifica canal cai na reserva do texto livre', () => {
+    expect(resolverCanalCliente('landing_page', 'Foi um amigo que indicou')).toBe('indicacao')
+  })
+
+  it('sem vínculo no CRM → classifica só pelo texto livre', () => {
+    expect(resolverCanalCliente(null, 'Google')).toBe('google_ads')
+  })
+
+  it('Instagram orgânico via CRM independe do texto livre', () => {
+    expect(resolverCanalCliente('instagram', 'sei lá')).toBe('organico')
+  })
+
+  it('quando nada resolve, cai no fallback "outro"', () => {
+    expect(resolverCanalCliente(null, null)).toBe('outro')
+    expect(resolverCanalCliente('manual', 'xxxx')).toBe('outro')
   })
 })
 

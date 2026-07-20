@@ -23,6 +23,9 @@
 export const PREMISSA_CAC =
   'CAC do canal = investimento do canal no período ÷ clientes ganhos (início na competência) classificados nesse canal (origem é texto livre, casada por heurística); canal sem cliente ganho fica indefinido.'
 
+export const PREMISSA_CAC_ATRIBUICAO =
+  'Canal atribuído por origem estruturada do CRM (oportunidade vinculada → contato vinculado, mapeadas por canalDaOrigemCrm); reserva no texto livre clientes.origem_cliente via classificarCanal quando não há vínculo ou a origem estruturada não identifica canal pago; Google não existe no CRM, só chega pela reserva; fallback final "outro".'
+
 export const CANAIS_AQUISICAO = [
   'meta_ads',
   'google_ads',
@@ -51,8 +54,14 @@ export type InvestimentoCanal = {
 }
 
 export type ClienteGanho = {
-  /** clientes.origem_cliente (texto livre) — classificado em canal. */
+  /** clientes.origem_cliente (texto livre) — reserva quando o CRM não resolve. */
   origem: string | null
+  /**
+   * Origem estruturada resolvida do CRM (oportunidade → contato). undefined/null
+   * = sem vínculo, cai na reserva do texto livre. Opcional: preserva os testes
+   * antigos que passam só `origem`.
+   */
+  origemCrm?: string | null
   /** 'YYYY-MM-DD' (min data_inicio; fallback created_at). null = ignorado. */
   inicio: string | null
 }
@@ -99,7 +108,9 @@ function deslocarMes(mes: string, delta: number): string {
 // evita ambiguidade: indicação/prospecção antes das mídias pagas; 'ads' NÃO é
 // keyword de meta (a substring aparece em "leads") — usamos 'anuncio'/rede.
 const REGRAS_CANAL: [CanalAquisicao, string[]][] = [
-  ['indicacao', ['indica']],
+  // 'indic' (não 'indica') captura indicação/indicado/indicou — a reserva de
+  // texto livre da cadeia do CRM precisa reconhecer "Amigo indicou".
+  ['indicacao', ['indic']],
   ['prospeccao', ['prospec', 'outbound', 'cold']],
   ['google_ads', ['google', 'pesquisa', 'search', 'adwords']],
   ['meta_ads', ['instagram', 'insta', 'facebook', 'face', 'meta', 'anuncio']],
@@ -118,6 +129,43 @@ export function classificarCanal(origem: string | null): CanalAquisicao {
     if (keywords.some((k) => t.includes(k))) return canal
   }
   return 'outro'
+}
+
+// Mapa EXPLÍCITO das origens canônicas do CRM (src/lib/crm/origem.ts) para os
+// canais de aquisição. Só as origens que identificam um canal aparecem aqui;
+// qualquer outra (landing_page, whatsapp, evento, parceria, manual, outro,
+// desconhecida) cai para null e deixa a reserva do texto livre decidir.
+// IMPORTANTE: Google Ads NÃO existe como origem no CRM — por isso o modelo é
+// híbrido: cliente vindo do Google é captado só pela reserva de texto livre
+// (keyword 'google' já tratada em classificarCanal).
+const MAPA_ORIGEM_CRM: Record<string, CanalAquisicao> = {
+  meta_lead_ad: 'meta_ads', // Meta PAGO (lead ad)
+  indicacao: 'indicacao',
+  prospeccao_fria: 'prospeccao',
+  instagram: 'organico', // Instagram ORGÂNICO (o pago é meta_lead_ad)
+}
+
+/**
+ * Mapeia a origem ESTRUTURADA do CRM num canal canônico. Retorna null quando a
+ * origem não identifica um canal (deixando a reserva de texto livre decidir) ou
+ * quando não há origem/valor conhecido.
+ */
+export function canalDaOrigemCrm(origemCrm: string | null): CanalAquisicao | null {
+  if (!origemCrm) return null
+  return MAPA_ORIGEM_CRM[origemCrm] ?? null
+}
+
+/**
+ * CADEIA/RESERVA de atribuição de canal (ver PREMISSA_CAC_ATRIBUICAO): tenta
+ * PRIMEIRO a origem estruturada do CRM; se ela não resolve (sem vínculo ou
+ * origem que não identifica canal pago), cai no classificador do texto livre —
+ * que já garante o fallback 'outro'.
+ */
+export function resolverCanalCliente(
+  origemCrm: string | null,
+  origemTextoLivre: string | null,
+): CanalAquisicao {
+  return canalDaOrigemCrm(origemCrm) ?? classificarCanal(origemTextoLivre)
 }
 
 /** Competência 'YYYY-MM' do início de um cliente ('YYYY-MM-DD'). */
@@ -156,7 +204,7 @@ function agregar(
   for (const cliente of clientesGanhos) {
     if (cliente.inicio == null) continue
     if (!dentroDaJanela(competenciaDoInicio(cliente.inicio))) continue
-    const canal = classificarCanal(cliente.origem)
+    const canal = resolverCanalCliente(cliente.origemCrm ?? null, cliente.origem)
     ganhosPorCanal.set(canal, (ganhosPorCanal.get(canal) ?? 0) + 1)
     clientesGanhosTotal += 1
   }
