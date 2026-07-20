@@ -1,9 +1,10 @@
-import { HeartCrack, PlusCircle, RefreshCw, Repeat, UserMinus, Users } from 'lucide-react'
+import { Coins, Gauge, HeartCrack, PlusCircle, RefreshCw, Repeat, UserMinus, Users } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/stat-card'
-import type { VisaoAnaliticaData, VisaoExecutivaData } from '@/actions/financeiro'
+import type { CacAquisicaoData, VisaoAnaliticaData, VisaoExecutivaData } from '@/actions/financeiro'
 import type { Faixa } from '@/lib/financeiro/calculos'
+import { CANAIS_AQUISICAO, ROTULO_CANAL, type CacCanal } from '@/lib/financeiro/cac'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -45,6 +46,86 @@ function corChurn(percentual: number): 'success' | 'warning' | 'danger' {
   if (percentual <= 3) return 'success'
   if (percentual <= 8) return 'warning'
   return 'danger'
+}
+
+/** Relação LTV/CAC: verde ≥3 (saudável), amarelo 1–3, vermelho <1. */
+function corLtvCac(relacao: number): 'success' | 'warning' | 'danger' {
+  if (relacao >= 3) return 'success'
+  if (relacao >= 1) return 'warning'
+  return 'danger'
+}
+
+/** CAC do canal formatado como moeda, ou "—" quando indefinido. */
+function formatarCac(cac: number | null): string {
+  return cac === null ? '—' : formatadorMoeda.format(cac)
+}
+
+/**
+ * Seção "CAC por canal + relação LTV/CAC" (quick-260720-pev). Cada canal mostra
+ * o CAC do mês com o acumulado 3m/6m no helper; canal sem cliente ganho aparece
+ * com "—" em vez de dividir por zero. Um card fecha com a relação LTV/CAC.
+ */
+function SecaoCac({ cac }: { cac: CacAquisicaoData | null }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold">CAC por canal &amp; LTV/CAC</h2>
+        <p className="text-xs text-muted-foreground">
+          Quanto custa captar um cliente em cada canal e quantas vezes o retorno (LTV) cobre esse
+          custo — LTV/CAC ≥ 3 é o alvo saudável.
+        </p>
+      </div>
+
+      {cac === null ? (
+        <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+          CAC indisponível — aplique a migration 0039 (
+          <code className="text-xs">scripts/aplicar-migration-0039.ts</code>) para habilitar o
+          lançamento de investimento em aquisição por canal.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {CANAIS_AQUISICAO.map((canal) => {
+              const mes = cac.porCanalMes.porCanal.find((c) => c.canal === canal) as CacCanal
+              const tres = cac.porCanal3m.porCanal.find((c) => c.canal === canal) as CacCanal
+              const seis = cac.porCanal6m.porCanal.find((c) => c.canal === canal) as CacCanal
+              const semGanho = mes.clientesGanhos === 0
+              return (
+                <StatCard
+                  key={canal}
+                  label={`CAC — ${ROTULO_CANAL[canal]}`}
+                  value={formatarCac(mes.cac)}
+                  icon={Coins}
+                  color="primary"
+                  helper={
+                    semGanho
+                      ? `Sem cliente ganho no período · investido ${formatadorMoeda.format(mes.investimento)}`
+                      : `${mes.clientesGanhos} cliente(s) · 3m ${formatarCac(tres.cac)} · 6m ${formatarCac(seis.cac)}`
+                  }
+                />
+              )
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="LTV / CAC"
+              value={cac.ltvCac.relacao === null ? '—' : `${cac.ltvCac.relacao}x`}
+              icon={Gauge}
+              color={cac.ltvCac.relacao === null ? 'primary' : corLtvCac(cac.ltvCac.relacao)}
+              helper={
+                cac.ltvCac.relacao === null
+                  ? cac.ltvCac.cacGeral === null
+                    ? 'Sem cliente ganho no período para calcular o CAC geral'
+                    : 'LTV ainda indefinido (sem contratos com valor conhecido)'
+                  : `LTV ${cac.ltvCac.ltv !== null ? formatadorMoeda.format(cac.ltvCac.ltv) : '—'} ÷ CAC geral ${cac.ltvCac.cacGeral !== null ? formatadorMoeda.format(cac.ltvCac.cacGeral) : '—'}`
+              }
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 /** Seção "Visão Executiva": churn, LTV e ranking de motivos de encerramento. */
@@ -130,15 +211,18 @@ function VisaoExecutiva({ dados }: { dados: VisaoExecutivaData | null }) {
 export function VisaoAnalitica({
   dados,
   executiva = null,
+  cac = null,
 }: {
   dados: VisaoAnaliticaData
   executiva?: VisaoExecutivaData | null
+  cac?: CacAquisicaoData | null
 }) {
   const { taxaRenovacao, dependencia, despesasVsFaturamento: dvf, variacao } = dados
 
   return (
     <div className="space-y-6">
       <VisaoExecutiva dados={executiva} />
+      <SecaoCac cac={cac} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Taxa de Renovacao"

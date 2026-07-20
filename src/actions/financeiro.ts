@@ -5,8 +5,12 @@ import { revalidatePath } from 'next/cache'
 import { addMonths, addWeeks } from 'date-fns'
 
 import { db } from '@/lib/db'
-import { transacoes, contratos, clientes, profiles } from '@/lib/db/schema'
+import { transacoes, contratos, clientes, profiles, investimentosAquisicao } from '@/lib/db/schema'
 import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transacao'
+import {
+  investimentoAquisicaoSchema,
+  type InvestimentoAquisicaoInput,
+} from '@/lib/validations/investimento-aquisicao'
 import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { hojeBrasilia } from '@/lib/date-br'
 import {
@@ -29,6 +33,14 @@ import {
   type ResultadoLtv,
   type MotivoRanking,
 } from '@/lib/financeiro/executiva'
+import {
+  cacPorCanal,
+  cacAcumulado,
+  relacaoLtvCac,
+  type ClienteGanho,
+  type InvestimentoCanal,
+  type ResultadoCac,
+} from '@/lib/financeiro/cac'
 
 const ERRO_VALIDACAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
 
@@ -598,6 +610,196 @@ export async function getVisaoExecutiva(): Promise<VisaoExecutivaData | null> {
     churn6m: churnAcumulado(vidas, mes, 6),
     ltv: ltvMedio(vidas, hoje),
     motivos: rankingMotivos(vidas),
+  }
+}
+
+// --- Aquisição / CAC por canal e relação LTV/CAC (quick-260720-pev) ---
+
+export type InvestimentoAquisicaoRow = {
+  id: string
+  canal: string
+  competencia: string
+  valor: string
+  notas: string | null
+}
+
+/**
+ * UPSERT do investimento em aquisição por (canal, competência) — o índice único
+ * ux_invest_canal_competencia garante 1 lançamento por canal/mês. Reeditar o
+ * mesmo canal/mês sobrescreve valor/notas em vez de duplicar.
+ */
+export async function createInvestimentoAquisicao(input: InvestimentoAquisicaoInput) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  const parsed = investimentoAquisicaoSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: ERRO_VALIDACAO }
+  }
+
+  const { canal, competencia, valor, notas } = parsed.data
+
+  try {
+    await db
+      .insert(investimentosAquisicao)
+      .values({
+        canal,
+        competencia,
+        valor: valor.toFixed(2),
+        notas: notas ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [investimentosAquisicao.canal, investimentosAquisicao.competencia],
+        set: { valor: valor.toFixed(2), notas: notas ?? null, updatedAt: new Date() },
+      })
+  } catch (e) {
+    // Migration 0039 pendente (tabela ausente) ou soluço de conexão.
+    console.error('[createInvestimentoAquisicao]', e)
+    return { error: 'Não foi possível salvar. Aplique a migration 0039 e tente novamente.' }
+  }
+
+  revalidatePath('/financeiro')
+  return { data: { ok: true } }
+}
+
+/** Histórico de lançamentos (competência desc) para a tela de Aquisição. */
+export async function listInvestimentosAquisicao(): Promise<InvestimentoAquisicaoRow[]> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return []
+
+  try {
+    return await db
+      .select({
+        id: investimentosAquisicao.id,
+        canal: investimentosAquisicao.canal,
+        competencia: investimentosAquisicao.competencia,
+        valor: investimentosAquisicao.valor,
+        notas: investimentosAquisicao.notas,
+      })
+      .from(investimentosAquisicao)
+      .orderBy(desc(investimentosAquisicao.competencia))
+  } catch (e) {
+    // Migration 0039 pendente — a tela mostra aviso, não erro.
+    console.error('[listInvestimentosAquisicao]', e)
+    return []
+  }
+}
+
+export type CacAquisicaoData = {
+  /** Mês de referência 'YYYY-MM' (hoje em Brasília). */
+  mes: string
+  porCanalMes: ResultadoCac
+  porCanal3m: ResultadoCac
+  porCanal6m: ResultadoCac
+  ltvCac: {
+    ltv: number | null
+    cacGeral: number | null
+    /** LTV ÷ CAC geral; null quando um dos dois é indefinido. */
+    relacao: number | null
+  }
+}
+
+/**
+ * CAC por canal (mês + acumulado 3m/6m) e relação LTV/CAC — padrão IDÊNTICO ao
+ * getVisaoExecutiva: leitura da tabela nova em try/catch (ausente = migration
+ * 0039 pendente → return null, a UI degrada com aviso), depois queries
+ * SEQUENCIAIS (pool max=5 — NUNCA dentro do Promise.all da página) e TODO o
+ * cálculo delegado ao módulo puro src/lib/financeiro/cac.ts.
+ *
+ * Independente da migration 0038: não lê clientes.data_encerramento (o LTV usado
+ * aqui aproxima a vida dos encerrados até hoje). O CAC só depende da 0039.
+ */
+export async function getCacAquisicao(): Promise<CacAquisicaoData | null> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return null
+
+  let investimentos: InvestimentoCanal[]
+  try {
+    const linhas = await db
+      .select({
+        canal: investimentosAquisicao.canal,
+        competencia: investimentosAquisicao.competencia,
+        valor: investimentosAquisicao.valor,
+      })
+      .from(investimentosAquisicao)
+    investimentos = linhas.map((l) => ({
+      canal: l.canal,
+      competencia: l.competencia,
+      valor: Number(l.valor),
+    }))
+  } catch (e) {
+    // Migration 0039 pendente (undefined_table) ou soluço de conexão.
+    console.error('[getCacAquisicao]', e)
+    return null
+  }
+
+  // SEQUENCIAL: clientes (origem + entrada na base) — sem data_encerramento
+  // para não acoplar à migration 0038.
+  const linhasClientes = await db
+    .select({
+      id: clientes.id,
+      status: clientes.status,
+      origemCliente: clientes.origemCliente,
+      createdAt: clientes.createdAt,
+    })
+    .from(clientes)
+
+  // SEQUENCIAL: primeiro contrato (min data_inicio) e ticket do contrato mais
+  // recente por cliente — mesma leitura de getVisaoExecutiva.
+  const linhasContratos = await db
+    .select({
+      clienteId: contratos.clienteId,
+      inicio: sql<string>`min(${contratos.dataInicio})`,
+      ticket: sql<string>`(array_agg(${contratos.valorMensal} order by ${contratos.dataInicio} desc))[1]`,
+    })
+    .from(contratos)
+    .groupBy(contratos.clienteId)
+
+  const porCliente = new Map(linhasContratos.map((c) => [c.clienteId, c]))
+
+  const clientesGanhos: ClienteGanho[] = linhasClientes.map((c) => {
+    const contrato = porCliente.get(c.id)
+    return {
+      origem: c.origemCliente,
+      inicio: contrato?.inicio ?? c.createdAt.toISOString().slice(0, 10),
+    }
+  })
+
+  // LTV reusando o módulo executiva (data_encerramento = null aqui: vida dos
+  // encerrados aproximada até hoje — CAC permanece independente da 0038).
+  const vidas: ClienteVida[] = linhasClientes.map((c) => {
+    const contrato = porCliente.get(c.id)
+    return {
+      id: c.id,
+      status: c.status,
+      inicio: contrato?.inicio ?? c.createdAt.toISOString().slice(0, 10),
+      dataEncerramento: null,
+      motivoEncerramento: null,
+      ticketMensal: contrato?.ticket != null ? Number(contrato.ticket) : null,
+    }
+  })
+
+  const hoje = hojeBrasilia()
+  const mes = hoje.slice(0, 7)
+
+  const porCanalMes = cacPorCanal(investimentos, clientesGanhos, mes)
+  const porCanal3m = cacAcumulado(investimentos, clientesGanhos, mes, 3)
+  const porCanal6m = cacAcumulado(investimentos, clientesGanhos, mes, 6)
+  const ltv = ltvMedio(vidas, hoje)
+  const ltvValor = ltv?.valor ?? null
+
+  return {
+    mes,
+    porCanalMes,
+    porCanal3m,
+    porCanal6m,
+    ltvCac: {
+      ltv: ltvValor,
+      cacGeral: porCanalMes.cacGeral,
+      relacao: relacaoLtvCac(ltvValor, porCanalMes.cacGeral),
+    },
   }
 }
 

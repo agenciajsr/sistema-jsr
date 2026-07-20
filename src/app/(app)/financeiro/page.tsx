@@ -16,6 +16,8 @@ import {
   getVisaoAnalitica,
   getPrevisaoReceitaPorMes,
   getVisaoExecutiva,
+  getCacAquisicao,
+  listInvestimentosAquisicao,
 } from '@/actions/financeiro'
 import { getProfiles } from '@/actions/clientes'
 import { getVisaoCobrancas } from '@/lib/cobrancas/dados'
@@ -31,6 +33,7 @@ import { TransacoesTable } from './transacoes-table'
 import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
 import { VisaoAnalitica } from './visao-analitica'
+import { AquisicaoForm } from './aquisicao-form'
 import { CobrancasTab } from './cobrancas-tab'
 import { PrevisaoPorMes } from './previsao-por-mes'
 import { MonthSelector } from './month-selector'
@@ -99,6 +102,11 @@ export default async function FinanceiroPage({
     // churn, LTV e motivos de encerramento (quick-260719-wwm). null =
     // migration 0038 pendente, a UI degrada com aviso.
     const visaoExecutiva = await getVisaoExecutiva()
+    // Também SEQUENCIAL (regra do pool max=5 — NUNCA dentro dos Promise.all):
+    // CAC por canal + relação LTV/CAC (quick-260720-pev). null = migration 0039
+    // pendente, a UI degrada com aviso. E o histórico de lançamentos da aba.
+    const cacAquisicao = await getCacAquisicao()
+    const investimentosAquisicao = await listInvestimentosAquisicao()
     return [
       resumo,
       mrr,
@@ -112,6 +120,8 @@ export default async function FinanceiroPage({
       visaoCobrancas,
       previsaoMeses,
       visaoExecutiva,
+      cacAquisicao,
+      investimentosAquisicao,
     ] as const
   }
 
@@ -156,6 +166,8 @@ export default async function FinanceiroPage({
     visaoCobrancas,
     previsaoMeses,
     visaoExecutiva,
+    cacAquisicao,
+    investimentosAquisicao,
   ] = dados
 
   // Contagem do badge da aba: clientes que precisam de atenção este mês
@@ -281,6 +293,7 @@ export default async function FinanceiroPage({
           <TabsTrigger value="cobrancas">Cobranças ({cobrancasAtencao})</TabsTrigger>
           <TabsTrigger value="pagar">A Pagar ({contasPagar.length})</TabsTrigger>
           <TabsTrigger value="previsao">Previsao</TabsTrigger>
+          <TabsTrigger value="aquisicao">Aquisição</TabsTrigger>
           <TabsTrigger value="analitica">Visao Analitica</TabsTrigger>
         </TabsList>
 
@@ -341,8 +354,16 @@ export default async function FinanceiroPage({
           <PrevisaoCaixa previsao={previsao} />
         </TabsContent>
 
+        <TabsContent value="aquisicao">
+          <AquisicaoForm historico={investimentosAquisicao} />
+        </TabsContent>
+
         <TabsContent value="analitica">
-          <VisaoAnalitica dados={visaoAnalitica} executiva={visaoExecutiva} />
+          <VisaoAnalitica
+            dados={visaoAnalitica}
+            executiva={visaoExecutiva}
+            cac={cacAquisicao}
+          />
         </TabsContent>
       </Tabs>
     </div>
