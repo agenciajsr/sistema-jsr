@@ -1,11 +1,19 @@
 'use server'
 
-import { eq, sql, and, lte, gte, gt, desc, inArray } from 'drizzle-orm'
+import { eq, sql, and, lte, gte, gt, desc, inArray, isNotNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { addMonths, addWeeks } from 'date-fns'
 
 import { db } from '@/lib/db'
-import { transacoes, contratos, clientes, profiles, investimentosAquisicao } from '@/lib/db/schema'
+import {
+  transacoes,
+  contratos,
+  clientes,
+  profiles,
+  investimentosAquisicao,
+  crmOportunidades,
+  crmContatos,
+} from '@/lib/db/schema'
 import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transacao'
 import {
   investimentoAquisicaoSchema,
@@ -759,10 +767,56 @@ export async function getCacAquisicao(): Promise<CacAquisicaoData | null> {
 
   const porCliente = new Map(linhasContratos.map((c) => [c.clienteId, c]))
 
+  // SEQUENCIAL (fora de qualquer Promise.all — regra do pool max=5): origem
+  // ESTRUTURADA do CRM por cliente, para atribuir o canal do CAC pela origem
+  // do CRM antes de cair na reserva do texto livre (resolverCanalCliente).
+  // try/catch de degradação graciosa: se as tabelas/colunas do CRM não
+  // existirem (migrations pendentes), seguimos com mapas vazios → 100% reserva.
+  const origemOppPorCliente = new Map<string, string | null>()
+  const origemContatoPorCliente = new Map<string, string | null>()
+  try {
+    // Oportunidade MAIS RECENTE por cliente (updatedAt desc, createdAt desc).
+    const linhasOpp = await db
+      .select({
+        clienteId: crmOportunidades.clienteId,
+        origem: sql<
+          string | null
+        >`(array_agg(${crmOportunidades.origem} order by ${crmOportunidades.updatedAt} desc, ${crmOportunidades.createdAt} desc))[1]`,
+      })
+      .from(crmOportunidades)
+      .where(isNotNull(crmOportunidades.clienteId))
+      .groupBy(crmOportunidades.clienteId)
+    for (const l of linhasOpp) {
+      if (l.clienteId) origemOppPorCliente.set(l.clienteId, l.origem)
+    }
+
+    // Contato MAIS RECENTE vinculado por cliente (mesma decisão temporal).
+    const linhasContato = await db
+      .select({
+        clienteId: crmContatos.clienteId,
+        origem: sql<
+          string | null
+        >`(array_agg(${crmContatos.origem} order by ${crmContatos.updatedAt} desc, ${crmContatos.createdAt} desc))[1]`,
+      })
+      .from(crmContatos)
+      .where(isNotNull(crmContatos.clienteId))
+      .groupBy(crmContatos.clienteId)
+    for (const l of linhasContato) {
+      if (l.clienteId) origemContatoPorCliente.set(l.clienteId, l.origem)
+    }
+  } catch (e) {
+    // CRM ausente (migrations pendentes) → cai 100% na reserva de texto livre.
+    console.error('[getCacAquisicao] origem CRM indisponível', e)
+  }
+
   const clientesGanhos: ClienteGanho[] = linhasClientes.map((c) => {
     const contrato = porCliente.get(c.id)
+    // Cadeia de vínculo: oportunidade primeiro, senão contato, senão null.
+    const origemCrm =
+      origemOppPorCliente.get(c.id) ?? origemContatoPorCliente.get(c.id) ?? null
     return {
       origem: c.origemCliente,
+      origemCrm,
       inicio: contrato?.inicio ?? c.createdAt.toISOString().slice(0, 10),
     }
   })
