@@ -90,18 +90,27 @@ function SecaoCac({ cac }: { cac: CacAquisicaoData | null }) {
               const tres = cac.porCanal3m.porCanal.find((c) => c.canal === canal) as CacCanal
               const seis = cac.porCanal6m.porCanal.find((c) => c.canal === canal) as CacCanal
               const semGanho = mes.clientesGanhos === 0
+              const temInvestimento = mes.investimento > 0
+              // Sem cliente ganho: se houve investimento, destaca o VALOR INVESTIDO
+              // (o CAC ainda não existe — aguarda o 1º cliente do canal); senão "—".
+              const valorCard = !semGanho
+                ? formatarCac(mes.cac)
+                : temInvestimento
+                  ? formatadorMoeda.format(mes.investimento)
+                  : '—'
+              const helperCard = !semGanho
+                ? `${mes.clientesGanhos} cliente(s) · 3m ${formatarCac(tres.cac)} · 6m ${formatarCac(seis.cac)}`
+                : temInvestimento
+                  ? 'investido · CAC aguardando 1º cliente'
+                  : 'Sem investimento lançado'
               return (
                 <StatCard
                   key={canal}
                   label={`CAC — ${ROTULO_CANAL[canal]}`}
-                  value={formatarCac(mes.cac)}
+                  value={valorCard}
                   icon={Coins}
                   color="primary"
-                  helper={
-                    semGanho
-                      ? `Sem cliente ganho no período · investido ${formatadorMoeda.format(mes.investimento)}`
-                      : `${mes.clientesGanhos} cliente(s) · 3m ${formatarCac(tres.cac)} · 6m ${formatarCac(seis.cac)}`
-                  }
+                  helper={helperCard}
                 />
               )
             })}
