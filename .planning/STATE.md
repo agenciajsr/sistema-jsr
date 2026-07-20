@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260719-s3a (follow-up no CRM: etapa + visão D1-D6 + temperatura — migration 0037 GERADA, NÃO aplicada)"
-last_updated: "2026-07-19T23:55:00.000Z"
+stopped_at: "Concluído quick 260719-wwm (financeiro visão executiva: churn/LTV/motivos + modal de transação — migration 0038 GERADA, NÃO aplicada)"
+last_updated: "2026-07-20T02:55:00.000Z"
 last_activity: "2026-07-17 - Completed quick task 260717-qq6: 3 alertas operacionais + carimbo primeiro_contato_em + indicador de SLA no kanban (migration 0034 GERADA, NÃO aplicada)"
 progress:
   total_phases: 6
@@ -184,8 +184,10 @@ None yet.
 
 | 260718-gp5 | Processos criam TAREFA como fonte única — onboarding/retenção/saída viram tarefa "Onboarding — {nome}" (alta, hoje BR) com checklist do modelo, idempotente por etiqueta processo:{tipo} em tarefas.etiquetas (jsonb @>, sem migration); aba Processos e alerta onboarding_parado leem o checklist da tarefa (processo_itens abandonado na leitura, schema fica); quadro /tarefas com coluna derivada "Atrasadas" (vermelha, destructive) + stats com 5 colunas; STATUS_ORDEM separado p/ selects de status; 535 testes | 2026-07-18 | 659a844..4d08540 | [260718-gp5-processos-criam-tarefa-como-fonte-unica-](./quick/260718-gp5-processos-criam-tarefa-como-fonte-unica-/) |
 
+| 260719-wwm | Financeiro — Visão Executiva: churn mensal + acumulado 3m/6m, LTV médio (vida × ticket, premissa PREMISSA_LTV) e ranking de motivos de encerramento em módulo puro executiva.ts sob TDD (19 testes, 61 no recorte financeiro); coluna clientes.data_encerramento (migration 0038 GERADA, NÃO aplicada — rodar scripts/aplicar-migration-0038.ts) gravada no encerramento preservando a data original, com retry sem a coluna enquanto pendente; cards na aba Visão Analítica + chips no Painel (getVisaoExecutiva sequencial pós-Promise.all); formulário de transação vira Dialog centralizado no padrão do CRM com copy pt-BR acentuada | 2026-07-20 | 9d83c0a..0b3c172 | [260719-wwm-financeiro-vis-o-executiva-churn-ltv-e-m](./quick/260719-wwm-financeiro-vis-o-executiva-churn-ltv-e-m/) |
+
 ## Session Continuity
 
-Last session: 2026-07-19T23:55:00.000Z
-Stopped at: Concluído quick 260719-s3a (follow-up no CRM — pendente: aplicar migration 0037 e testar local antes do push)
+Last session: 2026-07-20T02:55:00.000Z
+Stopped at: Concluído quick 260719-wwm (visão executiva do financeiro — pendente: aplicar migration 0038)
 Resume file: None
