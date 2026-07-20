@@ -34,6 +34,25 @@ yarn-error.log*
 .env*
 !.env.example
 
+# backups de limpeza de dados (contêm dados pessoais — nunca commitar)
+scripts/backup-*.json
+
+# materiais locais (dados sensíveis / referências pessoais — nunca commitar)
+/contratos/
+/Imagens_referencia_CRM/
+/Imagens_referencia_campanhas/
+/imagens_referencia_relatorios/
+/prints_aleatorios/
+/print_erro/
+/automacao_make_exemplo/
+
+# claude code (configs locais)
+.claude/settings.local.json
+.claude/launch.json
+
+# backups locais de planos
+*.local.bak
+
 # vercel
 .vercel
 
