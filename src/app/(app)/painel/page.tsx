@@ -18,6 +18,7 @@ import { AiInsightFloat } from '@/components/dashboard/ai-insight-float'
 import { EvolucaoFinanceira } from '@/components/dashboard/evolucao-financeira'
 import { FiltroPeriodo } from '@/components/dashboard/filtro-periodo'
 import { getDashboardData, type TendenciaKpi } from '@/lib/dashboard/data'
+import { getVisaoExecutiva } from '@/actions/financeiro'
 import { getCurrentUser } from '@/lib/auth/session'
 import type { Tendencia } from '@/lib/mock/dashboard-ref'
 
@@ -55,6 +56,12 @@ export default async function PainelPage({ searchParams }: Props) {
   }
 
   const [user, data] = await Promise.all([getCurrentUser(), getDashboardData(mesParam, anoParam)])
+
+  // SEQUENCIAL depois do Promise.all (regra do pool max=5 — nunca engordar
+  // os lotes): resumo executivo de churn/LTV (quick-260719-wwm). null =
+  // migration 0038 pendente → os chips simplesmente não aparecem.
+  const visaoExecutiva = await getVisaoExecutiva()
+  const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
   const primeiroNome = user?.nome?.split(' ')[0] ?? 'Usuário'
 
@@ -133,6 +140,24 @@ export default async function PainelPage({ searchParams }: Props) {
           helper="últimos 7 dias"
         />
       </div>
+
+      {/* Chips executivos — churn e LTV (visão completa no Financeiro → Visão Analítica) */}
+      {visaoExecutiva && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
+            Churn do mês:{' '}
+            {visaoExecutiva.churnMes.percentual === null
+              ? '—'
+              : `${visaoExecutiva.churnMes.percentual}%`}
+            {visaoExecutiva.churn3m.percentual !== null &&
+              ` · 3m ${visaoExecutiva.churn3m.percentual}%`}
+          </span>
+          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
+            LTV médio:{' '}
+            {visaoExecutiva.ltv ? formatadorMoeda.format(visaoExecutiva.ltv.valor) : '—'}
+          </span>
+        </div>
+      )}
 
       {/* Linha do meio — Performance mais larga, Saúde e Agenda ao lado */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

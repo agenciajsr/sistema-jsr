@@ -19,6 +19,16 @@ import {
   periodoMesAnterior,
   type Faixa,
 } from '@/lib/financeiro/calculos'
+import {
+  taxaDeChurn,
+  churnAcumulado,
+  ltvMedio,
+  rankingMotivos,
+  type ClienteVida,
+  type ResultadoChurn,
+  type ResultadoLtv,
+  type MotivoRanking,
+} from '@/lib/financeiro/executiva'
 
 const ERRO_VALIDACAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
 
@@ -503,6 +513,92 @@ export async function uploadComprovante(transacaoId: string, url: string) {
 
   revalidatePath('/financeiro')
   return { data: { url } }
+}
+
+// --- Visão Executiva (churn, LTV, motivos de encerramento) ---
+
+export type VisaoExecutivaData = {
+  /** Mês de referência 'YYYY-MM' (hoje em Brasília). */
+  mes: string
+  churnMes: ResultadoChurn
+  churn3m: ResultadoChurn
+  churn6m: ResultadoChurn
+  ltv: ResultadoLtv | null
+  motivos: MotivoRanking[]
+}
+
+/**
+ * Dados da visão executiva: poucas queries AGREGADAS SEQUENCIAIS (pool max=5,
+ * regra do STATE.md — nunca dentro de Promise.all) + TODO o cálculo delegado
+ * ao módulo puro src/lib/financeiro/executiva.ts.
+ *
+ * Retorna null quando a coluna clientes.data_encerramento ainda não existe
+ * (migration 0038 pendente) — a UI mostra aviso em vez de números inventados.
+ */
+export async function getVisaoExecutiva(): Promise<VisaoExecutivaData | null> {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return null
+
+  let linhasClientes: {
+    id: string
+    status: string
+    dataEncerramento: string | null
+    motivoEncerramento: string | null
+    createdAt: Date
+  }[]
+  try {
+    linhasClientes = await db
+      .select({
+        id: clientes.id,
+        status: clientes.status,
+        dataEncerramento: clientes.dataEncerramento,
+        motivoEncerramento: clientes.motivoEncerramento,
+        createdAt: clientes.createdAt,
+      })
+      .from(clientes)
+  } catch (e) {
+    // Migration 0038 pendente (undefined_column) ou soluço de conexão.
+    console.error('[getVisaoExecutiva]', e)
+    return null
+  }
+
+  // SEQUENCIAL: 1 query agregada — primeiro contrato (min data_inicio) e
+  // ticket do contrato mais recente, por cliente.
+  const linhasContratos = await db
+    .select({
+      clienteId: contratos.clienteId,
+      inicio: sql<string>`min(${contratos.dataInicio})`,
+      ticket: sql<string>`(array_agg(${contratos.valorMensal} order by ${contratos.dataInicio} desc))[1]`,
+    })
+    .from(contratos)
+    .groupBy(contratos.clienteId)
+
+  const porCliente = new Map(linhasContratos.map((c) => [c.clienteId, c]))
+
+  const vidas: ClienteVida[] = linhasClientes.map((c) => {
+    const contrato = porCliente.get(c.id)
+    return {
+      id: c.id,
+      status: c.status,
+      // Entrada na base: data do primeiro contrato; fallback created_at.
+      inicio: contrato?.inicio ?? c.createdAt.toISOString().slice(0, 10),
+      dataEncerramento: c.dataEncerramento,
+      motivoEncerramento: c.motivoEncerramento,
+      ticketMensal: contrato?.ticket != null ? Number(contrato.ticket) : null,
+    }
+  })
+
+  const hoje = hojeBrasilia()
+  const mes = hoje.slice(0, 7)
+
+  return {
+    mes,
+    churnMes: taxaDeChurn(vidas, mes),
+    churn3m: churnAcumulado(vidas, mes, 3),
+    churn6m: churnAcumulado(vidas, mes, 6),
+    ltv: ltvMedio(vidas, hoje),
+    motivos: rankingMotivos(vidas),
+  }
 }
 
 // --- Visao Analitica ---

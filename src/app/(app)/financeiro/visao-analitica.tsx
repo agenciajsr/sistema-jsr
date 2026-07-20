@@ -1,8 +1,8 @@
-import { PlusCircle, RefreshCw, Repeat, Users } from 'lucide-react'
+import { HeartCrack, PlusCircle, RefreshCw, Repeat, UserMinus, Users } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/stat-card'
-import type { VisaoAnaliticaData } from '@/actions/financeiro'
+import type { VisaoAnaliticaData, VisaoExecutivaData } from '@/actions/financeiro'
 import type { Faixa } from '@/lib/financeiro/calculos'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
@@ -41,11 +41,104 @@ function corTop5(percentual: number): string {
   return 'bg-chart-success'
 }
 
-export function VisaoAnalitica({ dados }: { dados: VisaoAnaliticaData }) {
+function corChurn(percentual: number): 'success' | 'warning' | 'danger' {
+  if (percentual <= 3) return 'success'
+  if (percentual <= 8) return 'warning'
+  return 'danger'
+}
+
+/** Seção "Visão Executiva": churn, LTV e ranking de motivos de encerramento. */
+function VisaoExecutiva({ dados }: { dados: VisaoExecutivaData | null }) {
+  const formatadorPct = (p: number | null) => (p === null ? '—' : `${p}%`)
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold">Visão Executiva</h2>
+        <p className="text-xs text-muted-foreground">
+          Churn, LTV e motivos de encerramento — com poucos clientes esses números oscilam bastante;
+          leia a tendência, não o decimal.
+        </p>
+      </div>
+
+      {dados === null ? (
+        <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+          Dados de churn indisponíveis — aplique a migration 0038 (
+          <code className="text-xs">scripts/aplicar-migration-0038.ts</code>) para habilitar a data de
+          encerramento dos clientes.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="Churn do mês"
+              value={formatadorPct(dados.churnMes.percentual)}
+              icon={UserMinus}
+              color={
+                dados.churnMes.percentual === null
+                  ? 'primary'
+                  : corChurn(dados.churnMes.percentual)
+              }
+              helper={
+                dados.churnMes.percentual === null
+                  ? 'Sem base de clientes no início do mês'
+                  : `${dados.churnMes.encerrados} de ${dados.churnMes.base} clientes | 3m ${formatadorPct(dados.churn3m.percentual)} · 6m ${formatadorPct(dados.churn6m.percentual)}`
+              }
+            />
+            <StatCard
+              label="LTV médio"
+              value={dados.ltv ? formatadorMoeda.format(dados.ltv.valor) : '—'}
+              icon={Repeat}
+              color="primary"
+              helper={
+                dados.ltv
+                  ? `Vida média ${dados.ltv.vidaMediaMeses} meses × ticket ${formatadorMoeda.format(dados.ltv.ticketMedio)}`
+                  : 'Sem contratos com valor conhecido'
+              }
+            />
+            <Card className="border-none shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <HeartCrack className="size-4" />
+                  Motivos de encerramento
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {dados.motivos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum encerramento registrado.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {dados.motivos.slice(0, 5).map((m) => (
+                      <li key={m.motivo} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="truncate">{m.motivo}</span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {m.quantidade}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function VisaoAnalitica({
+  dados,
+  executiva = null,
+}: {
+  dados: VisaoAnaliticaData
+  executiva?: VisaoExecutivaData | null
+}) {
   const { taxaRenovacao, dependencia, despesasVsFaturamento: dvf, variacao } = dados
 
   return (
     <div className="space-y-6">
+      <VisaoExecutiva dados={executiva} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Taxa de Renovacao"
