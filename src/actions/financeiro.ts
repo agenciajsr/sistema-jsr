@@ -1,6 +1,6 @@
 'use server'
 
-import { eq, sql, and, lte, gte, gt, desc, inArray, isNotNull } from 'drizzle-orm'
+import { eq, sql, and, lte, gte, gt, desc, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { addMonths } from 'date-fns'
 
@@ -49,8 +49,60 @@ import {
   type InvestimentoCanal,
   type ResultadoCac,
 } from '@/lib/financeiro/cac'
+import {
+  ocorrenciasRecorrentesNoIntervalo,
+  type RecorrenciaFin,
+} from '@/lib/financeiro/recorrencia'
 
 const ERRO_VALIDACAO = 'Nao foi possivel salvar. Verifique os dados e tente novamente.'
+
+// --- Projeção das séries recorrentes (quick-260721-ogt) ---
+// As previsões (por mês + caixa 30d) deixaram de somar linhas futuras
+// pré-geradas (agora removidas) e passam a PROJETAR a série a partir das
+// âncoras. A projeção começa SEMPRE no 1º dia do mês seguinte, então o mês
+// atual (linhas reais) e o futuro (projetado) nunca se sobrepõem.
+
+/** Datas-base da projeção, ancoradas em hoje (Brasília). */
+function horizontesProjecao(hoje: string) {
+  const [ano, mes] = hoje.split('-').map(Number) // mes 1-based
+  const dia = Number(hoje.slice(8, 10))
+  const mesAtual = hoje.slice(0, 7)
+  // 1º dia do mês seguinte (mes 1-based == índice do mês seguinte 0-based).
+  const primeiroDiaMesSeguinte = new Date(Date.UTC(ano, mes, 1, 12)).toISOString().slice(0, 10)
+  // Teto de 12 meses — IGUAL ao antigo teto de gerarParcelasRecorrentes, para o
+  // card mostrar os MESMOS meses de antes nas séries SEM contrato.
+  const horizonte12 = new Date(Date.UTC(ano, mes - 1 + 12, dia, 12)).toISOString().slice(0, 10)
+  return { mesAtual, primeiroDiaMesSeguinte, horizonte12 }
+}
+
+/**
+ * dataVencimento máxima do contrato VIGENTE hoje por cliente (agregada em UMA
+ * query, SEQUENCIAL). Sem contrato vigente → cliente ausente do mapa (a projeção
+ * usa o horizonte de 12 meses). Mesma leitura do rollover.
+ */
+async function capContratoPorCliente(
+  clienteIds: string[],
+  hoje: string,
+): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>()
+  if (clienteIds.length === 0) return mapa
+  const vigentes = await db
+    .select({
+      clienteId: contratos.clienteId,
+      cap: sql<string>`max(${contratos.dataVencimento})`,
+    })
+    .from(contratos)
+    .where(
+      and(
+        inArray(contratos.clienteId, clienteIds),
+        lte(contratos.dataInicio, hoje),
+        gte(contratos.dataVencimento, hoje),
+      ),
+    )
+    .groupBy(contratos.clienteId)
+  for (const v of vigentes) mapa.set(v.clienteId, v.cap)
+  return mapa
+}
 
 export async function createTransacao(input: TransacaoInput) {
   const currentUser = await getCurrentUser()
@@ -331,10 +383,17 @@ export async function getPrevisaoCaixa() {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { totalReceber: 0, totalPagar: 0, saldoProjetado: 0, items: [] }
 
-  const hoje = new Date().toISOString().slice(0, 10)
-  const em30dias = addMonths(new Date(), 1).toISOString().slice(0, 10)
+  // hojeBrasilia() para real E projeção: a borda do mês/30d não pode divergir
+  // por 1 dia entre as duas fontes (checker info 5).
+  const hoje = hojeBrasilia()
+  const em30dias = addMonths(new Date(`${hoje}T12:00:00Z`), 1).toISOString().slice(0, 10)
+  const { mesAtual, primeiroDiaMesSeguinte } = horizontesProjecao(hoje)
 
-  // Transacoes pendentes nos proximos 30 dias
+  // Transações pendentes/vencidas nos próximos 30 dias.
+  // ⚠️ BLINDAGEM CONTRA DUPLA CONTAGEM (checker Warning 1): EXCLUI os filhos
+  // recorrentes de competência FUTURA (> mês atual) — se uma linha futura
+  // pré-gerada sobreviver (deploy antes do --apply) ela não é somada JUNTO com a
+  // projeção. O mês atual e as avulsas futuras continuam 100% reais.
   const rows = await db
     .select({
       id: transacoes.id,
@@ -351,6 +410,7 @@ export async function getPrevisaoCaixa() {
         inArray(transacoes.status, ['pendente', 'vencido']),
         gte(transacoes.data, hoje),
         lte(transacoes.data, em30dias),
+        sql`NOT (to_char(${transacoes.data}, 'YYYY-MM') > ${mesAtual} AND ${transacoes.transacaoPaiId} IS NOT NULL AND ${transacoes.recorrencia} <> 'avulsa')`,
       ),
     )
     .orderBy(transacoes.data)
@@ -368,6 +428,58 @@ export async function getPrevisaoCaixa() {
       tipo: r.tipo as 'receita' | 'despesa',
     }
   })
+
+  // Projeção da série recorrente (ambos os tipos) — cobre só a fatia do próximo
+  // mês dentro dos 30 dias (começa no 1º dia do mês seguinte → não sobrepõe as
+  // reais do mês atual). Try/catch de degradação: falha aqui cai só nas reais.
+  try {
+    const ancoras = await db
+      .select({
+        data: transacoes.data,
+        valor: transacoes.valor,
+        tipo: transacoes.tipo,
+        clienteId: transacoes.clienteId,
+        recorrencia: transacoes.recorrencia,
+        descricao: transacoes.descricao,
+        clienteNome: clientes.nome,
+      })
+      .from(transacoes)
+      .leftJoin(clientes, eq(transacoes.clienteId, clientes.id))
+      .where(and(isNull(transacoes.transacaoPaiId), ne(transacoes.recorrencia, 'avulsa')))
+
+    const clienteIds = [...new Set(ancoras.map((a) => a.clienteId).filter((v): v is string => !!v))]
+    const capPorCliente = await capContratoPorCliente(clienteIds, hoje)
+
+    const projetados: { descricao: string; valor: number; data: string; tipo: 'receita' | 'despesa' }[] = []
+    for (const a of ancoras) {
+      const cap = a.clienteId ? (capPorCliente.get(a.clienteId) ?? null) : null
+      // ate = min(cap, em30dias): o cap do contrato limita, a janela de 30d também.
+      const ate = cap != null && cap < em30dias ? cap : em30dias
+      const datas = ocorrenciasRecorrentesNoIntervalo(
+        a.data,
+        a.recorrencia as RecorrenciaFin,
+        cap,
+        primeiroDiaMesSeguinte,
+        ate,
+      )
+      const valor = Number(a.valor)
+      const tipo = a.tipo as 'receita' | 'despesa'
+      for (const data of datas) {
+        if (tipo === 'receita') totalReceber += valor
+        else totalPagar += valor
+        projetados.push({
+          descricao: a.clienteNome ? `${a.descricao} (${a.clienteNome})` : a.descricao,
+          valor,
+          data,
+          tipo,
+        })
+      }
+    }
+    items.push(...projetados)
+    items.sort((x, y) => x.data.localeCompare(y.data))
+  } catch (e) {
+    console.error('[getPrevisaoCaixa] projeção indisponível', e)
+  }
 
   return {
     totalReceber,
@@ -436,12 +548,21 @@ export async function getContasAPagar() {
 }
 
 // Previsão de receita por mês FUTURO (quick-260717-i26): agregada no banco
-// (GROUP BY mês) — a visão de MRR futuro vira somas mensais, não N linhas.
+// (GROUP BY mês). Desde o quick-260721-ogt as linhas recorrentes futuras não são
+// mais pré-geradas — os meses futuros recorrentes vêm da PROJEÇÃO da série; o mês
+// atual e as avulsas futuras continuam vindo das linhas reais.
 export async function getPrevisaoReceitaPorMes(): Promise<{ mes: string; total: number }[]> {
   const currentUser = await getCurrentUser()
   if (!currentUser) return []
 
   const hoje = hojeBrasilia()
+  const { mesAtual, primeiroDiaMesSeguinte, horizonte12 } = horizontesProjecao(hoje)
+
+  // Linhas REAIS. ⚠️ BLINDAGEM CONTRA DUPLA CONTAGEM (checker Warning 1, à prova
+  // de ordem): EXCLUI os filhos recorrentes de competência FUTURA (> mês atual) —
+  // a PROJEÇÃO é a fonte ÚNICA dos meses futuros recorrentes. Assim, sobreviva ou
+  // não uma linha futura pré-gerada, o mês futuro nunca é contado duas vezes. O
+  // mês atual (recorrentes reais) e as avulsas futuras continuam somando aqui.
   const rows = await db
     .select({
       mes: sql<string>`to_char(${transacoes.data}, 'YYYY-MM')`,
@@ -453,12 +574,61 @@ export async function getPrevisaoReceitaPorMes(): Promise<{ mes: string; total: 
         eq(transacoes.tipo, 'receita'),
         inArray(transacoes.status, ['pendente', 'vencido']),
         gt(transacoes.data, hoje),
+        sql`NOT (to_char(${transacoes.data}, 'YYYY-MM') > ${mesAtual} AND ${transacoes.transacaoPaiId} IS NOT NULL AND ${transacoes.recorrencia} <> 'avulsa')`,
       ),
     )
     .groupBy(sql`to_char(${transacoes.data}, 'YYYY-MM')`)
     .orderBy(sql`to_char(${transacoes.data}, 'YYYY-MM')`)
 
-  return rows.map((r) => ({ mes: r.mes, total: Number(r.total) }))
+  const porMes = new Map<string, number>()
+  for (const r of rows) porMes.set(r.mes, Number(r.total))
+
+  // Projeção das séries de RECEITA recorrente — fonte única dos meses futuros.
+  // Try/catch de degradação: falha aqui cai só nas linhas reais, nunca quebra.
+  try {
+    const ancoras = await db
+      .select({
+        data: transacoes.data,
+        valor: transacoes.valor,
+        clienteId: transacoes.clienteId,
+        recorrencia: transacoes.recorrencia,
+      })
+      .from(transacoes)
+      .where(
+        and(
+          isNull(transacoes.transacaoPaiId),
+          eq(transacoes.tipo, 'receita'),
+          ne(transacoes.recorrencia, 'avulsa'),
+        ),
+      )
+
+    const clienteIds = [...new Set(ancoras.map((a) => a.clienteId).filter((v): v is string => !!v))]
+    const capPorCliente = await capContratoPorCliente(clienteIds, hoje)
+
+    for (const a of ancoras) {
+      // Sem contrato vigente → horizonte de 12 meses (mesmo teto de antes).
+      const cap = a.clienteId ? (capPorCliente.get(a.clienteId) ?? null) : null
+      const ate = cap ?? horizonte12
+      const datas = ocorrenciasRecorrentesNoIntervalo(
+        a.data,
+        a.recorrencia as RecorrenciaFin,
+        cap,
+        primeiroDiaMesSeguinte,
+        ate,
+      )
+      const valor = Number(a.valor)
+      for (const data of datas) {
+        const mes = data.slice(0, 7)
+        porMes.set(mes, (porMes.get(mes) ?? 0) + valor)
+      }
+    }
+  } catch (e) {
+    console.error('[getPrevisaoReceitaPorMes] projeção indisponível', e)
+  }
+
+  return [...porMes.entries()]
+    .map(([mes, total]) => ({ mes, total }))
+    .sort((a, b) => a.mes.localeCompare(b.mes))
 }
 
 export async function uploadComprovante(transacaoId: string, url: string) {
