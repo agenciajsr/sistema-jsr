@@ -13,6 +13,7 @@ import { hojeBrasilia } from '@/lib/date-br'
 import { normalizarTelefone, dedupHash } from '@/lib/crm/lead'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { ehLeadFrio, NOME_PIPELINE_FRIO } from '@/lib/crm/roteamento'
+import { ehEtapaAbordado } from '@/lib/crm/followup'
 import type { LeadEntrada } from '@/lib/validations/crm'
 
 // Ingestão de leads COMPARTILHADA entre a API pública (/api/crm/leads) e
@@ -128,12 +129,17 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
       })
     }
 
-    // (d) ROTEAMENTO por fonte → pipeline destino e sua PRIMEIRA etapa.
-    //   - fonte 'prospeccao_fria': funil "Prospecção Fria" na etapa "A Abordar"
-    //     (1ª etapa, menor ordem — nasce em ordem 0 no seed).
-    //   - qualquer outra fonte: funil padrão "Vendas" (comportamento atual).
+    // (d) ROTEAMENTO por fonte → pipeline destino e sua etapa de entrada.
+    //   - fonte 'prospeccao_fria': funil "Prospecção Fria" na etapa "Abordado".
+    //     O webhook do disparo (WhatsApp) só chega DEPOIS que a 1ª mensagem foi
+    //     enviada — o lead JÁ foi abordado, então nasce em "Abordado" (não em
+    //     "A Abordar", que fica p/ entrada MANUAL: ex. Instagram, onde se cadastra
+    //     a lista e move p/ "Abordado" ao mandar a DM). Carimba o 1º contato →
+    //     o relógio do follow-up D1 (24h) já começa a correr sozinho.
+    //   - qualquer outra fonte: funil padrão "Vendas" na 1ª etapa (inalterado).
     // Queries SEQUENCIAIS (nada de Promise.all): pool max=3, max_pipeline=0.
     let pipelineDestino: { id: string } | undefined
+    let nasceuNoFrio = false
 
     if (ehLeadFrio(lead.fonte)) {
       // DEGRADAÇÃO GRACIOSA: se o pipeline Frio ainda NÃO existir (seed não
@@ -149,7 +155,10 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
           )
         )
         .limit(1)
-      pipelineDestino = pipelineFrio
+      if (pipelineFrio) {
+        pipelineDestino = pipelineFrio
+        nasceuNoFrio = true
+      }
     }
 
     if (!pipelineDestino) {
@@ -163,20 +172,27 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
 
     if (!pipelineDestino) throw new Error('Pipeline padrao nao encontrado no workspace.')
 
-    const [primeiraEtapa] = await db
-      .select({ id: crmEtapas.id })
+    // Etapa de entrada: no frio o lead JÁ foi abordado (webhook pós-mensagem) →
+    // nasce em "Abordado"; fallback à 1ª etapa se "Abordado" não existir (seed
+    // antigo). Nos demais funis, a 1ª etapa (menor ordem), como sempre.
+    const etapas = await db
+      .select({ id: crmEtapas.id, nome: crmEtapas.nome })
       .from(crmEtapas)
       .where(eq(crmEtapas.pipelineId, pipelineDestino.id))
       .orderBy(asc(crmEtapas.ordem))
-      .limit(1)
 
-    if (!primeiraEtapa) throw new Error('Pipeline destino sem etapas.')
+    if (etapas.length === 0) throw new Error('Pipeline destino sem etapas.')
+
+    const etapaAbordado = nasceuNoFrio ? etapas.find((e) => ehEtapaAbordado(e.nome)) : undefined
+    const etapaDestino = etapaAbordado ?? etapas[0]
+    // Só carimba o 1º contato quando REALMENTE caiu em "Abordado" (não no fallback).
+    const carimbarContato = !!etapaAbordado
 
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)::int` })
       .from(crmOportunidades)
       .where(
-        and(eq(crmOportunidades.etapaId, primeiraEtapa.id), eq(crmOportunidades.status, 'aberta'))
+        and(eq(crmOportunidades.etapaId, etapaDestino.id), eq(crmOportunidades.status, 'aberta'))
       )
 
     const titulo = lead.empresa ? `Lead: ${lead.nome} (${lead.empresa})` : `Lead: ${lead.nome}`
@@ -186,7 +202,7 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
       .values({
         workspaceId,
         pipelineId: pipelineDestino.id,
-        etapaId: primeiraEtapa.id,
+        etapaId: etapaDestino.id,
         empresaId,
         contatoId,
         titulo,
@@ -196,6 +212,9 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
         donoId: null,
         status: 'aberta',
         ordemNaEtapa: total,
+        // Frio já abordado (webhook pós-mensagem): carimba o 1º contato p/ o
+        // relógio do follow-up D1 (24h) começar sozinho. Fallback "A Abordar" → null.
+        primeiroContatoEm: carimbarContato ? new Date() : null,
       })
       .returning({ id: crmOportunidades.id })
 
