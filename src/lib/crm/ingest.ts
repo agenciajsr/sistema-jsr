@@ -12,6 +12,7 @@ import {
 import { hojeBrasilia } from '@/lib/date-br'
 import { normalizarTelefone, dedupHash } from '@/lib/crm/lead'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
+import { ehLeadFrio, NOME_PIPELINE_FRIO } from '@/lib/crm/roteamento'
 import type { LeadEntrada } from '@/lib/validations/crm'
 
 // Ingestão de leads COMPARTILHADA entre a API pública (/api/crm/leads) e
@@ -27,7 +28,8 @@ export type ResultadoLead =
 
 /**
  * Processa um lead validado: inbox (dedup por hash) → contato (dedup por
- * email/telefone) → oportunidade na 1ª etapa do pipeline padrão → atividades.
+ * email/telefone) → oportunidade na 1ª etapa do pipeline destino (Frio para a
+ * fonte 'prospeccao_fria', padrão "Vendas" para o resto) → atividades.
  * Idempotente por dia: o MESMO lead da MESMA fonte no MESMO dia (Brasília)
  * retorna { duplicado: true } sem criar nada — trava final no uniqueIndex
  * de crm_lead_inbox.dedup_hash.
@@ -126,23 +128,49 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
       })
     }
 
-    // (d) pipeline padrão e sua PRIMEIRA etapa (menor ordem).
-    const [pipelinePadrao] = await db
-      .select({ id: crmPipelines.id })
-      .from(crmPipelines)
-      .where(and(eq(crmPipelines.workspaceId, workspaceId), eq(crmPipelines.padrao, true)))
-      .limit(1)
+    // (d) ROTEAMENTO por fonte → pipeline destino e sua PRIMEIRA etapa.
+    //   - fonte 'prospeccao_fria': funil "Prospecção Fria" na etapa "A Abordar"
+    //     (1ª etapa, menor ordem — nasce em ordem 0 no seed).
+    //   - qualquer outra fonte: funil padrão "Vendas" (comportamento atual).
+    // Queries SEQUENCIAIS (nada de Promise.all): pool max=3, max_pipeline=0.
+    let pipelineDestino: { id: string } | undefined
 
-    if (!pipelinePadrao) throw new Error('Pipeline padrao nao encontrado no workspace.')
+    if (ehLeadFrio(lead.fonte)) {
+      // DEGRADAÇÃO GRACIOSA: se o pipeline Frio ainda NÃO existir (seed não
+      // aplicado), cai no padrão em vez de quebrar a ingestão — o roteamento
+      // passa a valer no instante em que o orquestrador rodar o seed.
+      const [pipelineFrio] = await db
+        .select({ id: crmPipelines.id })
+        .from(crmPipelines)
+        .where(
+          and(
+            eq(crmPipelines.workspaceId, workspaceId),
+            eq(crmPipelines.nome, NOME_PIPELINE_FRIO)
+          )
+        )
+        .limit(1)
+      pipelineDestino = pipelineFrio
+    }
+
+    if (!pipelineDestino) {
+      const [pipelinePadrao] = await db
+        .select({ id: crmPipelines.id })
+        .from(crmPipelines)
+        .where(and(eq(crmPipelines.workspaceId, workspaceId), eq(crmPipelines.padrao, true)))
+        .limit(1)
+      pipelineDestino = pipelinePadrao
+    }
+
+    if (!pipelineDestino) throw new Error('Pipeline padrao nao encontrado no workspace.')
 
     const [primeiraEtapa] = await db
       .select({ id: crmEtapas.id })
       .from(crmEtapas)
-      .where(eq(crmEtapas.pipelineId, pipelinePadrao.id))
+      .where(eq(crmEtapas.pipelineId, pipelineDestino.id))
       .orderBy(asc(crmEtapas.ordem))
       .limit(1)
 
-    if (!primeiraEtapa) throw new Error('Pipeline padrao sem etapas.')
+    if (!primeiraEtapa) throw new Error('Pipeline destino sem etapas.')
 
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)::int` })
@@ -157,7 +185,7 @@ export async function processarLead(lead: LeadEntrada, workspaceId: string): Pro
       .insert(crmOportunidades)
       .values({
         workspaceId,
-        pipelineId: pipelinePadrao.id,
+        pipelineId: pipelineDestino.id,
         etapaId: primeiraEtapa.id,
         empresaId,
         contatoId,
