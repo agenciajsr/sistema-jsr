@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sincronizarTudoMeta } from '@/lib/meta/sync'
 import { avaliarEPersistirAlertas, type ResumoAvaliacao } from '@/lib/alertas/persistir'
 import { gerarCobrancasMensais, type ResumoCobrancasMensais } from '@/lib/cobrancas/gerar'
+import { rolarRecorrentes } from '@/lib/financeiro/rollover'
 
 // Rota chamada pelo Vercel Cron (GET) 1×/dia. Descobre/atualiza as contas da Meta
 // e sincroniza insights + saldo de todas as contas ativas. Sem sessão de usuário —
@@ -44,12 +45,23 @@ export async function GET(request: Request) {
       console.error('[cron/sync-meta] falha ao gerar cobranças — seguindo sem cobranças', erroCobrancas)
     }
 
+    // Carona (quick-260721-ogt): materializa a competência do mês das transações
+    // recorrentes do financeiro (rolam mês a mês como as cobranças). try/catch
+    // PRÓPRIO — o rollover já degrada graciosamente, mas isolamos o sync mesmo assim.
+    let recorrentesResumo: { criadas: number } | null = null
+    try {
+      recorrentesResumo = await rolarRecorrentes()
+    } catch (erroRecorrentes) {
+      console.error('[cron/sync-meta] falha ao rolar recorrentes — seguindo', erroRecorrentes)
+    }
+
     return NextResponse.json({
       ok: true,
       contas,
       insights,
       ...(alertasResumo ? { alertas: alertasResumo } : {}),
       ...(cobrancasResumo ? { cobrancas: cobrancasResumo } : {}),
+      ...(recorrentesResumo ? { recorrentes: recorrentesResumo } : {}),
     })
   } catch (err) {
     console.error('[cron/sync-meta] Erro:', err)

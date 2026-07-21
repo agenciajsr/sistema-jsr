@@ -173,6 +173,11 @@ export const transacoes = pgTable('transacoes', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   dataIdx: index('transacoes_data_idx').on(table.data, table.tipo),
+  // Trava de corrida da materialização recorrente (quick-260721-ogt, migration
+  // 0041): 1 competência por série. Parcial (só filhos) — âncoras têm pai NULL.
+  paiDataUnq: uniqueIndex('ux_transacoes_pai_data')
+    .on(table.transacaoPaiId, table.data)
+    .where(sql`${table.transacaoPaiId} IS NOT NULL`),
 }))
 
 export const plataformaEnum = pgEnum('plataforma', ['meta', 'google'])

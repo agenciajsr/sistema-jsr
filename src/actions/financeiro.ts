@@ -2,7 +2,7 @@
 
 import { eq, sql, and, lte, gte, gt, desc, inArray, isNotNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { addMonths, addWeeks } from 'date-fns'
+import { addMonths } from 'date-fns'
 
 import { db } from '@/lib/db'
 import {
@@ -80,70 +80,11 @@ export async function createTransacao(input: TransacaoInput) {
     })
     .returning({ id: transacoes.id })
 
-  // Gerar parcelas automaticamente se recorrencia != avulsa
-  if (recorrencia && recorrencia !== 'avulsa') {
-    await gerarParcelasRecorrentes(novo.id, parsed.data)
-  }
-
+  // Só insere a ÂNCORA (1ª competência). As próximas competências nascem pelo
+  // rollover preguiçoso (rolarRecorrentes), como as cobranças dos clientes —
+  // nunca mais pré-geramos 12 meses/27 semanas de futuro (quick-260721-ogt).
   revalidatePath('/financeiro')
   return { data: { id: novo.id } }
-}
-
-export async function gerarParcelasRecorrentes(transacaoPaiId: string, input: TransacaoInput) {
-  const hoje = new Date()
-  let dataFinal: Date
-
-  // Determinar data final: contrato vigente ou 12 meses
-  if (input.clienteId) {
-    const hojeStr = hoje.toISOString().slice(0, 10)
-    const [contrato] = await db
-      .select({ dataVencimento: contratos.dataVencimento })
-      .from(contratos)
-      .where(
-        and(
-          eq(contratos.clienteId, input.clienteId),
-          lte(contratos.dataInicio, hojeStr),
-          gte(contratos.dataVencimento, hojeStr),
-        ),
-      )
-      .limit(1)
-
-    dataFinal = contrato ? new Date(contrato.dataVencimento) : addMonths(hoje, 12)
-  } else {
-    dataFinal = addMonths(hoje, 12)
-  }
-
-  // Semanal avança 7 dias; mensal/trimestral avançam meses. 'avulsa' não gera parcelas.
-  const isSemanal = input.recorrencia === 'semanal'
-  const incrementoMeses = input.recorrencia === 'trimestral' ? 3 : 1
-  const proximaData = (d: Date) => (isSemanal ? addWeeks(d, 1) : addMonths(d, incrementoMeses))
-  const dataBase = new Date(input.data)
-  const parcelas: (typeof transacoes.$inferInsert)[] = []
-
-  let dataParcela = proximaData(dataBase)
-  while (dataParcela <= dataFinal) {
-    parcelas.push({
-      tipo: input.tipo,
-      categoria: input.categoria,
-      clienteId: input.clienteId ?? null,
-      descricao: input.descricao,
-      valor: input.valor.toFixed(2),
-      data: dataParcela.toISOString().slice(0, 10),
-      status: 'pendente',
-      diaVencto: input.diaVencto ?? null,
-      notas: input.notas ?? null,
-      centroCusto: input.centroCusto ?? null,
-      recorrencia: input.recorrencia ?? 'avulsa',
-      formaPagamento: input.formaPagamento ?? null,
-      responsavelId: input.responsavelId ?? null,
-      transacaoPaiId,
-    })
-    dataParcela = proximaData(dataParcela)
-  }
-
-  if (parcelas.length > 0) {
-    await db.insert(transacoes).values(parcelas)
-  }
 }
 
 export async function listTransacoes(filtros?: { mes?: number; ano?: number }) {

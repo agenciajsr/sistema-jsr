@@ -24,6 +24,7 @@ import { getVisaoCobrancas } from '@/lib/cobrancas/dados'
 import { asaasDisponivel } from '@/lib/asaas/client'
 import { getCurrentUser } from '@/lib/auth/session'
 import { withRetry } from '@/lib/utils/with-retry'
+import { rolarRecorrentes } from '@/lib/financeiro/rollover'
 import { hojeBrasilia } from '@/lib/date-br'
 import { progressoDoMes } from '@/lib/financeiro/calculos'
 import { filtrarAReceber } from '@/lib/financeiro/a-receber'
@@ -68,6 +69,19 @@ export default async function FinanceiroPage({
   //    (max=5) antes da 2ª tentativa — quebra a cascata de 15/jul/2026.
   // 4. Tela de erro estática só como ÚLTIMO recurso (2 tentativas falharam).
   await getCurrentUser()
+
+  // Materialização preguiçosa BARATA (quick-260721-ogt): rola as competências
+  // do mês das transações recorrentes. Roda 1× SEQUENCIAL aqui, ANTES do
+  // withRetry — NÃO dentro do factory retriado, NÃO dentro de nenhum Promise.all
+  // (regra do pool max=5 / max_pipeline=1 — debug 260721: nunca engordar os
+  // lotes nem aumentar paralelismo). O cron roda só a cada 6h; sem isto a
+  // despesa/receita do mês só apareceria horas depois da virada. rolarRecorrentes
+  // já é try/catch por dentro, mas blindamos aqui para nunca quebrar a página.
+  try {
+    await rolarRecorrentes()
+  } catch (e) {
+    console.error('[financeiro] rollover', e)
+  }
 
   // Factory (não Promise pronta): cada tentativa do withRetry redispara as
   // queries do zero — a 2ª tentativa pega as conexões já quentes do pool.
