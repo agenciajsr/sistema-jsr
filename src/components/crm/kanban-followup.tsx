@@ -47,6 +47,17 @@ function rotuloPrazo(nivel: number): string {
   return horas < 120 ? `${horas}h` : `${Math.round(horas / 24)}d`
 }
 
+/**
+ * Cabeçalho da coluna. O NÚMERO significa "quantos follow-ups já foram feitos":
+ * nível 0 (só no frio) = lead que recebeu apenas a 1ª mensagem, aguardando o 1º
+ * follow-up (24h); D1 = 1º follow-up feito, D2 = 2º, etc. O prazo é o tempo até
+ * o PRÓXIMO follow-up a partir daquele ponto.
+ */
+function tituloColuna(nivel: number): { titulo: string; prazo: string } {
+  if (nivel === 0) return { titulo: 'Aguardando 1º follow-up', prazo: '24h' }
+  return { titulo: `D${nivel}`, prazo: rotuloPrazo(nivel) }
+}
+
 function Coluna({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
@@ -98,14 +109,20 @@ export function KanbanFollowup({
 
   const colunaPerdido = colunasFechadas.find((c) => c.chave === PERDIDO)
 
-  // Agrupa por nível (com sobreposição otimista). Nível null na etapa cai em
-  // D1 VISUALMENTE: o card acabou de entrar (ou a coluna está pendente) — a
-  // entrada real em D1 é feita pela action ao mover para a etapa.
+  // No frio existe a coluna 0 = "Aguardando 1º follow-up" (lead que recebeu só a
+  // 1ª mensagem, nenhum follow-up feito). No Vendas mantém D1..D6 (o card já entra
+  // em D1 ao mover para a etapa "Follow-up"). Assim o NÚMERO da coluna significa
+  // "quantos follow-ups já foram feitos" — a lógica que o usuário espera.
+  const nivelMin = frio ? 0 : 1
+  const colunasNivel: number[] = frio ? [0, 1, 2, 3, 4, 5, 6] : [...NIVEIS]
+
+  // Agrupa por nível (com sobreposição otimista). No frio, nível null = aguardando
+  // (coluna 0); no Vendas, null cai em D1 (segurança — o card entra com nível 1).
   const porNivel = new Map<number, OportunidadeCard[]>()
-  for (const n of NIVEIS) porNivel.set(n, [])
+  for (const n of colunasNivel) porNivel.set(n, [])
   for (const card of cardsFollowup) {
-    const nivel = niveisOtimistas[card.id] ?? card.followupNivel ?? 1
-    const alvo = Math.min(Math.max(nivel, 1), 6)
+    const nivel = niveisOtimistas[card.id] ?? card.followupNivel ?? nivelMin
+    const alvo = Math.min(Math.max(nivel, nivelMin), 6)
     porNivel.get(alvo)!.push(card)
   }
 
@@ -140,7 +157,7 @@ export function KanbanFollowup({
     const card = cardsFollowup.find((c) => c.id === id)
     if (!card) return // só cards das colunas D avançam/perdem
 
-    const nivelAtual = niveisOtimistas[id] ?? card.followupNivel ?? 1
+    const nivelAtual = niveisOtimistas[id] ?? card.followupNivel ?? nivelMin
 
     // Perdido: reusa o fluxo de motivo de perda — nada move antes de confirmar.
     if (destino === PERDIDO) {
@@ -164,7 +181,7 @@ export function KanbanFollowup({
       toast.error(result.error)
       return
     }
-    toast.success(`Follow-up ${nivelDestino} registrado.`)
+    toast.success(`${nivelDestino}º follow-up registrado.`)
     router.refresh()
   }
 
@@ -215,20 +232,26 @@ export function KanbanFollowup({
         }}
       >
         <div className="flex h-[calc(100dvh-230px)] min-h-[540px] gap-4 overflow-x-auto overflow-y-hidden pb-2">
-          {/* Colunas D1..D6: derivadas do followup_nivel do MESMO card. */}
-          {NIVEIS.map((nivel) => {
+          {/* Colunas derivadas do followup_nivel do MESMO card. No frio, a coluna 0
+              é "Aguardando 1º follow-up"; nas duas o número = follow-ups já feitos. */}
+          {colunasNivel.map((nivel) => {
             const cards = porNivel.get(nivel) ?? []
             const visiveis = filtrar(cards)
+            const aguardando = nivel === 0
+            const { titulo, prazo } = tituloColuna(nivel)
             return (
               <Coluna key={nivel} id={`nivel-${nivel}`}>
                 <div className="overflow-hidden rounded-lg border bg-card shadow-[var(--shadow-sm)]">
-                  <div className="h-1 w-full bg-amber-400 dark:bg-amber-500" />
+                  <div
+                    className={cn(
+                      'h-1 w-full',
+                      aguardando ? 'bg-sky-400 dark:bg-sky-500' : 'bg-amber-400 dark:bg-amber-500',
+                    )}
+                  />
                   <div className="flex items-center justify-between gap-2 px-3 py-2">
-                    <p className="truncate text-sm font-semibold">
-                      D{nivel}
-                      <span className="ml-1 font-normal text-muted-foreground">
-                        · {rotuloPrazo(nivel)}
-                      </span>
+                    <p className={cn('text-sm font-semibold', !aguardando && 'truncate')}>
+                      {titulo}
+                      <span className="ml-1 font-normal text-muted-foreground">· {prazo}</span>
                     </p>
                     <Badge variant="secondary" className="shrink-0 text-[10px] tabular-nums">
                       {cards.length}
