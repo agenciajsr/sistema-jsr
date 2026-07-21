@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Concluído quick 260720-trz (CRM: funil separado 'Prospecção Fria' — roteamento por fonte na ingestão + script idempotente de seed/migração dos frios; script NÃO aplicado, pendente rodar pelo orquestrador)"
-last_updated: "2026-07-20T23:10:00.000Z"
-last_activity: "2026-07-20 - Completed quick task 260720-trz: pipeline separado 'Prospecção Fria' (roteamento ehLeadFrio sob TDD + processarLead com fallback gracioso + scripts/seed-prospeccao-fria.ts idempotente)"
+stopped_at: "Concluído quick 260720-urt (CRM: follow-up do funil frio — graduação AUTOMÁTICA 'Qualificado'→Vendas, cadência D1-D6 em 'Abordado' e supressão do SLA de 1h; regressão zero, 630/630 testes). Teste manual depende do seed do frio (trz) aplicado."
+last_updated: "2026-07-20T23:59:00.000Z"
+last_activity: "2026-07-20 - Completed quick task 260720-urt: graduação frio→Vendas + cadência de follow-up na etapa 'Abordado' + SLA de 1º contato suprimido para o frio (módulos puros TDD + wiring actions/dados/alertas + aba Follow-up)"
 progress:
   total_phases: 6
   completed_phases: 0
