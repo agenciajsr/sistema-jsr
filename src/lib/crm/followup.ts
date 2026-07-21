@@ -53,6 +53,25 @@ export function ehEtapaContatoFeito(nome: string): boolean {
   return normalizar(nome) === 'contato feito'
 }
 
+/**
+ * true somente quando o nome da etapa é "Abordado" (tolerante a acento/caixa/
+ * espaços). É a etapa do funil FRIO onde a cadência de follow-up corre — no frio
+ * "Abordado" acumula os dois papéis que "Contato Feito" (entrada) e "Follow-up"
+ * (cadência) cumprem separadamente no Vendas. NÃO casa "A Abordar" (etapa inicial).
+ */
+export function ehEtapaAbordado(nome: string): boolean {
+  return normalizar(nome) === 'abordado'
+}
+
+/**
+ * true somente quando o nome da etapa é "Qualificado" (tolerante a acento/caixa/
+ * espaços). Marca o ponto de GRADUAÇÃO do lead frio para o funil de Vendas.
+ * NÃO casa "Qualificação"/"Desqualificado" (normalização compara o nome inteiro).
+ */
+export function ehEtapaQualificado(nome: string): boolean {
+  return normalizar(nome) === 'qualificado'
+}
+
 export type PendenciaFollowup = { tipo: 'pendente' | 'esgotado'; texto: string } | null
 
 /** Converte Date | string ISO em ms; null quando ausente. */
@@ -61,6 +80,34 @@ function paraMs(valor: Date | string | null): number | null {
   const d = valor instanceof Date ? valor : new Date(valor)
   const ms = d.getTime()
   return Number.isNaN(ms) ? null : ms
+}
+
+/** Pendência de entrada: 24h desde a base (primeiro contato) sem nível ainda. */
+function pendenciaEntrada(
+  baseContatoFeito: Date | string | null,
+  agora: Date,
+): PendenciaFollowup {
+  const base = paraMs(baseContatoFeito)
+  if (base == null) return null
+  const horas = (agora.getTime() - base) / MS_POR_HORA
+  return horas >= PRAZO_ENTRADA_HORAS ? { tipo: 'pendente', texto: 'Follow-up pendente' } : null
+}
+
+/** Cadência D1..D6: pendente/esgotado a partir do último follow-up no nível. */
+function pendenciaCadencia(
+  nivel: number | null,
+  ultimoFollowupEm: Date | string | null,
+  agora: Date,
+): PendenciaFollowup {
+  if (nivel == null || nivel < 1 || nivel > 6) return null
+  const ultimo = paraMs(ultimoFollowupEm)
+  if (ultimo == null) return null
+  const horas = (agora.getTime() - ultimo) / MS_POR_HORA
+  if (horas < PRAZOS_FOLLOWUP_HORAS[nivel]) return null
+
+  return nivel >= 6
+    ? { tipo: 'esgotado', texto: 'Follow-ups esgotados' }
+    : { tipo: 'pendente', texto: 'Follow-up pendente' }
 }
 
 /**
@@ -72,6 +119,12 @@ function paraMs(valor: Date | string | null): number | null {
  *   desde ultimoFollowupEm.
  * - Nível 6: 'esgotado' após 14 dias (decisão HUMANA mover para Perdido).
  * Limite EM PONTO conta como vencido (mesma convenção do estourouSla).
+ *
+ * pipelineFrio (default false): no funil "Prospecção Fria" a MESMA cadência corre
+ * dentro de uma ÚNICA etapa "Abordado" — que acumula os papéis de entrada (24h com
+ * nível null) E de cadência (D1..D6). "Contato Feito"/"Follow-up" NÃO existem no
+ * frio; "A Abordar"/"Respondeu"/"Qualificado" não disparam nada. Com pipelineFrio
+ * false o comportamento é BYTE-IDÊNTICO ao do Vendas (regressão zero).
  */
 export function pendenciaFollowup(
   p: {
@@ -82,29 +135,23 @@ export function pendenciaFollowup(
     baseContatoFeito: Date | string | null
   },
   agora: Date = new Date(),
+  pipelineFrio = false,
 ): PendenciaFollowup {
   if (p.status !== 'aberta') return null
   const etapa = p.etapaNome ?? ''
 
-  // Entrada no fluxo: em Contato Feito ainda sem nível, 24h desde a base.
-  if (ehEtapaContatoFeito(etapa) && p.followupNivel == null) {
-    const base = paraMs(p.baseContatoFeito)
-    if (base == null) return null
-    const horas = (agora.getTime() - base) / MS_POR_HORA
-    return horas >= PRAZO_ENTRADA_HORAS ? { tipo: 'pendente', texto: 'Follow-up pendente' } : null
+  // Frio: só "Abordado" pende — nível null usa a entrada de 24h, nível >=1 a cadência.
+  if (pipelineFrio) {
+    if (!ehEtapaAbordado(etapa)) return null
+    return p.followupNivel == null
+      ? pendenciaEntrada(p.baseContatoFeito, agora)
+      : pendenciaCadencia(p.followupNivel, p.ultimoFollowupEm, agora)
   }
 
-  // Dentro do fluxo: só quem ESTÁ na etapa Follow-up com nível válido.
+  // Vendas (comportamento original): entrada em "Contato Feito", cadência em "Follow-up".
+  if (ehEtapaContatoFeito(etapa) && p.followupNivel == null) {
+    return pendenciaEntrada(p.baseContatoFeito, agora)
+  }
   if (!ehEtapaFollowup(etapa)) return null
-  const nivel = p.followupNivel
-  if (nivel == null || nivel < 1 || nivel > 6) return null
-
-  const ultimo = paraMs(p.ultimoFollowupEm)
-  if (ultimo == null) return null
-  const horas = (agora.getTime() - ultimo) / MS_POR_HORA
-  if (horas < PRAZOS_FOLLOWUP_HORAS[nivel]) return null
-
-  return nivel >= 6
-    ? { tipo: 'esgotado', texto: 'Follow-ups esgotados' }
-    : { tipo: 'pendente', texto: 'Follow-up pendente' }
+  return pendenciaCadencia(p.followupNivel, p.ultimoFollowupEm, agora)
 }

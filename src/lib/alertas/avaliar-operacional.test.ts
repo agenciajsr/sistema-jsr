@@ -142,6 +142,7 @@ function oportunidade(extra: Partial<OportunidadeSlaInput>): OportunidadeSlaInpu
     status: 'aberta',
     criadaEm: new Date('2026-07-15T12:00:00-03:00'),
     primeiroContatoEm: null,
+    pipelineNome: 'Vendas',
     ...extra,
   }
 }
@@ -181,6 +182,14 @@ describe('avaliarSlaPrimeiroContato', () => {
   it('sem nome de contato usa o titulo do negocio', () => {
     const alertas = avaliarSlaPrimeiroContato([oportunidade({ contatoNome: null })], HOJE)
     expect(alertas[0].clienteNome).toBe('Trafego Pago - Loja X')
+  })
+
+  it('pipeline Prospecção Fria estourado → 0 alertas (frio não tem SLA de 1º contato)', () => {
+    const alertas = avaliarSlaPrimeiroContato(
+      [oportunidade({ pipelineNome: 'Prospecção Fria' })],
+      HOJE,
+    )
+    expect(alertas).toHaveLength(0)
   })
 })
 

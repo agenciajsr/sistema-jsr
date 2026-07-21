@@ -24,3 +24,26 @@ export const ETAPA_INICIAL_FRIO = 'A Abordar'
 export function ehLeadFrio(fonte: string): boolean {
   return fonte === 'prospeccao_fria'
 }
+
+/** Remove diacríticos (NFD + faixa de combinantes), apara espaços e baixa a caixa. */
+function normalizar(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * true quando o pipeline é o funil de PROSPECÇÃO FRIA, detectado pelo NOME
+ * normalizado (tolerante a acento/caixa/espaços) == 'prospeccao fria'.
+ *
+ * A detecção é por NOME (e não por fonte do lead) porque a camada de dados e a de
+ * alertas têm em mãos o pipeline do card, não a fonte que o originou. `normalizar`
+ * é local de propósito: roteamento.ts é usado na ingestão e deve ficar autossuficiente
+ * (zero import de followup.ts). null/'Vendas'/'Prospecção' e afins → false.
+ */
+export function ehPipelineFrio(nomePipeline: string | null): boolean {
+  if (nomePipeline == null) return false
+  return normalizar(nomePipeline) === normalizar(NOME_PIPELINE_FRIO)
+}

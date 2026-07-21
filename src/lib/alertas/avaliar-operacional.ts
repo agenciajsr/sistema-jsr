@@ -10,6 +10,7 @@
 
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 
+import { ehPipelineFrio } from '@/lib/crm/roteamento'
 import { SLA_PRIMEIRO_CONTATO_HORAS, estourouSla, horasAguardando } from '@/lib/crm/sla-contato'
 import type { Alerta, SeveridadeAlerta } from './types'
 
@@ -217,12 +218,16 @@ export type OportunidadeSlaInput = {
   status: string // 'aberta' | 'ganha' | 'perdida'
   criadaEm: Date
   primeiroContatoEm: Date | null
+  pipelineNome: string | null
 }
 
 /**
  * Lead ABERTO sem primeiro_contato_em e criado há 24h ou mais →
  * 'sla_primeiro_contato' (atenção). clienteNome = nome do contato (fallback
  * título do negócio); clienteId vazio — lead ainda não é cliente.
+ *
+ * O funil FRIO (Prospecção Fria) é PULADO: prospecção ativa não tem SLA de 1º
+ * contato de lead quente — o card frio nasce sem contato feito e isso é normal.
  */
 export function avaliarSlaPrimeiroContato(
   oportunidades: OportunidadeSlaInput[],
@@ -231,6 +236,7 @@ export function avaliarSlaPrimeiroContato(
   const alertas: Alerta[] = []
 
   for (const o of oportunidades) {
+    if (ehPipelineFrio(o.pipelineNome)) continue
     if (o.status !== 'aberta') continue
     if (o.primeiroContatoEm !== null) continue
     if (!estourouSla(o.criadaEm, agora)) continue

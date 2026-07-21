@@ -6,6 +6,7 @@ import {
   ETAPA_INICIAL_FRIO,
   NOME_PIPELINE_FRIO,
   ehLeadFrio,
+  ehPipelineFrio,
 } from './roteamento'
 
 describe('constantes do pipeline Frio', () => {
@@ -35,5 +36,24 @@ describe('ehLeadFrio', () => {
     expect(ehLeadFrio('fonte_inexistente')).toBe(false)
     expect(ehLeadFrio('PROSPECCAO_FRIA')).toBe(false)
     expect(ehLeadFrio('prospeccao')).toBe(false)
+  })
+})
+
+describe('ehPipelineFrio', () => {
+  it('casa o nome canônico "Prospecção Fria" (com acento)', () => {
+    expect(ehPipelineFrio('Prospecção Fria')).toBe(true)
+    expect(ehPipelineFrio(NOME_PIPELINE_FRIO)).toBe(true)
+  })
+
+  it('tolera caixa, acento ausente e espaços nas pontas', () => {
+    expect(ehPipelineFrio('prospeccao fria')).toBe(true)
+    expect(ehPipelineFrio(' PROSPECÇÃO FRIA ')).toBe(true)
+  })
+
+  it('null/Vendas/nome parcial → false', () => {
+    expect(ehPipelineFrio(null)).toBe(false)
+    expect(ehPipelineFrio('Vendas')).toBe(false)
+    expect(ehPipelineFrio('Prospecção')).toBe(false)
+    expect(ehPipelineFrio('')).toBe(false)
   })
 })

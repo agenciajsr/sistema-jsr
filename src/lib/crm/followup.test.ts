@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   PRAZOS_FOLLOWUP_HORAS,
+  ehEtapaAbordado,
   ehEtapaContatoFeito,
   ehEtapaFollowup,
+  ehEtapaQualificado,
   pendenciaFollowup,
 } from './followup'
 
@@ -53,6 +55,34 @@ describe('ehEtapaContatoFeito', () => {
 
   it('rejeita a etapa Follow-up', () => {
     expect(ehEtapaContatoFeito('Follow-up')).toBe(false)
+  })
+})
+
+describe('ehEtapaAbordado', () => {
+  it('reconhece "Abordado" tolerando caixa/acento/espaços', () => {
+    expect(ehEtapaAbordado('Abordado')).toBe(true)
+    expect(ehEtapaAbordado('abordado')).toBe(true)
+    expect(ehEtapaAbordado('ABORDADO ')).toBe(true)
+  })
+
+  it('NÃO casa "A Abordar" (etapa inicial) nem outras etapas', () => {
+    expect(ehEtapaAbordado('A Abordar')).toBe(false)
+    expect(ehEtapaAbordado('Contato Feito')).toBe(false)
+    expect(ehEtapaAbordado('Follow-up')).toBe(false)
+    expect(ehEtapaAbordado('Qualificado')).toBe(false)
+  })
+})
+
+describe('ehEtapaQualificado', () => {
+  it('reconhece "Qualificado" tolerando caixa/acento/espaços', () => {
+    expect(ehEtapaQualificado('Qualificado')).toBe(true)
+    expect(ehEtapaQualificado(' qualificado ')).toBe(true)
+  })
+
+  it('NÃO casa grafias parecidas', () => {
+    expect(ehEtapaQualificado('Qualificação')).toBe(false)
+    expect(ehEtapaQualificado('Desqualificado')).toBe(false)
+    expect(ehEtapaQualificado('Abordado')).toBe(false)
   })
 })
 
@@ -189,5 +219,69 @@ describe('pendenciaFollowup', () => {
         agora,
       ),
     ).toBeNull()
+  })
+
+  // --- Funil FRIO (pipelineFrio=true): "Abordado" acumula entrada + cadência ---
+  describe('no funil Frio (pipelineFrio=true, cadência em "Abordado")', () => {
+    /** Card frio em "Abordado" com nível null: entrada de 24h desde a base. */
+    function frioEntrada(baseHorasAtras: number) {
+      return {
+        status: 'aberta',
+        etapaNome: 'Abordado',
+        followupNivel: null,
+        ultimoFollowupEm: null,
+        baseContatoFeito: horasAtras(agora, baseHorasAtras),
+      }
+    }
+
+    /** Card frio em "Abordado" já na cadência no nível dado. */
+    function frioCadencia(nivel: number, ultimoHorasAtras: number) {
+      return {
+        status: 'aberta',
+        etapaNome: 'Abordado',
+        followupNivel: nivel,
+        ultimoFollowupEm: horasAtras(agora, ultimoHorasAtras),
+        baseContatoFeito: null,
+      }
+    }
+
+    it('nível null: 23h → sem pendência; 24h → pendente (entrada)', () => {
+      expect(pendenciaFollowup(frioEntrada(23), agora, true)).toBeNull()
+      expect(pendenciaFollowup(frioEntrada(24), agora, true)).toEqual({
+        tipo: 'pendente',
+        texto: 'Follow-up pendente',
+      })
+    })
+
+    it('nível 1: 47h → sem pendência; 48h → pendente (cadência)', () => {
+      expect(pendenciaFollowup(frioCadencia(1, 47), agora, true)).toBeNull()
+      expect(pendenciaFollowup(frioCadencia(1, 48), agora, true)).toEqual({
+        tipo: 'pendente',
+        texto: 'Follow-up pendente',
+      })
+    })
+
+    it('nível 6 há 336h (14d) → esgotado', () => {
+      expect(pendenciaFollowup(frioCadencia(6, 336), agora, true)).toEqual({
+        tipo: 'esgotado',
+        texto: 'Follow-ups esgotados',
+      })
+    })
+
+    it('status ganha/perdida no frio nunca pende', () => {
+      expect(pendenciaFollowup({ ...frioCadencia(6, 400), status: 'ganha' }, agora, true)).toBeNull()
+      expect(pendenciaFollowup({ ...frioEntrada(100), status: 'perdida' }, agora, true)).toBeNull()
+    })
+
+    it('etapa "A Abordar" no frio (nível null) não pende — só "Abordado" dispara', () => {
+      expect(
+        pendenciaFollowup({ ...frioEntrada(100), etapaNome: 'A Abordar' }, agora, true),
+      ).toBeNull()
+    })
+
+    it('regressão: SEM pipelineFrio, "Abordado" não dispara nada (é etapa do Vendas)', () => {
+      expect(pendenciaFollowup(frioEntrada(100), agora)).toBeNull()
+      expect(pendenciaFollowup(frioCadencia(1, 400), agora)).toBeNull()
+    })
   })
 })
