@@ -1,12 +1,13 @@
 import { Briefcase, DollarSign, Radar, Target, UserPlus } from 'lucide-react'
-import { format, isToday, isYesterday } from 'date-fns'
-import { ptBR } from 'date-fns/locale/pt-BR'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FiltroFeed } from '@/components/acompanhamento/filtro-feed'
 import { getFeedAtividades, type ItemFeed, type JanelaFeed } from '@/lib/acompanhamento/feed'
+import { hojeBrasilia, dataMenosDias } from '@/lib/date-br'
 import { cn } from '@/lib/utils'
+
+const TZ = 'America/Sao_Paulo'
 
 // Backstop contra o timeout de 300s da Vercel (padrão das páginas do grupo app).
 export const maxDuration = 60
@@ -21,22 +22,32 @@ const CONFIG_FONTE: Record<
   cliente_novo: { rotulo: 'Novo cliente', classe: 'bg-chart-orange/10 text-chart-orange', icon: UserPlus },
 }
 
+// Rótulo do dia calculado no fuso de Brasília (não no fuso do processo Node,
+// que na Vercel é UTC). 'en-CA' => 'YYYY-MM-DD' comparável.
 function rotuloDia(d: Date): string {
-  if (isToday(d)) return 'Hoje'
-  if (isYesterday(d)) return 'Ontem'
-  return format(d, "dd/MM/yyyy (EEEE)", { locale: ptBR })
+  const diaItem = d.toLocaleDateString('en-CA', { timeZone: TZ })
+  if (diaItem === hojeBrasilia()) return 'Hoje'
+  if (diaItem === dataMenosDias(1)) return 'Ontem'
+  const data = d.toLocaleDateString('pt-BR', {
+    timeZone: TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const semana = d.toLocaleDateString('pt-BR', { timeZone: TZ, weekday: 'long' })
+  return `${data} (${semana})`
 }
 
-// Resolve o período da URL numa janela [de, ate). Dias no fuso LOCAL do
-// servidor (São Paulo na Vercel — memória vercel-regiao-saopaulo).
+// Resolve o período da URL numa janela [de, ate). Os limites de dia são
+// ancorados no fuso de Brasília (-03:00, sem DST desde 2019) — NÃO no fuso do
+// processo Node, que na Vercel é UTC e deslocaria as bordas em 3h.
 function resolverJanela(periodo?: string, dia?: string): JanelaFeed {
   const umDia = 24 * 60 * 60 * 1000
   if (dia && /^\d{4}-\d{2}-\d{2}$/.test(dia)) {
     const de = new Date(`${dia}T00:00:00-03:00`)
     return { de, ate: new Date(de.getTime() + umDia) }
   }
-  const hoje = new Date()
-  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+  const inicioHoje = new Date(`${hojeBrasilia()}T00:00:00-03:00`)
   const amanha = new Date(inicioHoje.getTime() + umDia)
   if (periodo === 'hoje') return { de: inicioHoje, ate: amanha }
   if (periodo === 'ontem') return { de: new Date(inicioHoje.getTime() - umDia), ate: inicioHoje }
