@@ -576,6 +576,8 @@ export async function getVisaoExecutiva(): Promise<VisaoExecutivaData | null> {
         createdAt: clientes.createdAt,
       })
       .from(clientes)
+      // LTV/churn é do negócio — o perfil interno (agência) fica fora.
+      .where(eq(clientes.interno, false))
   } catch (e) {
     // Migration 0038 pendente (undefined_column) ou soluço de conexão.
     console.error('[getVisaoExecutiva]', e)
@@ -775,6 +777,8 @@ export async function getCacAquisicao(): Promise<CacAquisicaoData | null> {
       createdAt: clientes.createdAt,
     })
     .from(clientes)
+    // CAC é do negócio — o perfil interno (agência) não conta como cliente ganho.
+    .where(eq(clientes.interno, false))
 
   // SEQUENCIAL: primeiro contrato (min data_inicio) e ticket do contrato mais
   // recente por cliente — mesma leitura de getVisaoExecutiva.
@@ -956,11 +960,11 @@ export async function getVisaoAnalitica(mes?: number, ano?: number): Promise<Vis
   const receitaAvulsa = Number(atual.avulsa)
   const lucroAtual = receitaAtual - despesaAtual
 
-  // 4. Clientes ativos.
+  // 4. Clientes ativos (exclui o perfil interno da agência).
   const [cliRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(clientes)
-    .where(eq(clientes.status, 'ativo'))
+    .where(and(eq(clientes.status, 'ativo'), eq(clientes.interno, false)))
   const clientesAtivos = Number(cliRow.total)
 
   // 5. Taxa de renovacao — contratos vencendo dentro do mes selecionado.

@@ -11,6 +11,8 @@ export const clienteSchema = z.object({
     message: 'Selecione um nicho válido',
   }),
   status: z.enum(['ativo', 'pausado', 'encerrado', 'aguardando_inicio', 'em_aviso']).default('ativo'),
+  // Perfil interno da agência (perfil mãe): fica fora das métricas de negócio.
+  interno: z.boolean().default(false),
   // Obrigatório quando status = encerrado (validado no superRefine abaixo) —
   // fica documentado NO cliente por que ele saiu.
   motivoEncerramento: z.string().optional(),

@@ -78,6 +78,7 @@ const valoresPadraoCliente: z.input<typeof clienteSchema> = {
   nome: '',
   nicho: 'ecommerce',
   status: 'ativo',
+  interno: false,
   contatoNome: '',
   contatoTelefone: '',
   contatoEmail: '',
@@ -245,6 +246,27 @@ function ClienteFormCriar() {
               <p className="text-sm text-destructive">{errors.cliente.nicho.message}</p>
             )}
           </div>
+
+          {/* Perfil interno (agência) — some das métricas de negócio, aparece no tráfego */}
+          <Controller
+            name="cliente.interno"
+            control={control}
+            render={({ field }) => (
+              <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-dashed p-3">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={field.value ?? false}
+                  onCheckedChange={field.onChange}
+                />
+                <span className="text-sm">
+                  Cliente interno (a própria agência)
+                  <span className="block text-xs text-muted-foreground">
+                    Use para a conta de anúncio da agência. Aparece no Tráfego/Campanhas, mas fica fora das métricas de negócio (contagem de clientes, MRR, CAC).
+                  </span>
+                </span>
+              </label>
+            )}
+          />
         </CardContent>
       </Card>
 
@@ -669,6 +691,27 @@ function ClienteFormEditar({
               )}
             />
           </div>
+
+          {/* Perfil interno (agência) — some das métricas de negócio, aparece no tráfego */}
+          <Controller
+            name="interno"
+            control={control}
+            render={({ field }) => (
+              <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-dashed p-3">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={field.value ?? false}
+                  onCheckedChange={field.onChange}
+                />
+                <span className="text-sm">
+                  Cliente interno (a própria agência)
+                  <span className="block text-xs text-muted-foreground">
+                    Use para a conta de anúncio da agência. Aparece no Tráfego/Campanhas, mas fica fora das métricas de negócio (contagem de clientes, MRR, CAC).
+                  </span>
+                </span>
+              </label>
+            )}
+          />
 
           {/* Encerrar é decisão séria: exige o MOTIVO documentado no cliente
               (aparece na ficha; alimenta o aprendizado de churn). */}

@@ -42,6 +42,8 @@ export async function getClientesLista(): Promise<ClienteLinha[]> {
       })
       .from(clientes)
       .leftJoin(profiles, eq(clientes.gestorId, profiles.id))
+      // Perfil interno (agência) fica fora da lista de clientes do negócio.
+      .where(eq(clientes.interno, false))
       .orderBy(asc(clientes.nome))
 
     // 2. Mensalidade — soma dos contratos vigentes hoje.

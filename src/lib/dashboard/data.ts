@@ -114,10 +114,10 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
         sql`extract(year from ${transacoes.data}::date) = ${ano}`,
       )),
 
-    // Clientes ativos
+    // Clientes ativos (exclui o perfil interno da agência)
     db.select({ total: count() })
       .from(clientes)
-      .where(eq(clientes.status, 'ativo')),
+      .where(and(eq(clientes.status, 'ativo'), eq(clientes.interno, false))),
   ])
 
   const [campanhasResult, clientesComContas, atividadeAcompResult] = await Promise.all([
@@ -169,6 +169,7 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       createdAt: clientes.createdAt,
     })
       .from(clientes)
+      .where(eq(clientes.interno, false))
       .orderBy(desc(clientes.createdAt))
       .limit(3),
 
@@ -194,10 +195,13 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
       .from(contratos)
       .where(sql`${contratos.dataVencimento} >= (current_date - interval '6 months')`),
 
-    // Clientes novos no mês corrente (helper "↑ N este mês")
+    // Clientes novos no mês corrente (helper "↑ N este mês") — exclui interno
     db.select({ total: count() })
       .from(clientes)
-      .where(sql`${clientes.createdAt} >= date_trunc('month', current_date)`),
+      .where(and(
+        sql`${clientes.createdAt} >= date_trunc('month', current_date)`,
+        eq(clientes.interno, false),
+      )),
   ])
 
   const mrr = Number(mrrResult[0]?.total ?? 0)
@@ -213,7 +217,9 @@ export async function getDashboardData(mesParam?: number, anoParam?: number): Pr
   // Performance por cliente (top clientes com contas)
   const clientesPerformance: ClientePerformance[] = []
 
-  for (const c of clientesComContas.slice(0, 10)) {
+  // Tabela de performance = clientes do negócio. O perfil interno (agência)
+  // aparece no Tráfego/Campanhas, mas não nesta visão executiva do dashboard.
+  for (const c of clientesComContas.filter((c) => !c.interno).slice(0, 10)) {
     try {
       const resumo = await getResumoCliente(c.id, '30d')
       if (!resumo || !resumo.temDados) continue

@@ -23,6 +23,10 @@ export const clientes = pgTable('clientes', {
   nome: text('nome').notNull(),
   nicho: nichoEnum('nicho').notNull(),
   status: clienteStatusEnum('status').notNull().default('ativo'),
+  /** Cliente INTERNO = a própria agência (perfil mãe). Aparece no tráfego/campanhas
+   *  (a conta de anúncio dela é vinculada aqui), mas fica FORA das métricas de
+   *  negócio: contagem de clientes, MRR, CAC, LTV/churn, lista de clientes. */
+  interno: boolean('interno').notNull().default(false),
   contatoNome: text('contato_nome'),
   contatoTelefone: text('contato_telefone'),
   contatoEmail: text('contato_email'),
