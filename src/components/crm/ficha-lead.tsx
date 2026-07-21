@@ -980,8 +980,9 @@ export function FichaLead({
                                   )}
                                   <p className="text-[10px] text-muted-foreground">{h.autorNome}</p>
                                 </div>
-                                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                                  {tempoRelativoCurto(h.createdAt)}
+                                <span className="flex shrink-0 flex-col items-end text-[10px] tabular-nums text-muted-foreground">
+                                  <span className="font-medium">{formatarHora(h.createdAt)}</span>
+                                  <span>{tempoRelativoCurto(h.createdAt)}</span>
                                 </span>
                               </div>
                             )

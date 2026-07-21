@@ -112,7 +112,11 @@ export default async function AcompanhamentoPage({
                         <p className="truncate text-xs text-muted-foreground">{item.sub}</p>
                       </div>
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        {format(item.quando, 'HH:mm')}
+                        {item.quando.toLocaleTimeString('pt-BR', {
+                          timeZone: 'America/Sao_Paulo',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </span>
                     </div>
                   )
