@@ -606,6 +606,7 @@ export function CrmView({ dados }: { dados: CrmVisaoGeral }) {
           <KanbanFollowup
             colunas={dados.colunas}
             colunasFechadas={dados.colunasFechadas}
+            pipelineNome={dados.pipelineNome}
             oportunidadesVisiveis={oportunidadesVisiveis}
             onArrastandoChange={setArrastando}
           />

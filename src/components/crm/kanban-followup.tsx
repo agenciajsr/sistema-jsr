@@ -21,7 +21,8 @@ import { cn } from '@/lib/utils'
 import { CardOportunidade } from '@/components/crm/card-oportunidade'
 import { FichaLead } from '@/components/crm/ficha-lead'
 import { MotivoPerdaDialog } from '@/components/crm/motivo-perda-dialog'
-import { PRAZOS_FOLLOWUP_HORAS, ehEtapaFollowup } from '@/lib/crm/followup'
+import { PRAZOS_FOLLOWUP_HORAS, ehEtapaAbordado, ehEtapaFollowup } from '@/lib/crm/followup'
+import { ehPipelineFrio } from '@/lib/crm/roteamento'
 import type { ColunaFechada, ColunaKanban, OportunidadeCard } from '@/lib/crm/dados'
 
 // Visão Kanban de FOLLOW-UP (quick-260719-s3a): 7 colunas fixas D1..D6 +
@@ -64,11 +65,15 @@ function Coluna({ id, children }: { id: string; children: React.ReactNode }) {
 export function KanbanFollowup({
   colunas,
   colunasFechadas,
+  pipelineNome,
   oportunidadesVisiveis,
   onArrastandoChange,
 }: {
   colunas: ColunaKanban[]
   colunasFechadas: ColunaFechada[]
+  // Nome do pipeline ativo: no funil frio a cadência corre em "Abordado" (não há
+  // etapa "Follow-up"), então a coluna-fonte muda conforme este nome.
+  pipelineNome?: string | null
   // Filtro da busca do CrmView: quando presente, só renderiza ids do Set.
   oportunidadesVisiveis?: Set<string>
   // Pausa o polling de quase tempo real durante o drag (quick 260717-pvr).
@@ -81,10 +86,14 @@ export function KanbanFollowup({
   // Sobreposição otimista: id → nível LOCAL enquanto o refresh não chega.
   const [niveisOtimistas, setNiveisOtimistas] = useState<Record<string, number>>({})
 
-  // A etapa Follow-up é detectada por NOME (etapas não têm chave semântica).
-  // Se a migration 0037 (seed) ainda não foi aplicada, ela não existe →
+  // A coluna-fonte da cadência é detectada por NOME (etapas não têm chave
+  // semântica): no Vendas é "Follow-up"; no funil frio, "Abordado" (onde a mesma
+  // cadência D1-D6 corre — não há etapa "Follow-up"). Se a etapa não existe →
   // estado vazio honesto, sem dado falso.
-  const colunaFollowup = colunas.find((c) => ehEtapaFollowup(c.etapa.nome))
+  const frio = ehPipelineFrio(pipelineNome ?? null)
+  const colunaFollowup = colunas.find((c) =>
+    frio ? ehEtapaAbordado(c.etapa.nome) : ehEtapaFollowup(c.etapa.nome),
+  )
   const cardsFollowup = colunaFollowup?.oportunidades ?? []
 
   const colunaPerdido = colunasFechadas.find((c) => c.chave === PERDIDO)
@@ -174,15 +183,21 @@ export function KanbanFollowup({
 
   const cardArrastado = arrastandoId ? acharCard(arrastandoId) : null
 
-  // Estado vazio honesto: etapa inexistente (migration 0037 não aplicada) ou vazia.
+  // Estado vazio honesto: etapa inexistente ou vazia. Copy muda no funil frio,
+  // onde a cadência corre em "Abordado".
   if (!colunaFollowup || cardsFollowup.length === 0) {
+    const etapaCadencia = frio ? 'Abordado' : 'Follow-up'
     return (
       <div className="rounded-lg border border-dashed px-6 py-16 text-center">
-        <p className="text-sm font-medium">Nenhum lead na etapa Follow-up</p>
+        <p className="text-sm font-medium">Nenhum lead na etapa {etapaCadencia}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {colunaFollowup
-            ? 'Arraste um card para a etapa "Follow-up" no kanban de vendas para ele entrar em D1.'
-            : 'A etapa "Follow-up" ainda não existe neste pipeline — aplique a migration 0037 para criá-la.'}
+            ? frio
+              ? 'Arraste um card para a etapa "Abordado" no funil frio para iniciar a cadência de follow-up.'
+              : 'Arraste um card para a etapa "Follow-up" no kanban de vendas para ele entrar em D1.'
+            : frio
+              ? 'A etapa "Abordado" ainda não existe neste funil — aplique o seed da Prospecção Fria.'
+              : 'A etapa "Follow-up" ainda não existe neste pipeline — aplique a migration 0037 para criá-la.'}
         </p>
       </div>
     )
