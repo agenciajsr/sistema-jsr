@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, FileCheck, FileX } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -18,29 +17,12 @@ import {
 } from '@/components/ui/table'
 
 import { TransacaoForm, type TransacaoParaEditar } from './transacao-form'
+import { useTransacoesStore, type TransacaoRow } from './transacoes-store'
 
 type ClienteOption = { id: string; nome: string }
 type ResponsavelOption = { id: string; nome: string }
 
-type Transacao = {
-  id: string
-  tipo: 'receita' | 'despesa'
-  categoria: string
-  clienteId?: string | null
-  clienteNome: string | null
-  descricao: string
-  valor: string
-  data: string
-  status: 'pago' | 'pendente' | 'vencido'
-  diaVencto?: number | null
-  notas?: string | null
-  centroCusto?: string | null
-  recorrencia?: string | null
-  formaPagamento?: string | null
-  responsavelId?: string | null
-  responsavelNome?: string | null
-  comprovanteUrl?: string | null
-}
+type Transacao = TransacaoRow
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -87,15 +69,15 @@ const FORMA_PGTO_LABEL: Record<string, string> = {
 }
 
 export function TransacoesTable({
-  transacoes,
   clientes,
   responsaveis,
 }: {
-  transacoes: Transacao[]
   clientes: ClienteOption[]
   responsaveis: ResponsavelOption[]
 }) {
-  const router = useRouter()
+  // Lista vem do store (compartilhada com o form de criação/edição) — assim uma
+  // mutação reflete na hora, sem router.refresh() da página pesada (debug 260721).
+  const { transacoes, remover } = useTransacoesStore()
   const [isPending, startTransition] = useTransition()
   const [editando, setEditando] = useState<TransacaoParaEditar | null>(null)
 
@@ -107,7 +89,8 @@ export function TransacoesTable({
         return
       }
       toast.success('Transacao excluida.')
-      router.refresh()
+      // Some da tela na hora; o delete já persistiu no banco (sem reload pesado).
+      remover(id)
     })
   }
 

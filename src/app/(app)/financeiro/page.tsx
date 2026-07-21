@@ -30,6 +30,7 @@ import { filtrarAReceber } from '@/lib/financeiro/a-receber'
 
 import { TransacaoForm } from './transacao-form'
 import { TransacoesTable } from './transacoes-table'
+import { TransacoesProvider } from './transacoes-store'
 import { ContasTable } from './contas-table'
 import { PrevisaoCaixa } from './previsao-caixa'
 import { VisaoAnalitica } from './visao-analitica'
@@ -283,6 +284,11 @@ export default async function FinanceiroPage({
         />
       </div>
 
+      {/* Provider da lista de transações: compartilha o estado entre o form de
+          criação e a tabela para que salvar/editar/excluir reflitam na hora, SEM
+          router.refresh() da página pesada (debug 260721). Keyed por mês/ano —
+          trocar de mês remonta com os dados frescos do servidor. */}
+      <TransacoesProvider key={`${mes}-${ano}`} initial={transacoesParaTabela} mes={mes} ano={ano}>
       <TransacaoForm clientes={clientesAtivos} responsaveis={profilesList} />
 
       {/* Abas */}
@@ -304,7 +310,6 @@ export default async function FinanceiroPage({
             </CardHeader>
             <CardContent>
               <TransacoesTable
-                transacoes={transacoesParaTabela}
                 clientes={clientesAtivos}
                 responsaveis={profilesList}
               />
@@ -366,6 +371,7 @@ export default async function FinanceiroPage({
           />
         </TabsContent>
       </Tabs>
+      </TransacoesProvider>
     </div>
   )
 }

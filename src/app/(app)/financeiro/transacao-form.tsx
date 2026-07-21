@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Pencil, Plus } from 'lucide-react'
@@ -20,6 +19,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { transacaoSchema, type TransacaoInput } from '@/lib/validations/transacao'
+
+import { useTransacoesStore, type TransacaoRow } from './transacoes-store'
 
 type ClienteOption = { id: string; nome: string }
 type ResponsavelOption = { id: string; nome: string }
@@ -93,11 +94,35 @@ export function TransacaoForm({
   transacao?: TransacaoParaEditar
   onClose?: () => void
 }) {
-  const router = useRouter()
+  const store = useTransacoesStore()
   const [aberto, setAberto] = useState(!!transacao)
   const [isPending, startTransition] = useTransition()
 
   const isEdicao = !!transacao
+
+  // Monta a linha da tabela a partir dos valores do formulário, resolvendo os
+  // nomes de cliente/responsável pelas opções já carregadas — sem ir ao banco.
+  function construirLinha(id: string, values: TransacaoInput): TransacaoRow {
+    return {
+      id,
+      tipo: values.tipo,
+      categoria: values.categoria,
+      clienteId: values.clienteId ?? null,
+      clienteNome: clientes.find((c) => c.id === values.clienteId)?.nome ?? null,
+      descricao: values.descricao,
+      valor: values.valor.toFixed(2),
+      data: values.data,
+      status: values.status,
+      diaVencto: values.diaVencto ?? null,
+      notas: values.notas ?? null,
+      centroCusto: values.centroCusto ?? null,
+      recorrencia: values.recorrencia ?? 'avulsa',
+      formaPagamento: values.formaPagamento ?? null,
+      responsavelId: values.responsavelId ?? null,
+      responsavelNome: responsaveis.find((r) => r.id === values.responsavelId)?.nome ?? null,
+      comprovanteUrl: values.comprovanteUrl ?? null,
+    }
+  }
 
   const defaultValues = transacao
     ? {
@@ -145,12 +170,22 @@ export function TransacaoForm({
       toast.success(
         isEdicao ? 'Transação atualizada com sucesso.' : 'Transação registrada com sucesso.'
       )
+      // Reflete a mudança LOCALMENTE em vez de router.refresh() — este
+      // recarregava a página inteira (~14 queries render-blocking), o que
+      // congelava o /financeiro e deixava conexão zumbi (debug 260721). A
+      // mutação já persistiu no banco; KPIs/analítica recalculam no próximo
+      // carregamento real (troca de mês, F5). Mesmo padrão do commit 1e84e67.
+      const linha = construirLinha(isEdicao ? transacao!.id : result.data.id, values)
+      if (isEdicao) {
+        store.atualizar(linha)
+      } else {
+        store.adicionar(linha)
+      }
       if (!isEdicao) {
         reset({ ...VALORES_PADRAO, data: hoje() })
       }
       setAberto(false)
       onClose?.()
-      router.refresh()
     })
   }
 

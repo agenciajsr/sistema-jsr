@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Megaphone, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -43,7 +42,6 @@ function competenciaAtual(): string {
 
 /** Tela dedicada de lançamento do investimento em aquisição por canal/mês. */
 export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoRow[] }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [aberto, setAberto] = useState(false)
   const [competencia, setCompetencia] = useState(competenciaAtual())
@@ -54,11 +52,15 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
   // inteira do financeiro (a mais pesada — o router.refresh() dela é o que
   // engasgava ao apagar). O CAC da Visão Analítica recalcula no próximo carregamento.
   const [removidos, setRemovidos] = useState<Set<string>>(new Set())
+  // Lançamentos criados/atualizados nesta sessão (upsert por id) — refletem na
+  // hora, SEM router.refresh() da página pesada que congelava o /financeiro
+  // (debug 260721). Substitui o antigo router.refresh() do salvar.
+  const [historicoLocal, setHistoricoLocal] = useState<InvestimentoAquisicaoRow[]>(historico)
 
   // Histórico visível = tudo menos o que foi removido nesta sessão.
   const historicoVisivel = useMemo(
-    () => historico.filter((l) => !removidos.has(l.id)),
-    [historico, removidos],
+    () => historicoLocal.filter((l) => !removidos.has(l.id)),
+    [historicoLocal, removidos],
   )
 
   // Valores por canal para a competência selecionada, pré-preenchidos do histórico.
@@ -102,6 +104,7 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
         return
       }
 
+      const salvos: InvestimentoAquisicaoRow[] = []
       for (const alvo of alvos) {
         const valor = Number(alvo.bruto.replace(',', '.'))
         if (Number.isNaN(valor) || valor < 0) {
@@ -117,11 +120,24 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
           toast.error(result.error ?? 'Não foi possível salvar.')
           return
         }
+        salvos.push(result.data.linha)
       }
 
+      // Reflete na hora (upsert por id), SEM router.refresh() da página pesada.
+      setHistoricoLocal((prev) => {
+        const porId = new Map(prev.map((l) => [l.id, l]))
+        for (const linha of salvos) porId.set(linha.id, linha)
+        return [...porId.values()]
+      })
+      // Um upsert pode reaparecer um id antes removido nesta sessão.
+      setRemovidos((prev) => {
+        if (!salvos.some((l) => prev.has(l.id))) return prev
+        const proximo = new Set(prev)
+        for (const l of salvos) proximo.delete(l.id)
+        return proximo
+      })
       toast.success('Investimento em aquisição salvo com sucesso.')
       setAberto(false)
-      router.refresh()
     })
   }
 

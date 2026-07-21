@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState, useTransition } from 'react'
 import { FileCheck, FileX, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -70,14 +69,24 @@ export function ContasTable({
   // 'YYYY-MM-DD' vindo do servidor (hojeBrasilia) — evita divergência server/client.
   hoje?: string
 }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [mostrarTodas, setMostrarTodas] = useState(false)
+  // Ids marcados como pago nesta sessão: somem da tela na hora (a lista mostra só
+  // pendente/vencido), SEM router.refresh() da página pesada — que congelava o
+  // /financeiro e deixava conexão zumbi (debug 260721). Já persistiu no banco.
+  const [pagos, setPagos] = useState<Set<string>>(new Set())
+
+  const contasVisiveis = useMemo(
+    () => contas.filter((c) => !pagos.has(c.id)),
+    [contas, pagos],
+  )
 
   // Filtro padrão SÓ na aba de receitas (quick-260717-i26): próximos 30 dias
   // + vencidas. Despesas seguem com a lista completa, como sempre.
   const filtroAtivo = tipo === 'receita' && !!hoje
-  const contasExibidas = filtroAtivo ? filtrarAReceber(contas, hoje, mostrarTodas) : contas
+  const contasExibidas = filtroAtivo
+    ? filtrarAReceber(contasVisiveis, hoje, mostrarTodas)
+    : contasVisiveis
 
   // Total do rodapé usa a lista FILTRADA exibida.
   const total = contasExibidas.reduce((acc, c) => acc + Number(c.valor), 0)
@@ -90,11 +99,11 @@ export function ContasTable({
         return
       }
       toast.success('Marcado como pago.')
-      router.refresh()
+      setPagos((prev) => new Set(prev).add(id))
     })
   }
 
-  if (contas.length === 0) {
+  if (contasVisiveis.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
         Nenhuma conta registrada.
@@ -108,8 +117,8 @@ export function ContasTable({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
             {mostrarTodas
-              ? `Mostrando todas as ${contas.length} contas`
-              : `Mostrando ${contasExibidas.length} de ${contas.length} — próximos 30 dias + vencidas`}
+              ? `Mostrando todas as ${contasVisiveis.length} contas`
+              : `Mostrando ${contasExibidas.length} de ${contasVisiveis.length} — próximos 30 dias + vencidas`}
           </p>
           <Button variant="outline" size="sm" onClick={() => setMostrarTodas((v) => !v)}>
             {mostrarTodas ? 'Mostrar próximos 30 dias' : 'Mostrar todas'}

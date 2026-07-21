@@ -651,8 +651,9 @@ export async function createInvestimentoAquisicao(input: InvestimentoAquisicaoIn
 
   const { canal, competencia, valor, notas } = parsed.data
 
+  let linha: InvestimentoAquisicaoRow
   try {
-    await db
+    const [row] = await db
       .insert(investimentosAquisicao)
       .values({
         canal,
@@ -664,6 +665,16 @@ export async function createInvestimentoAquisicao(input: InvestimentoAquisicaoIn
         target: [investimentosAquisicao.canal, investimentosAquisicao.competencia],
         set: { valor: valor.toFixed(2), notas: notas ?? null, updatedAt: new Date() },
       })
+      // Retorna a linha (inserida OU atualizada) para o cliente refletir na hora,
+      // SEM router.refresh() da página pesada (debug 260721).
+      .returning({
+        id: investimentosAquisicao.id,
+        canal: investimentosAquisicao.canal,
+        competencia: investimentosAquisicao.competencia,
+        valor: investimentosAquisicao.valor,
+        notas: investimentosAquisicao.notas,
+      })
+    linha = row
   } catch (e) {
     // Migration 0039 pendente (tabela ausente) ou soluço de conexão.
     console.error('[createInvestimentoAquisicao]', e)
@@ -671,7 +682,7 @@ export async function createInvestimentoAquisicao(input: InvestimentoAquisicaoIn
   }
 
   revalidatePath('/financeiro')
-  return { data: { ok: true } }
+  return { data: { linha } }
 }
 
 /** Histórico de lançamentos (competência desc) para a tela de Aquisição. */
