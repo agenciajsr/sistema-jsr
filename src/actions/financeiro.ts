@@ -695,6 +695,28 @@ export async function listInvestimentosAquisicao(): Promise<InvestimentoAquisica
   }
 }
 
+/**
+ * Apaga UM lançamento de investimento em aquisição por id. O CAC/LTV-CAC da
+ * Visão Analítica recomputa sozinho na próxima leitura (não há dado derivado
+ * persistido). Usado para remover lançamentos de teste feitos à mão.
+ */
+export async function deleteInvestimentoAquisicao(id: string) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) {
+    return { error: 'Sessao expirada. Faca login novamente.' }
+  }
+
+  try {
+    await db.delete(investimentosAquisicao).where(eq(investimentosAquisicao.id, id))
+  } catch (e) {
+    console.error('[deleteInvestimentoAquisicao]', e)
+    return { error: 'Não foi possível excluir o lançamento.' }
+  }
+
+  revalidatePath('/financeiro')
+  return { data: { ok: true } }
+}
+
 export type CacAquisicaoData = {
   /** Mês de referência 'YYYY-MM' (hoje em Brasília). */
   mes: string

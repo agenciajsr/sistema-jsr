@@ -2,14 +2,24 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Megaphone, Plus } from 'lucide-react'
+import { Megaphone, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { createInvestimentoAquisicao } from '@/actions/financeiro'
+import { createInvestimentoAquisicao, deleteInvestimentoAquisicao } from '@/actions/financeiro'
 import type { InvestimentoAquisicaoRow } from '@/actions/financeiro'
 import { CANAIS_AQUISICAO, ROTULO_CANAL, type CanalAquisicao } from '@/lib/financeiro/cac'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +47,9 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
   const [isPending, startTransition] = useTransition()
   const [aberto, setAberto] = useState(false)
   const [competencia, setCompetencia] = useState(competenciaAtual())
+  // Lançamento marcado para exclusão (abre a confirmação); null = fechado.
+  const [aExcluir, setAExcluir] = useState<InvestimentoAquisicaoRow | null>(null)
+  const [excluindo, startExcluir] = useTransition()
 
   // Valores por canal para a competência selecionada, pré-preenchidos do histórico.
   const valoresDaCompetencia = useMemo(() => {
@@ -107,6 +120,21 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
     () => [...historico].sort((a, b) => b.competencia.localeCompare(a.competencia)),
     [historico],
   )
+
+  function confirmarExclusao() {
+    if (!aExcluir) return
+    const alvo = aExcluir
+    startExcluir(async () => {
+      const result = await deleteInvestimentoAquisicao(alvo.id)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Não foi possível excluir.')
+        return
+      }
+      toast.success('Lançamento excluído.')
+      setAExcluir(null)
+      router.refresh()
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -191,6 +219,10 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
       <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Histórico de lançamentos</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Para <strong>editar</strong> um valor, lance de novo o mesmo mês e canal — ele
+            sobrescreve. Para <strong>remover</strong>, use a lixeira ao lado do lançamento.
+          </p>
         </CardHeader>
         <CardContent>
           {historicoOrdenado.length === 0 ? (
@@ -205,6 +237,7 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
                     <th className="py-2 pr-4 font-medium">Competência</th>
                     <th className="py-2 pr-4 font-medium">Canal</th>
                     <th className="py-2 pr-4 text-right font-medium">Valor</th>
+                    <th className="py-2 pl-4 text-right font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -217,6 +250,18 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
                       <td className="py-2 pr-4 text-right tabular-nums">
                         {formatadorMoeda.format(Number(linha.valor))}
                       </td>
+                      <td className="py-2 pl-4 text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-destructive"
+                          aria-label="Excluir lançamento"
+                          onClick={() => setAExcluir(linha)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -225,6 +270,32 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={aExcluir !== null} onOpenChange={(open) => !open && setAExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {aExcluir
+                ? `${ROTULO_CANAL[aExcluir.canal as CanalAquisicao] ?? aExcluir.canal} · ${aExcluir.competencia} · ${formatadorMoeda.format(Number(aExcluir.valor))}. Esta ação não pode ser desfeita.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmarExclusao()
+              }}
+              disabled={excluindo}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {excluindo ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
