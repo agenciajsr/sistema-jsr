@@ -50,18 +50,28 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
   // Lançamento marcado para exclusão (abre a confirmação); null = fechado.
   const [aExcluir, setAExcluir] = useState<InvestimentoAquisicaoRow | null>(null)
   const [excluindo, startExcluir] = useTransition()
+  // Ids já excluídos nesta sessão: some da tela na hora, SEM recarregar a página
+  // inteira do financeiro (a mais pesada — o router.refresh() dela é o que
+  // engasgava ao apagar). O CAC da Visão Analítica recalcula no próximo carregamento.
+  const [removidos, setRemovidos] = useState<Set<string>>(new Set())
+
+  // Histórico visível = tudo menos o que foi removido nesta sessão.
+  const historicoVisivel = useMemo(
+    () => historico.filter((l) => !removidos.has(l.id)),
+    [historico, removidos],
+  )
 
   // Valores por canal para a competência selecionada, pré-preenchidos do histórico.
   const valoresDaCompetencia = useMemo(() => {
     const mapa = new Map<string, string>()
-    for (const linha of historico) {
+    for (const linha of historicoVisivel) {
       if (linha.competencia === competencia) {
         // Normaliza "1000.00" → "1000" para exibição amigável no input.
         mapa.set(linha.canal, String(Number(linha.valor)))
       }
     }
     return mapa
-  }, [historico, competencia])
+  }, [historicoVisivel, competencia])
 
   const [valores, setValores] = useState<Record<string, string>>({})
 
@@ -117,8 +127,8 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
 
   // Histórico agrupado por competência (desc) para a tabela.
   const historicoOrdenado = useMemo(
-    () => [...historico].sort((a, b) => b.competencia.localeCompare(a.competencia)),
-    [historico],
+    () => [...historicoVisivel].sort((a, b) => b.competencia.localeCompare(a.competencia)),
+    [historicoVisivel],
   )
 
   function confirmarExclusao() {
@@ -130,9 +140,11 @@ export function AquisicaoForm({ historico }: { historico: InvestimentoAquisicaoR
         toast.error(result.error ?? 'Não foi possível excluir.')
         return
       }
+      // Some da tela na hora (sem router.refresh() da página pesada). O delete já
+      // persistiu no banco; ao reabrir o Financeiro, o item continua fora.
+      setRemovidos((prev) => new Set(prev).add(alvo.id))
       toast.success('Lançamento excluído.')
       setAExcluir(null)
-      router.refresh()
     })
   }
 
