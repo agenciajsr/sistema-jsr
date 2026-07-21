@@ -18,6 +18,7 @@ import {
   cobrancas,
   crmOportunidades,
   crmContatos,
+  crmPipelines,
   tarefas,
   tarefaChecklistItems,
 } from '@/lib/db/schema'
@@ -205,9 +206,12 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
         status: crmOportunidades.status,
         criadaEm: crmOportunidades.createdAt,
         primeiroContatoEm: crmOportunidades.primeiroContatoEm,
+        // Nome do pipeline: o funil frio é PULADO pelo avaliador (não tem SLA de 1º contato).
+        pipelineNome: crmPipelines.nome,
       })
       .from(crmOportunidades)
       .leftJoin(crmContatos, eq(crmOportunidades.contatoId, crmContatos.id))
+      .leftJoin(crmPipelines, eq(crmOportunidades.pipelineId, crmPipelines.id))
       .where(
         and(
           eq(crmOportunidades.status, 'aberta'),
@@ -223,6 +227,7 @@ export async function calcularAlertasAtuais(): Promise<Alerta[]> {
       status: r.status,
       criadaEm: r.criadaEm instanceof Date ? r.criadaEm : new Date(r.criadaEm),
       primeiroContatoEm: r.primeiroContatoEm,
+      pipelineNome: r.pipelineNome,
     }))
     alertasSla = avaliarSlaPrimeiroContato(slaInputs, hoje)
   } catch (erro) {

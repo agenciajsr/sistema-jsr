@@ -20,7 +20,8 @@ import { getCurrentUser, requireAdmin } from '@/lib/auth/session'
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { registrarAtividadeCrm } from '@/lib/crm/atividades'
 import { carimbarPrimeiroContato } from '@/lib/crm/primeiro-contato'
-import { ehEtapaFollowup } from '@/lib/crm/followup'
+import { ehEtapaAbordado, ehEtapaFollowup, ehEtapaQualificado } from '@/lib/crm/followup'
+import { ehPipelineFrio, NOME_PIPELINE_FRIO } from '@/lib/crm/roteamento'
 import { clienteExistenteDe, dadosClienteDe } from '@/lib/crm/conversao'
 import { montarDadosContrato, gerarToken } from '@/lib/contratos/fluxo'
 import { servicosContratadosSchema, somaServicos } from '@/lib/contratos/servicos-contratados'
@@ -570,6 +571,75 @@ export async function moverOportunidade(id: string, etapaId: string, ordemNaEtap
       para: etapaPara.nome,
     })
 
+    // GRADUAÇÃO AUTOMÁTICA frio → Vendas (quick-260720-urt, D-01): quando um card
+    // do funil "Prospecção Fria" chega em "Qualificado", ele é PROMOVIDO para o
+    // pipeline padrão (Vendas) na etapa "Qualificado" — some do board frio e
+    // reaparece no Vendas, preservando contato/empresa/valor, SEM UI de arrastar
+    // entre pipelines. try/catch próprio: se faltar pipeline padrão / etapa
+    // Qualificado no Vendas, a graduação aborta em silêncio (o card fica no frio
+    // e o mover NÃO quebra). Queries SEQUENCIAIS (pool max=3, nada de Promise.all).
+    try {
+      const [pipelineDestino] = await db
+        .select({ nome: crmPipelines.nome })
+        .from(crmPipelines)
+        .where(eq(crmPipelines.id, etapaPara.pipelineId))
+
+      if (
+        pipelineDestino &&
+        ehPipelineFrio(pipelineDestino.nome) &&
+        ehEtapaQualificado(etapaPara.nome)
+      ) {
+        // Pipeline "Vendas" = o padrão do workspace.
+        const [vendas] = await db
+          .select({ id: crmPipelines.id })
+          .from(crmPipelines)
+          .where(and(eq(crmPipelines.workspaceId, workspace.id), eq(crmPipelines.padrao, true)))
+
+        if (vendas) {
+          // Etapa "Qualificado" DESSE pipeline padrão (a primeira que casa).
+          const etapasVendas = await db
+            .select({ id: crmEtapas.id, nome: crmEtapas.nome })
+            .from(crmEtapas)
+            .where(eq(crmEtapas.pipelineId, vendas.id))
+          const qualificadoVendas = etapasVendas.find((e) => ehEtapaQualificado(e.nome))
+
+          if (qualificadoVendas) {
+            const [{ total: totalDestino }] = await db
+              .select({ total: sql<number>`count(*)::int` })
+              .from(crmOportunidades)
+              .where(
+                and(
+                  eq(crmOportunidades.etapaId, qualificadoVendas.id),
+                  eq(crmOportunidades.status, 'aberta'),
+                ),
+              )
+
+            // UM update: troca pipeline/etapa/ordem — contato/empresa/valor ficam
+            // na mesma linha, preservados sem tocar.
+            await db
+              .update(crmOportunidades)
+              .set({
+                pipelineId: vendas.id,
+                etapaId: qualificadoVendas.id,
+                ordemNaEtapa: totalDestino,
+                updatedAt: new Date(),
+              })
+              .where(eq(crmOportunidades.id, id))
+
+            await registrarAtividadeCrm(workspace.id, currentUser, {
+              tipo: 'mudanca_etapa',
+              oportunidadeId: id,
+              campo: 'pipeline',
+              de: NOME_PIPELINE_FRIO,
+              para: 'Vendas · Qualificado',
+            })
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[moverOportunidade] graduação frio→Vendas falhou (card segue no frio)', e)
+    }
+
     revalidatePath('/crm')
     return { data: { ok: true } }
   } catch (e) {
@@ -609,16 +679,51 @@ export async function avancarFollowup(id: string) {
     }
 
     const [etapa] = await db
-      .select({ nome: crmEtapas.nome })
+      .select({ nome: crmEtapas.nome, pipelineId: crmEtapas.pipelineId })
       .from(crmEtapas)
       .where(eq(crmEtapas.id, oportunidade.etapaId))
 
-    if (!etapa || !ehEtapaFollowup(etapa.nome)) {
-      return { error: 'O negocio nao esta na etapa Follow-up.' }
+    if (!etapa) return { error: 'Etapa nao encontrada.' }
+
+    // No Vendas a cadência corre na etapa "Follow-up"; no funil frio ela corre em
+    // "Abordado" (não há etapa "Follow-up"). Descobre o pipeline do card para
+    // saber qual etapa aceita o avanço. Query sequencial (pool max=3).
+    const [pipeline] = await db
+      .select({ nome: crmPipelines.nome })
+      .from(crmPipelines)
+      .where(eq(crmPipelines.id, etapa.pipelineId))
+    const frio = ehPipelineFrio(pipeline?.nome ?? null)
+
+    const naEtapaDeCadencia = ehEtapaFollowup(etapa.nome) || (frio && ehEtapaAbordado(etapa.nome))
+    if (!naEtapaDeCadencia) {
+      return { error: frio ? 'O negocio nao esta na etapa Abordado.' : 'O negocio nao esta na etapa Follow-up.' }
     }
 
     const nivel = oportunidade.followupNivel
-    if (nivel == null) return { error: 'O negocio ainda nao entrou no fluxo de follow-up.' }
+
+    // No frio, "Abordado" com nível null INICIA a cadência (D1) neste 1º avanço —
+    // no Vendas o null→1 acontece ao mover para "Follow-up"; no frio não há esse
+    // move, então o início da cadência é aqui.
+    if (nivel == null) {
+      if (frio && ehEtapaAbordado(etapa.nome)) {
+        await db
+          .update(crmOportunidades)
+          .set({ followupNivel: 1, ultimoFollowupEm: new Date(), updatedAt: new Date() })
+          .where(eq(crmOportunidades.id, id))
+
+        await registrarAtividadeCrm(workspace.id, currentUser, {
+          tipo: 'followup',
+          oportunidadeId: id,
+          campo: 'followup',
+          de: null,
+          para: 'D1',
+        })
+
+        revalidatePath('/crm')
+        return { data: { nivel: 1 } }
+      }
+      return { error: 'O negocio ainda nao entrou no fluxo de follow-up.' }
+    }
     if (nivel >= 6) return { error: 'O negocio ja esta no ultimo nivel de follow-up (D6).' }
 
     await db

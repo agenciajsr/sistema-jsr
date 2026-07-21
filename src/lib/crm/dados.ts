@@ -16,6 +16,7 @@ import {
 import { getWorkspaceAtual } from '@/lib/crm/workspace'
 import { horasAguardando } from '@/lib/crm/sla-contato'
 import { pendenciaFollowup, type PendenciaFollowup } from '@/lib/crm/followup'
+import { ehPipelineFrio } from '@/lib/crm/roteamento'
 import { temperaturaOrigem, type Temperatura } from '@/lib/crm/temperatura'
 
 // Módulo server comum — SEM 'use server': é chamado direto pelo Server Component
@@ -227,6 +228,10 @@ type InsumosCard = {
     string,
     { followupNivel: number | null; ultimoFollowupEm: Date | null; primeiroContatoEm: Date | null }
   >
+  // true quando o pipeline ativo é o funil "Prospecção Fria": a cadência de
+  // follow-up corre em "Abordado" e o SLA de 1h de 1º contato é SUPRIMIDO
+  // (lead frio nasce sem contato feito, e isso é normal — não é atraso).
+  pipelineFrio: boolean
 }
 
 // Helper LOCAL (não exportado): a montagem do card mora num lugar só — senão
@@ -259,9 +264,12 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
     dataPrevistaFechamento: o.dataPrevistaFechamento,
     createdAt: criada.toISOString(),
     semContato,
-    aguardando1oContato: o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id),
+    // No funil frio o SLA de 1h de 1º contato é SUPRIMIDO: o card nunca fica
+    // vermelho "aguardando 1º contato" (D-04). Fora do frio, comportamento atual.
+    aguardando1oContato:
+      !insumos.pipelineFrio && o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id),
     horasAguardando1oContato:
-      o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id)
+      !insumos.pipelineFrio && o.status === 'aberta' && insumos.semPrimeiroContato.has(o.id)
         ? horasAguardando(criada)
         : null,
     clienteId: o.clienteId,
@@ -272,13 +280,17 @@ function montarCard(o: LinhaCard, semContato: boolean, insumos: InsumosCard): Op
     // Pendência só existe em card aberto (o módulo puro já garante); a base
     // dos 24h em "Contato Feito" é primeiro_contato_em (carimbo do quick
     // 260717-qq6) com fallback na criação do card.
-    pendenciaFollowup: pendenciaFollowup({
-      status: o.status,
-      etapaNome,
-      followupNivel: fup?.followupNivel ?? null,
-      ultimoFollowupEm: fup?.ultimoFollowupEm ?? null,
-      baseContatoFeito: fup ? (fup.primeiroContatoEm ?? criada) : null,
-    }),
+    pendenciaFollowup: pendenciaFollowup(
+      {
+        status: o.status,
+        etapaNome,
+        followupNivel: fup?.followupNivel ?? null,
+        ultimoFollowupEm: fup?.ultimoFollowupEm ?? null,
+        baseContatoFeito: fup ? (fup.primeiroContatoEm ?? criada) : null,
+      },
+      undefined,
+      insumos.pipelineFrio,
+    ),
   }
 }
 
@@ -581,6 +593,10 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
     const nomeEtapaPorId = new Map<string, string>()
     for (const et of etapas) nomeEtapaPorId.set(et.id, et.nome)
 
+    // Frio detectado pelo NOME do pipeline ativo — decide a cadência em "Abordado"
+    // e a supressão do SLA de 1h (ambos dentro do montarCard).
+    const pipelineFrio = ehPipelineFrio(pipeline.nome)
+
     const insumos: InsumosCard = {
       atividadesPorOportunidade,
       tarefasAbertasPorOportunidade,
@@ -589,6 +605,7 @@ export async function getCrmVisaoGeral(pipelineIdParam?: string): Promise<CrmVis
       semPrimeiroContato,
       nomeEtapaPorId,
       followupPorOportunidade,
+      pipelineFrio,
     }
 
     // Merge em memória: monta os cards preenchendo createdAt e semContato.
