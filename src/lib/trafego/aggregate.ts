@@ -107,7 +107,6 @@ export async function getInvestido30dPorCliente(): Promise<Map<string, number>> 
     .innerJoin(adAccounts, eq(campaignInsights.adAccountId, adAccounts.id))
     .where(
       and(
-        eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
         gte(campaignInsights.date, dataMinima),
       ),
@@ -125,14 +124,14 @@ export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetiv
 
 /**
  * Lista clientes (id, nome, nicho, objetivo, metas) que possuem ao menos uma conta
- * Meta ativa vinculada. Distinct por cliente, ordenado por nome.
+ * ativa (Meta ou Google) vinculada. Distinct por cliente, ordenado por nome.
  */
 export async function listarClientesComContas(): Promise<ClienteComContas[]> {
   const rows = await db
     .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, objetivoPrincipal: clientes.objetivoPrincipal, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas, interno: clientes.interno })
     .from(clientes)
     .innerJoin(adAccounts, eq(adAccounts.clienteId, clientes.id))
-    .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
+    .where(eq(adAccounts.ativo, true))
     .orderBy(clientes.nome)
 
   return rows
@@ -247,7 +246,6 @@ export async function getResumoCliente(
     .where(
       and(
         eq(adAccounts.clienteId, clienteId),
-        eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
       ),
     )
@@ -529,7 +527,6 @@ export async function getMetricasIntervalo(
     .where(
       and(
         eq(adAccounts.clienteId, clienteId),
-        eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
       ),
     )

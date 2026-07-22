@@ -56,7 +56,7 @@ export async function getTrafegoData(): Promise<TrafegoAccount[]> {
     })
     .from(adAccounts)
     .leftJoin(clientes, eq(adAccounts.clienteId, clientes.id))
-    .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
+    .where(eq(adAccounts.ativo, true))
     .orderBy(adAccounts.nome)
 
   const result: TrafegoAccount[] = []
@@ -151,7 +151,7 @@ export type ContaNaoVinculada = {
 }
 
 /**
- * Contas Meta ativas ainda sem cliente vinculado (cliente_id NULL).
+ * Contas ativas (qualquer plataforma) ainda sem cliente vinculado (cliente_id NULL).
  */
 export async function getContasNaoVinculadas(): Promise<ContaNaoVinculada[]> {
   const currentUser = await getCurrentUser()
@@ -168,7 +168,6 @@ export async function getContasNaoVinculadas(): Promise<ContaNaoVinculada[]> {
     .where(
       and(
         isNull(adAccounts.clienteId),
-        eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
       ),
     )

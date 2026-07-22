@@ -263,7 +263,7 @@ export async function getAcoesDoDia(clienteId: string): Promise<AcaoDoDia[]> {
     const contas = await db
       .select({ id: adAccounts.id })
       .from(adAccounts)
-      .where(and(eq(adAccounts.clienteId, clienteId), eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
+      .where(and(eq(adAccounts.clienteId, clienteId), eq(adAccounts.ativo, true)))
     if (contas.length === 0) return []
     const contaIds = contas.map((c) => c.id)
 

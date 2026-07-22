@@ -244,7 +244,7 @@ export async function getResumoLandingPorCliente(
     const contas = await db
       .select({ id: adAccounts.id, clienteId: adAccounts.clienteId })
       .from(adAccounts)
-      .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
+      .where(eq(adAccounts.ativo, true))
     const contaParaCliente = new Map<string, string>()
     for (const c of contas) if (c.clienteId) contaParaCliente.set(c.id, c.clienteId)
     if (contaParaCliente.size === 0) return resultado
@@ -354,7 +354,6 @@ export async function getPainelCampanhas(
     .where(
       and(
         eq(adAccounts.clienteId, clienteId),
-        eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
       ),
     )
