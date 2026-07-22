@@ -340,6 +340,7 @@ async function buscarAdsStatus(clienteId: string): Promise<AdStatusRow[]> {
       .where(
         and(
           eq(adAccounts.clienteId, clienteId),
+          // Só Meta: ad_insights (status/reprovação de anúncio) é populado apenas pelo sync do Meta; Google não grava ad_insights. Ver quick 260721-xa1.
           eq(adAccounts.plataforma, 'meta'),
           eq(adAccounts.ativo, true),
         ),

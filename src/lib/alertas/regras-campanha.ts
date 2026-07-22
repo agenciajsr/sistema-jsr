@@ -272,6 +272,7 @@ export async function getAlertasCampanhaDiarios(): Promise<Alerta[]> {
         accountStatus: adAccounts.accountStatus,
       })
       .from(adAccounts)
+      // Google Ads mantido fora: alertas avaliam métricas contra metas; métricas Google ainda não validadas (PASSO B). Ver quick 260721-xa1.
       .where(and(eq(adAccounts.plataforma, 'meta'), eq(adAccounts.ativo, true)))
     const comCliente = contas.filter((c) => c.clienteId !== null)
     if (comCliente.length === 0) return []

@@ -260,6 +260,7 @@ export async function gerarRelatorioCliente(
     .where(
       and(
         eq(adAccounts.clienteId, clienteId),
+        // Google Ads mantido fora: relatório é client-facing e o mapeamento de métricas Google ainda não foi validado (PASSO B). Ver quick 260721-xa1.
         eq(adAccounts.plataforma, 'meta'),
         eq(adAccounts.ativo, true),
       ),
