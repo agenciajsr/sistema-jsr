@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getCredentials } from '@/lib/google/credentials'
-import { desconectarGoogle } from '@/actions/integracoes-google'
+import { getAdsCredentials } from '@/lib/google/ads-credentials'
+import { desconectarGoogle, desconectarGoogleAds } from '@/actions/integracoes-google'
 import { asaasDisponivel } from '@/lib/asaas/client'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
@@ -72,19 +73,42 @@ const MENSAGENS_ERRO: Record<string, string> = {
 export default async function IntegracoesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ conectado?: string; erro?: string }>
+  searchParams: Promise<{
+    conectado?: string
+    erro?: string
+    ads_conectado?: string
+    ads_erro?: string
+  }>
 }) {
   const sp = await searchParams
   const cred = await getCredentials().catch(() => null)
   const conectado = cred !== null
+  const adsCred = await getAdsCredentials().catch(() => null)
+  const adsConectado = adsCred !== null
+  // Env necessários para o SYNC do Google Ads (Parte 2) — a conexão OAuth já
+  // funciona sem eles, mas o sync precisa do developer token + ID da MCC.
+  const adsEnvOk = Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN && process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID)
 
-  const mensagemErro = sp.erro ? MENSAGENS_ERRO[sp.erro] : undefined
-  const mensagemSucesso = sp.conectado === '1' ? 'Conta Google conectada com sucesso.' : undefined
+  const mensagemErro = sp.erro
+    ? MENSAGENS_ERRO[sp.erro]
+    : sp.ads_erro
+      ? MENSAGENS_ERRO[sp.ads_erro]
+      : undefined
+  const mensagemSucesso =
+    sp.conectado === '1'
+      ? 'Conta Google conectada com sucesso.'
+      : sp.ads_conectado === '1'
+        ? 'Google Ads conectado com sucesso.'
+        : undefined
 
-  // Wrapper compatível com <form action> (precisa retornar void).
+  // Wrappers compatíveis com <form action> (precisam retornar void).
   async function desconectarAction() {
     'use server'
     await desconectarGoogle()
+  }
+  async function desconectarAdsAction() {
+    'use server'
+    await desconectarGoogleAds()
   }
 
   return (
@@ -137,6 +161,53 @@ export default async function IntegracoesPage({
             <Button asChild>
               <Link href="/api/integrations/google/start">Conectar Google Agenda</Link>
             </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Google Ads — conexão OAuth PRÓPRIA (escopo adwords), separada da Agenda. */}
+      <Card className="border-none shadow-[var(--shadow-sm)]">
+        <CardHeader className="flex flex-row items-center gap-3 space-y-0">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Megaphone className="size-5" />
+          </div>
+          <div>
+            <CardTitle className="text-base">Google Ads</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Sincroniza campanhas e resultados das contas de Google Ads dos clientes (via MCC da agência).
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {adsConectado ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="size-4 text-chart-success" />
+                {adsCred?.email ? (
+                  <span>
+                    Conectado como <span className="font-medium">{adsCred.email}</span>
+                  </span>
+                ) : (
+                  <span>Google Ads conectado</span>
+                )}
+              </p>
+              <form action={desconectarAdsAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  Desconectar
+                </Button>
+              </form>
+            </div>
+          ) : (
+            <Button asChild>
+              <Link href="/api/integrations/google-ads/start">Conectar Google Ads</Link>
+            </Button>
+          )}
+          {/* Aviso do que falta para o SYNC (Parte 2) funcionar. */}
+          {!adsEnvOk && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <XCircle className="size-3.5 text-chart-orange" />
+              Para o sync das campanhas, faltam as variáveis GOOGLE_ADS_DEVELOPER_TOKEN e GOOGLE_ADS_LOGIN_CUSTOMER_ID.
+            </p>
           )}
         </CardContent>
       </Card>

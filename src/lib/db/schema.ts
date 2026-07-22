@@ -709,6 +709,21 @@ export const googleCredentials = pgTable('google_credentials', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+// Credenciais do GOOGLE ADS — SEPARADAS das da Agenda (google_credentials) de
+// propósito: o escopo é outro (adwords), a conta autorizada é a que gerencia a
+// MCC da agência, e desconectar/reconectar um NÃO pode afetar o outro. App
+// single-tenant: UMA linha (agência inteira). Espelha google_credentials.
+export const googleAdsCredentials = pgTable('google_ads_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email'),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token').notNull(),
+  expiry: timestamp('expiry', { withTimezone: true }),
+  scope: text('scope'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 // --- CRM comercial ---
 // Prefixo crm_ em todas as tabelas do módulo. `workspaces` está preparado para
 // multi-tenant no futuro, mas o v1 tem UMA única linha (workspace 'JSR', criado
