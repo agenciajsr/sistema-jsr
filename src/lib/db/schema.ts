@@ -192,6 +192,11 @@ export const adAccounts = pgTable('ad_accounts', {
   currency: text('currency').default('BRL'),
   saldo: numeric('saldo', { precision: 12, scale: 2 }),
   fundingSource: text('funding_source'), // 'credit_card', 'prepaid', 'invoice', etc.
+  // Forma de pagamento MANUAL (definida pela equipe): o Meta bloqueia
+  // funding_source_details com Permission Denied (#10) e o funding_source vem
+  // vazio, então esta info é setada à mão na tela de Verbas. Valores:
+  // 'cartao_credito' | 'pix_deposito' | 'boleto' | 'faturamento' | null.
+  formaPagamentoManual: text('forma_pagamento_manual'),
   ativo: boolean('ativo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

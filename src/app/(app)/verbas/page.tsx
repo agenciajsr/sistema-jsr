@@ -1,17 +1,14 @@
-import { eq, and, sql, isNotNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import {
   AlertTriangle,
   BanknoteX,
   CheckCircle2,
-  CreditCard,
-  Landmark,
   Wallet,
   XCircle,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
 import { StatCard } from '@/components/stat-card'
 import {
   Table,
@@ -24,6 +21,8 @@ import {
 import { db } from '@/lib/db'
 import { adAccounts, clientes } from '@/lib/db/schema'
 import { SyncTodasButton } from '@/components/verbas/sync-todas-button'
+import { FormaPagamentoSelect } from '@/components/verbas/forma-pagamento-select'
+import type { FormaPagamentoManual } from '@/actions/trafego'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale/pt-BR'
 
@@ -40,12 +39,6 @@ const STATUS_MAP: Record<number, { label: string; nivel: 'ok' | 'atencao' | 'cri
   9: { label: 'Período de Graça', nivel: 'atencao' },
   100: { label: 'Revisão de Risco', nivel: 'critico' },
   101: { label: 'Pendente Liquidação', nivel: 'atencao' },
-}
-
-const FUNDING_LABELS: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
-  credit_card: { label: 'Cartão de Crédito', icon: CreditCard },
-  prepaid: { label: 'Pré-pago (Saldo)', icon: Wallet },
-  invoice: { label: 'Faturamento', icon: Landmark },
 }
 
 const NIVEL_CONFIG = {
@@ -71,6 +64,7 @@ export default async function VerbasPage() {
       accountStatus: adAccounts.accountStatus,
       saldo: adAccounts.saldo,
       fundingSource: adAccounts.fundingSource,
+      formaPagamentoManual: adAccounts.formaPagamentoManual,
       ativo: adAccounts.ativo,
       updatedAt: adAccounts.updatedAt,
       clienteId: adAccounts.clienteId,
@@ -169,9 +163,6 @@ export default async function VerbasPage() {
                     const saldo = conta.saldo !== null ? Number(conta.saldo) : null
                     const saldoBaixo = saldo !== null && saldo < SALDO_BAIXO_THRESHOLD
 
-                    const funding = FUNDING_LABELS[conta.fundingSource ?? ''] ?? { label: conta.fundingSource ?? '—', icon: Wallet }
-                    const FundingIcon = funding.icon
-
                     return (
                       <TableRow key={conta.id} className={statusInfo.nivel === 'critico' ? 'bg-destructive/5' : saldoBaixo ? 'bg-chart-orange/5' : ''}>
                         <TableCell>
@@ -183,11 +174,11 @@ export default async function VerbasPage() {
                         <TableCell className="whitespace-nowrap">
                           {conta.clienteNome ?? <span className="text-muted-foreground italic">Não vinculada</span>}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <FundingIcon className="size-3.5 text-muted-foreground" />
-                            <span className="text-sm whitespace-nowrap">{funding.label}</span>
-                          </div>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <FormaPagamentoSelect
+                            adAccountId={conta.id}
+                            valorInicial={conta.formaPagamentoManual as FormaPagamentoManual | null}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           {saldo !== null ? (

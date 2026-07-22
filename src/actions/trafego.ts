@@ -333,3 +333,36 @@ export async function salvarPreferenciasCampanhas(
     }
   }
 }
+
+// Formas de pagamento MANUAIS válidas (o Meta bloqueia esse dado — ver Verbas).
+const FORMAS_PAGAMENTO_MANUAL = ['cartao_credito', 'pix_deposito', 'boleto', 'faturamento'] as const
+export type FormaPagamentoManual = (typeof FORMAS_PAGAMENTO_MANUAL)[number]
+
+/**
+ * Define (ou limpa, com null) a forma de pagamento MANUAL de uma conta de anúncio.
+ * O Meta não fornece funding_source_details (Permission Denied #10), então a equipe
+ * registra à mão na tela de Verbas. Valida o valor contra a lista canônica.
+ */
+export async function atualizarFormaPagamentoConta(
+  adAccountId: string,
+  forma: FormaPagamentoManual | null,
+) {
+  const user = await getCurrentUser()
+  if (!user) return { error: 'Sessao expirada. Faca login novamente.' }
+
+  if (forma !== null && !FORMAS_PAGAMENTO_MANUAL.includes(forma)) {
+    return { error: 'Forma de pagamento invalida.' }
+  }
+
+  try {
+    await db
+      .update(adAccounts)
+      .set({ formaPagamentoManual: forma, updatedAt: new Date() })
+      .where(eq(adAccounts.id, adAccountId))
+    revalidatePath('/verbas')
+    return { data: { ok: true } }
+  } catch (err) {
+    console.error('[atualizarFormaPagamentoConta] Erro (migration 0042 pendente?):', err)
+    return { error: 'Nao foi possivel salvar a forma de pagamento.' }
+  }
+}
