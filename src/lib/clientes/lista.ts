@@ -116,3 +116,24 @@ export async function getClientesLista(): Promise<ClienteLinha[]> {
     return []
   }
 }
+
+export type ClienteInterno = { id: string; nome: string }
+
+/**
+ * Perfis INTERNOS (a própria agência — ver clientes.interno). Ficam FORA da lista
+ * de clientes do negócio (getClientesLista filtra interno=false) e de todas as
+ * métricas (MRR/CAC/contagem), mas precisam ser acessíveis para EDIÇÃO — daí esta
+ * busca leve e separada, renderizada numa seção própria da página. Nunca lança.
+ */
+export async function getClientesInternos(): Promise<ClienteInterno[]> {
+  try {
+    return await db
+      .select({ id: clientes.id, nome: clientes.nome })
+      .from(clientes)
+      .where(eq(clientes.interno, true))
+      .orderBy(asc(clientes.nome))
+  } catch (e) {
+    console.error('[getClientesInternos]', e)
+    return []
+  }
+}

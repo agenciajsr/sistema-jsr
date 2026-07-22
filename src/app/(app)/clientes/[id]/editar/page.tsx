@@ -37,6 +37,9 @@ export default async function EditarClientePage({
           nome: cliente.nome,
           nicho: cliente.nicho,
           status: cliente.status,
+          // Preserva o perfil interno ao editar — sem isto o campo cairia no
+          // default (false) do Zod e salvar desmarcaria o perfil mãe.
+          interno: cliente.interno,
           motivoEncerramento: cliente.motivoEncerramento ?? '',
           contatoNome: cliente.contatoNome ?? '',
           contatoTelefone: cliente.contatoTelefone ?? '',

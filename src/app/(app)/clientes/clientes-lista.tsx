@@ -32,6 +32,8 @@ import {
   type ClienteLinha,
   type ClienteStatus,
 } from '@/lib/clientes/agregar'
+import type { ClienteInterno } from '@/lib/clientes/lista'
+import { Building2, Pencil } from 'lucide-react'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -56,7 +58,13 @@ const STATUS_BADGE_CLASSE: Record<ClienteStatus, string> = {
   encerrado: '',
 }
 
-export function ClientesLista({ clientes }: { clientes: ClienteLinha[] }) {
+export function ClientesLista({
+  clientes,
+  internos = [],
+}: {
+  clientes: ClienteLinha[]
+  internos?: ClienteInterno[]
+}) {
   const router = useRouter()
   const [busca, setBusca] = useState('')
   const [aba, setAba] = useState<ClienteStatus | 'todos'>('ativo')
@@ -68,7 +76,8 @@ export function ClientesLista({ clientes }: { clientes: ClienteLinha[] }) {
   )
 
   // Carteira vazia: nada de busca/abas, só o convite para cadastrar.
-  if (clientes.length === 0) {
+  // (Só considera vazio quando NÃO há nem clientes de negócio nem perfis internos.)
+  if (clientes.length === 0 && internos.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed p-12 text-center">
         <h2 className="text-[20px] leading-tight font-semibold">
@@ -90,6 +99,8 @@ export function ClientesLista({ clientes }: { clientes: ClienteLinha[] }) {
 
   return (
     <div className="space-y-4">
+      {clientes.length > 0 && (
+        <>
       <div className="relative max-w-sm">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -204,6 +215,55 @@ export function ClientesLista({ clientes }: { clientes: ClienteLinha[] }) {
           </div>
         )}
       </Card>
+        </>
+      )}
+
+      {/* Seção INTERNO (perfil mãe / agência): fica FORA das abas e contagens do
+          negócio (essas rodam só sobre `clientes`, interno=false). Existe para o
+          perfil interno ser acessível/editável — ex.: ajustar o objetivo/metas que
+          alimentam o Tráfego/Campanhas. */}
+      {internos.length > 0 && (
+        <Card className="p-0">
+          <div className="flex items-center gap-2 border-b px-4 py-3">
+            <Building2 className="size-4 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-semibold">Interno / Agência</p>
+              <p className="text-xs text-muted-foreground">
+                Perfis da própria agência — aparecem no Tráfego/Campanhas, mas ficam fora das métricas de negócio (contagem, MRR, CAC).
+              </p>
+            </div>
+          </div>
+          <div className="divide-y">
+            {internos.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => abrirCliente(c.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') abrirCliente(c.id)
+                }}
+                tabIndex={0}
+                className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-2 font-medium">
+                  {c.nome}
+                  <Badge variant="secondary" className="text-[10px]">Interno</Badge>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    router.push(`/clientes/${c.id}/editar`)
+                  }}
+                >
+                  <Pencil className="size-3.5" />
+                  Editar
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
