@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getCredentials } from '@/lib/google/credentials'
 import { getAdsCredentials } from '@/lib/google/ads-credentials'
+import { TestarGoogleAds } from '@/components/integracoes/testar-google-ads'
 import { desconectarGoogle, desconectarGoogleAds } from '@/actions/integracoes-google'
 import { asaasDisponivel } from '@/lib/asaas/client'
 
@@ -202,6 +203,8 @@ export default async function IntegracoesPage({
               <Link href="/api/integrations/google-ads/start">Conectar Google Ads</Link>
             </Button>
           )}
+          {/* Testar conexão: só faz sentido conectado E com as variáveis do sync. */}
+          {adsConectado && adsEnvOk && <TestarGoogleAds />}
           {/* Aviso do que falta para o SYNC (Parte 2) funcionar. */}
           {!adsEnvOk && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
