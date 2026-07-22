@@ -25,10 +25,12 @@ import {
 import {
   classificarObjetivo,
   getInvestido30dPorCliente,
+  getPlataformasDoCliente,
   listarClientesComContas,
   type CriativoRanking,
   type Periodo,
 } from '@/lib/trafego/aggregate'
+import { SeletorPlataforma, BadgePlataforma } from '@/components/trafego/seletor-plataforma'
 import { getPainelCampanhas, getResumoLandingPorCliente } from '@/lib/trafego/painel'
 import { getAcoesDoDia } from '@/lib/trafego/acoes-dia'
 import { AcoesDoDia } from '@/components/trafego/acoes-do-dia'
@@ -46,11 +48,12 @@ import { calcularMetricas } from '@/lib/trafego/metricas'
 export const maxDuration = 60
 
 const PERIODOS_VALIDOS: Periodo[] = ['hoje', 'ontem', '7d', '30d']
+const PLATAFORMAS_VALIDAS = ['meta', 'google', 'compilado'] as const
 
 export default async function CampanhasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; periodo?: string }>
+  searchParams: Promise<{ cliente?: string; periodo?: string; plataforma?: string }>
 }) {
   const sp = await searchParams
   const cliente = sp.cliente ?? null
@@ -68,8 +71,22 @@ export default async function CampanhasPage({
       getUltimaSync(),
     ])
 
+  // Plataformas do cliente ANTES do painel: preciso do filtro resolvido para
+  // chamar getPainelCampanhas. Abas só existem com 2 plataformas (default Meta).
+  const plataformasCliente = cliente ? await getPlataformasDoCliente(cliente) : []
+  const temAbas = plataformasCliente.length >= 2
+  const plataformaParam = PLATAFORMAS_VALIDAS.includes(sp.plataforma as (typeof PLATAFORMAS_VALIDAS)[number])
+    ? (sp.plataforma as 'meta' | 'google' | 'compilado')
+    : 'meta'
+  const abaAtiva: 'meta' | 'google' | 'compilado' | null = temAbas ? plataformaParam : null
+  // Filtro passado ao painel: 'compilado' e cliente-de-1-plataforma => undefined
+  // (todas as contas) = comportamento byte-a-byte idêntico ao de hoje (REGRA DURA).
+  const plataformaFiltro: 'meta' | 'google' | undefined =
+    abaAtiva === 'meta' || abaAtiva === 'google' ? abaAtiva : undefined
+  const ehGoogle = abaAtiva === 'google'
+
   // SEQUENCIAL de propósito (pool max=5, decisão 260714-ita): painel -> preferências -> saúde.
-  const painel = cliente ? await getPainelCampanhas(cliente, periodo) : null
+  const painel = cliente ? await getPainelCampanhas(cliente, periodo, plataformaFiltro) : null
   const preferencias = cliente ? await getPreferenciasCampanhas(cliente) : null
 
   const clienteSelecionado = clientesComContas.find((c) => c.id === cliente) ?? null
@@ -195,6 +212,9 @@ export default async function CampanhasPage({
               {painel.contasUnificadas}{' '}
               {painel.contasUnificadas === 1 ? 'conta unificada' : 'contas unificadas'}
             </p>
+            {/* Single-platform mostra a plataforma real do cliente; com abas, a aba ativa. */}
+            <BadgePlataforma plataforma={abaAtiva ?? (plataformasCliente[0] ?? 'meta')} />
+            {temAbas && <SeletorPlataforma plataformaAtual={abaAtiva ?? 'meta'} />}
             {saude && (
               <HealthScoreCliente score={saude.score} rotulo={saude.rotulo} breakdown={breakdownSaude} />
             )}
@@ -222,6 +242,7 @@ export default async function CampanhasPage({
             anuncios={painel.anuncios}
             labelHeroi={painel.heroi.label}
             metas={metasRecord}
+            soloCampanhas={ehGoogle}
           />
 
           {painel.campanhas.length > 0 && (
@@ -235,19 +256,33 @@ export default async function CampanhasPage({
             />
           )}
 
-          {/* Etapa 2 — após o Funil de Conversão (ordem da referência) */}
-          <DemografiaSection demografia={painel.demografia} />
+          {/* Seções que o sync do Google ainda não alimenta (Parte 2e): ocultas
+              na aba Google, substituídas por uma nota honesta. */}
+          {ehGoogle && (
+            <Card className="border-none p-6 text-center shadow-[var(--shadow-sm)]">
+              <p className="text-sm text-muted-foreground">
+                Conjuntos, anúncios, demografia e regiões: em breve para Google Ads.
+              </p>
+            </Card>
+          )}
 
-          <RegioesSection
-            ranking={painel.regioes}
-            heroiChave={painel.heroi.chave}
-            labelHeroi={painel.heroi.label}
-          />
+          {/* Etapa 2 — após o Funil de Conversão (ordem da referência) */}
+          {!ehGoogle && <DemografiaSection demografia={painel.demografia} />}
+
+          {!ehGoogle && (
+            <RegioesSection
+              ranking={painel.regioes}
+              heroiChave={painel.heroi.chave}
+              labelHeroi={painel.heroi.label}
+            />
+          )}
 
           {/* Ações do dia (Feature 3) — acima dos Criativos campeões, como na spec */}
           <AcoesDoDia clienteId={cliente} acoes={acoesDoDia} />
 
-          <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
+          {!ehGoogle && (
+            <CriativosCampeoes topCriativos={topCriativos} labelHeroi={painel.heroi.label} />
+          )}
         </div>
       )}
 

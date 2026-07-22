@@ -57,7 +57,7 @@ export type ClienteCard = {
 
 type LandingClientesProps = {
   clientes: ClienteCard[]
-  investido30d: Map<string, number>
+  investido30d: Map<string, { meta: number; google: number }>
   periodo: string
   /** Resumo do semáforo por cliente (resultado, custo/resultado, pior status). */
   resumo?: Map<string, ResumoLandingCliente>
@@ -77,8 +77,9 @@ export function LandingClientes({ clientes, investido30d, periodo, resumo }: Lan
         {clientes.map((c) => {
           const classe = classificarObjetivo(c.objetivoPrincipal)
           const objetivoLabel = classe ? LABEL_CLASSE[classe] : LABEL_NICHO[c.nicho]
-          const investido = investido30d.get(c.id) ?? 0
-          const ativo = investido > 0
+          const inv = investido30d.get(c.id) ?? { meta: 0, google: 0 }
+          const total = inv.meta + inv.google
+          const ativo = total > 0
           const r = resumo?.get(c.id)
           const status: StatusMeta | null = r?.statusPior ?? null
           const iniciais = c.nome
@@ -124,11 +125,19 @@ export function LandingClientes({ clientes, investido30d, periodo, resumo }: Lan
                   </span>
                 </div>
 
+                {/* Split do investido por plataforma — só quando há gasto Google.
+                    Cliente só-Meta continua sem a linha (visual idêntico a hoje). */}
+                {inv.google > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Meta {formatadorMoeda.format(inv.meta)} · Google {formatadorMoeda.format(inv.google)}
+                  </p>
+                )}
+
                 <div className="mt-auto grid grid-cols-3 gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-xs text-muted-foreground">Investido</p>
                     <p className="truncate text-base font-semibold tracking-tight tabular-nums">
-                      {formatadorMoeda.format(r?.spend ?? investido)}
+                      {formatadorMoeda.format(r?.spend ?? total)}
                     </p>
                   </div>
                   <div className="min-w-0">

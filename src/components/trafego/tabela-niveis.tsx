@@ -139,9 +139,12 @@ type TabelaNiveisProps = {
   labelHeroi: string
   /** Metas efetivas do semáforo (resolvidas no server) — opcional. */
   metas?: Record<string, MetaMetrica>
+  /** Só campanhas (Google Ads ainda não alimenta Conjuntos/Anúncios): oculta as
+   *  abas Conjuntos e Anúncios, travando a tabela no nível campanhas. */
+  soloCampanhas?: boolean
 }
 
-export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas }: TabelaNiveisProps) {
+export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas, soloCampanhas }: TabelaNiveisProps) {
   const [nivel, setNivel] = useState<Nivel>('campanhas')
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
@@ -272,8 +275,12 @@ export function TabelaNiveis({ campanhas, conjuntos, anuncios, labelHeroi, metas
           <Tabs value={nivel} onValueChange={(v) => setNivel(v as Nivel)}>
             <TabsList>
               <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
-              <TabsTrigger value="conjuntos">Conjuntos</TabsTrigger>
-              <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
+              {!soloCampanhas && (
+                <>
+                  <TabsTrigger value="conjuntos">Conjuntos</TabsTrigger>
+                  <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
+                </>
+              )}
             </TabsList>
           </Tabs>
         </div>
