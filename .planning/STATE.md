@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
 Plan: 9 of 9 in current phase
 Status: Ready to execute
-Last activity: 2026-07-21 - Completed quick task 260721-up2: forma de pagamento MANUAL por conta nas Verbas (o Meta bloqueia funding_source_details — comprovado por sondagem)
+Last activity: 2026-07-21 - Completed quick task 260721-vuc: Google Ads Parte 1 (fluxo OAuth "Conectar Google Ads" separado da Agenda)
 
 Progress: [████████░░] 83%
 
@@ -203,3 +203,4 @@ Recent decisions affecting current work:
 Last session: 2026-07-21T20:55:00.000Z
 Stopped at: Concluído quick 260721-s9t (lead frio do webhook nasce em "Abordado" + carimba 1º contato). Antes: 260721-ogt (recorrência rola mês a mês) — limpeza `--apply` (42 futuras removidas) e migration 0041 (índice único ux_transacoes_pai_data) JÁ APLICADAS em 2026-07-21. Nenhuma migration pendente. Deploy de todos os quicks de 2026-07-21 já pushado (master sincronizado). seed-prospeccao-fria.ts (260720-trz) já aplicado (14 leads no funil frio). Pendente de teste manual: acompanhar D1 dos leads em "Abordado" após 24h.
 Resume file: None
+| 260721-vuc | Google Ads Parte 1 — fluxo OAuth "Conectar Google Ads" SEPARADO da Agenda (não arriscar Calendar): migration 0043 google_ads_credentials (APLICADA); lib/google/ads-oauth.ts (escopo adwords, redirect próprio) + ads-credentials.ts (refresh automático); rotas /api/integrations/google-ads/{start,callback} (cookie state próprio); desconectarGoogleAds; card "Google Ads" na /integracoes. Contexto: MCC 225-515-6295, token nível "Análises"=Explorer (lê produção, sem espera). PENDÊNCIAS DO USUÁRIO p/ conectar: Google Cloud Console (ativar Google Ads API + escopo adwords na consent + redirect URI + test user se Testing); p/ o sync (Parte 2): env GOOGLE_ADS_DEVELOPER_TOKEN + GOOGLE_ADS_LOGIN_CUSTOMER_ID. tsc limpo, eslint 0, vitest 649/0 | 2026-07-21 | 6536ea8 | [260721-vuc-google-ads-parte-1-fluxo-oauth-separado-](./quick/260721-vuc-google-ads-parte-1-fluxo-oauth-separado-/) |
