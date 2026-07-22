@@ -174,7 +174,7 @@ export default async function VerbasPage() {
                         <TableCell className="whitespace-nowrap">
                           {conta.clienteNome ?? <span className="text-muted-foreground italic">Não vinculada</span>}
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell>
                           <FormaPagamentoSelect
                             adAccountId={conta.id}
                             valorInicial={conta.formaPagamentoManual as FormaPagamentoManual | null}
