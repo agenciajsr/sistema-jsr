@@ -91,9 +91,11 @@ export function heroiDoObjetivo(objetivoPrincipal: string | null, nicho: Nicho):
  * (join adAccounts + campaignInsights, GROUP BY cliente). Leve de propósito: a
  * tela inicial de /campanhas mostra cards de todos os clientes e NÃO pode rodar
  * getResumoCliente/getSaudeDoCliente por cliente (pesadas, pool max=5). Retorna um
- * mapa clienteId -> investido30d; ausência de linha = sem gasto no período.
+ * mapa clienteId -> { meta, google }; ausência de linha = sem gasto no período.
+ * O split por plataforma alimenta a linha "Meta R$X · Google R$Y" nos cards; o
+ * total (meta+google) preserva o número exibido hoje quando só há Meta.
  */
-export async function getInvestido30dPorCliente(): Promise<Map<string, number>> {
+export async function getInvestido30dPorCliente(): Promise<Map<string, { meta: number; google: number }>> {
   const user = await getCurrentUser()
   if (!user) return new Map()
 
@@ -101,6 +103,7 @@ export async function getInvestido30dPorCliente(): Promise<Map<string, number>> 
   const rows = await db
     .select({
       clienteId: adAccounts.clienteId,
+      plataforma: adAccounts.plataforma,
       investido: sql<string>`coalesce(sum(${campaignInsights.spend}), 0)`,
     })
     .from(campaignInsights)
@@ -111,11 +114,15 @@ export async function getInvestido30dPorCliente(): Promise<Map<string, number>> 
         gte(campaignInsights.date, dataMinima),
       ),
     )
-    .groupBy(adAccounts.clienteId)
+    .groupBy(adAccounts.clienteId, adAccounts.plataforma)
 
-  const mapa = new Map<string, number>()
+  const mapa = new Map<string, { meta: number; google: number }>()
   for (const r of rows) {
-    if (r.clienteId) mapa.set(r.clienteId, Number(r.investido) || 0)
+    if (!r.clienteId) continue
+    const atual = mapa.get(r.clienteId) ?? { meta: 0, google: 0 }
+    if (r.plataforma === 'google') atual.google += Number(r.investido) || 0
+    else atual.meta += Number(r.investido) || 0
+    mapa.set(r.clienteId, atual)
   }
   return mapa
 }
@@ -135,6 +142,23 @@ export async function listarClientesComContas(): Promise<ClienteComContas[]> {
     .orderBy(clientes.nome)
 
   return rows
+}
+
+/**
+ * Plataformas distintas ('meta'|'google') com ao menos uma conta ATIVA vinculada
+ * ao cliente. Base em CONTAS existentes (não em gasto): um cliente com conta
+ * Google ainda vazia continua contando como "tem Google". Uma query distinct
+ * barata, chamada só quando há cliente selecionado, para decidir se mostra as
+ * abas de plataforma no painel de /campanhas.
+ */
+export async function getPlataformasDoCliente(clienteId: string): Promise<('meta' | 'google')[]> {
+  const user = await getCurrentUser()
+  if (!user) return []
+  const rows = await db
+    .selectDistinct({ plataforma: adAccounts.plataforma })
+    .from(adAccounts)
+    .where(and(eq(adAccounts.clienteId, clienteId), eq(adAccounts.ativo, true)))
+  return rows.map((r) => r.plataforma)
 }
 
 export type CampanhaRanking = {

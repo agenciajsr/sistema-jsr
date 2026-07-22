@@ -334,6 +334,7 @@ export async function getResumoLandingPorCliente(
 export async function getPainelCampanhas(
   clienteId: string,
   periodo: Periodo = '30d',
+  plataforma?: 'meta' | 'google',
 ): Promise<PainelCampanhas | null> {
   const user = await getCurrentUser()
   if (!user) return null
@@ -355,6 +356,10 @@ export async function getPainelCampanhas(
       and(
         eq(adAccounts.clienteId, clienteId),
         eq(adAccounts.ativo, true),
+        // plataforma ausente = todas as contas do cliente (aba Compilado ou
+        // cliente de 1 só plataforma) = comportamento byte-a-byte idêntico ao
+        // de hoje. Com abas, filtra a conta da plataforma da aba ativa.
+        ...(plataforma ? [eq(adAccounts.plataforma, plataforma)] : []),
       ),
     )
   if (contas.length === 0) return painelVazio(clienteId, heroi, 0)
