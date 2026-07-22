@@ -4,6 +4,9 @@ import { sincronizarTudoMeta } from '@/lib/meta/sync'
 import { avaliarEPersistirAlertas, type ResumoAvaliacao } from '@/lib/alertas/persistir'
 import { gerarCobrancasMensais, type ResumoCobrancasMensais } from '@/lib/cobrancas/gerar'
 import { rolarRecorrentes } from '@/lib/financeiro/rollover'
+import { sincronizarTudoGoogle } from '@/lib/google/ads-sync'
+import { adsSyncConfigurado } from '@/lib/google/ads-client'
+import { isAdsConnected } from '@/lib/google/ads-credentials'
 
 // Rota chamada pelo Vercel Cron (GET) 1×/dia. Descobre/atualiza as contas da Meta
 // e sincroniza insights + saldo de todas as contas ativas. Sem sessão de usuário —
@@ -55,6 +58,18 @@ export async function GET(request: Request) {
       console.error('[cron/sync-meta] falha ao rolar recorrentes — seguindo', erroRecorrentes)
     }
 
+    // Carona (quick-260721-wyt): sync do Google Ads — só roda quando conectado E
+    // com as variáveis (developer token + MCC). try/catch PRÓPRIO e degradação
+    // graciosa: falha aqui NÃO quebra o sync do Meta que já rodou.
+    let googleResumo: { contas: number; insights: number } | null = null
+    try {
+      if (adsSyncConfigurado() && (await isAdsConnected())) {
+        googleResumo = await sincronizarTudoGoogle()
+      }
+    } catch (erroGoogle) {
+      console.error('[cron/sync-meta] falha no sync do Google Ads — seguindo', erroGoogle)
+    }
+
     return NextResponse.json({
       ok: true,
       contas,
@@ -62,6 +77,7 @@ export async function GET(request: Request) {
       ...(alertasResumo ? { alertas: alertasResumo } : {}),
       ...(cobrancasResumo ? { cobrancas: cobrancasResumo } : {}),
       ...(recorrentesResumo ? { recorrentes: recorrentesResumo } : {}),
+      ...(googleResumo ? { google: googleResumo } : {}),
     })
   } catch (err) {
     console.error('[cron/sync-meta] Erro:', err)
