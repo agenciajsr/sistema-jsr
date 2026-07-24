@@ -22,58 +22,60 @@ Requisitos da primeira versão. Cada um será mapeado para uma fase do roadmap.
 
 ### Tráfego Pago (TRAF)
 
-- [ ] **TRAF-01**: Sistema sincroniza dados das contas de anúncio dos clientes a partir do Meta Ads (via conta da agência)
-- [ ] **TRAF-02**: Sistema sincroniza dados das contas de anúncio dos clientes a partir do Google Ads (via conta MCC da agência)
-- [ ] **TRAF-03**: Usuário pode ver, por cliente, o status da conta de anúncios (ativa, com problema, verba disponível)
-- [ ] **TRAF-04**: Usuário pode ver, por cliente, a lista de campanhas ativas/pausadas com verba gasta e restante
-- [ ] **TRAF-05**: Usuário pode ver, por cliente, quais criativos/anúncios estão performando bem ou mal
-- [ ] **TRAF-06**: Sistema exibe data/hora da última sincronização de dados por cliente (para identificar falha de integração)
+- [x] **TRAF-01**: Sistema sincroniza dados das contas de anúncio dos clientes a partir do Meta Ads (via conta da agência)
+- [~] **TRAF-02**: Sincroniza Google Ads via MCC da agência — **no ar** (OAuth + sync + telas + abas por plataforma). ⚠️ Métricas (spend/leads/roas/ctr) ainda não validadas contra campanha real (PASSO B).
+- [x] **TRAF-03**: Usuário pode ver, por cliente, o status da conta de anúncios (ativa, com problema, verba disponível)
+- [x] **TRAF-04**: Usuário pode ver, por cliente, a lista de campanhas ativas/pausadas com verba gasta e restante
+- [x] **TRAF-05**: Usuário pode ver, por cliente, quais criativos/anúncios estão performando bem ou mal
+- [x] **TRAF-06**: Sistema exibe data/hora da última sincronização de dados por cliente (para identificar falha de integração)
 
 ### Alertas (ALRT)
 
-- [ ] **ALRT-01**: Usuário pode configurar um limiar de verba mínima por cliente
-- [ ] **ALRT-02**: Sistema exibe alerta dentro do sistema quando a verba de um cliente cruza o limiar configurado
-- [ ] **ALRT-03**: Sistema exibe alerta quando o contrato de um cliente está próximo do vencimento
-- [ ] **ALRT-04**: Alerta de vencimento de contrato exibe junto o valor de MRR em risco
-- [ ] **ALRT-05**: Sistema detecta e alerta quedas bruscas de métricas de performance em relação à semana anterior
+- [~] **ALRT-01**: Limiar de verba mínima por cliente — **PARCIAL**: alerta de saldo baixo funciona, mas o limiar é fixo no código (R$50/R$100 p/ todos); falta torná-lo configurável por cliente.
+- [x] **ALRT-02**: Sistema exibe alerta dentro do sistema quando a verba de um cliente cruza o limiar (hoje o limiar fixo — ver ALRT-01)
+- [x] **ALRT-03**: Sistema exibe alerta quando o contrato de um cliente está próximo do vencimento
+- [x] **ALRT-04**: Alerta de vencimento de contrato exibe junto o valor de MRR em risco
+- [x] **ALRT-05**: Sistema detecta e alerta quedas bruscas de métricas de performance em relação à semana anterior
 
 ### Relatórios (REL)
 
-- [ ] **REL-01**: Sistema gera automaticamente relatório semanal por cliente com dados das campanhas
-- [ ] **REL-02**: Conteúdo do relatório é segmentado conforme o objetivo do cliente (e-commerce, negócio local, infoproduto)
-- [ ] **REL-03**: Relatório é gerado em formato de texto pronto para copiar e colar (ex: WhatsApp)
-- [ ] **REL-04**: Relatório inclui comparação com o período anterior (semana vs. semana anterior)
+- [x] **REL-01**: Sistema gera automaticamente relatório semanal por cliente com dados das campanhas
+- [x] **REL-02**: Conteúdo do relatório é segmentado conforme o objetivo do cliente (e-commerce, negócio local, infoproduto)
+- [x] **REL-03**: Relatório é gerado em formato de texto pronto para copiar e colar (ex: WhatsApp)
+- [~] **REL-04**: Comparação com o período anterior — **FALTA**: o relatório mostra números absolutos; a base de janelas "anterior" existe na engine, mas o texto ainda não traz "semana vs. semana anterior".
 
 ### Financeiro (FIN)
 
-- [ ] **FIN-01**: Usuário pode ver a data de cobrança de cada cliente
-- [ ] **FIN-02**: Sistema calcula e exibe o MRR total (soma dos contratos ativos)
-- [ ] **FIN-03**: Usuário pode ver receita e clientes ativos num painel financeiro consolidado
+- [x] **FIN-01**: Usuário pode ver a data de cobrança de cada cliente
+- [x] **FIN-02**: Sistema calcula e exibe o MRR total (soma dos contratos ativos)
+- [x] **FIN-03**: Usuário pode ver receita e clientes ativos num painel financeiro consolidado
 
 ### Painel Geral (DASH)
 
-- [ ] **DASH-01**: Usuário vê painel geral com visão consolidada de todos os clientes ativos (verba, contrato, performance) em uma única tela
-- [ ] **DASH-02**: Painel geral destaca o que precisa de atenção imediata (verba baixa, contrato vencendo, queda de performance)
+- [x] **DASH-01**: Usuário vê painel geral com visão consolidada de todos os clientes ativos (verba, contrato, performance) em uma única tela
+- [x] **DASH-02**: Painel geral destaca o que precisa de atenção imediata (verba baixa, contrato vencendo, queda de performance)
 
 ### Contratos (CONT) — adicionado em 2026-07-10 (feedback do usuário)
 
-- [ ] **CONT-01**: Usuário vê aba própria "Contratos" com todos os contratos de todos os clientes numa lista/tabela única (não só dentro do detalhe do cliente)
+- [x] **CONT-01**: Aba própria "Contratos" com todos os contratos numa lista/tabela única — **entregue** (inclui PDF + assinatura via Autentique)
 
 ### Checklist (CHK) — adicionado em 2026-07-10 (feedback do usuário)
 
-- [ ] **CHK-01**: Usuário vê e gerencia checklist operacional recorrente por cliente (ex: tarefas de rotina de gestão de tráfego)
+- [x] **CHK-01**: Checklist operacional recorrente por cliente — **entregue** (evoluiu para o módulo de Tarefas estilo ClickUp com recorrência; a aba Checklist da ficha foi consolidada no redesign 260723-v8z)
 
 ### Acompanhamento (ACOMP) — adicionado em 2026-07-10 (feedback do usuário)
 
-- [ ] **ACOMP-01**: Usuário vê tela de acompanhamento consolidado do relacionamento com cada cliente (histórico de interações/observações)
+- [x] **ACOMP-01**: Acompanhamento/histórico de interações por cliente — **entregue** (feed de atividades; no redesign passou a viver no card "Atividades recentes" + registro dentro de Observações na ficha)
 
 ### Verbas Ads (VBA) — adicionado em 2026-07-10 (feedback do usuário)
 
-- [ ] **VBA-01**: Usuário vê tela dedicada de controle de verbas de anúncio por cliente (complementar ao TRAF-04, com foco em gestão/ajuste de orçamento, não só visualização)
+- [x] **VBA-01**: Tela dedicada de controle de verbas de anúncio por cliente — **entregue** (/verbas com saldo, status e forma de pagamento manual)
 
 ### Funil (FUN) — adicionado em 2026-07-10 (feedback do usuário; reverte exclusão original)
 
-- [ ] **FUN-01**: Usuário vê funil/pipeline simples de clientes ou oportunidades
+- [x] **FUN-01**: Funil/pipeline de clientes/oportunidades — **entregue e superado** (CRM comercial completo estilo Pipedrive + prospecção fria)
+
+> **Legenda:** `[x]` entregue · `[~]` parcial/a validar (ver as 3 pendências abaixo na Rastreabilidade)
 
 ## Requisitos v2
 
@@ -106,28 +108,37 @@ Exclusões explícitas. Documentadas para evitar retrabalho e discussões repeti
 
 ## Rastreabilidade
 
-Quais fases cobrem quais requisitos. Preenchido durante a criação do roadmap.
+Status reconciliado com o **código real** em 2026-07-24 (o produto foi entregue via ~90 quick tasks, não pelo fluxo formal de fases — por isso a coluna reflete evidência de código, não VERIFICATION.md por fase).
 
 | Requisito | Fase | Status |
 |---|---|---|
-| ACES-01, ACES-02, ACES-03 | Fase 1 | Pendente |
-| CLI-01, CLI-02, CLI-03, CLI-04 | Fase 1 | Pendente |
-| TRAF-01, TRAF-02, TRAF-06 | Fase 2 | Pendente |
-| TRAF-03, TRAF-04, TRAF-05 | Fase 3 | Pendente |
-| ALRT-01, ALRT-02, ALRT-05 | Fase 3 | Pendente |
-| ALRT-03, ALRT-04 | Fase 4 | Pendente |
-| FIN-01, FIN-02, FIN-03 | Fase 4 | Pendente |
-| REL-01, REL-02, REL-03, REL-04 | Fase 5 | Pendente |
-| DASH-01, DASH-02 | Fase 6 | Pendente |
-| CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01 | Não mapeado (fora do processo GSD) | Scaffold visual criado com dados de exemplo em 2026-07-10, a pedido explícito do usuário — construção fora do fluxo padrão de pesquisa/plano/verificação para acelerar entrega. Falta implementação funcional real e planejamento formal de fase. |
+| ACES-01, ACES-02, ACES-03 | Fase 1 | ✅ Concluído |
+| CLI-01, CLI-02, CLI-03, CLI-04 | Fase 1 | ✅ Concluído (ficha redesenhada em 260723-v8z) |
+| TRAF-01, TRAF-06 | Fase 2 | ✅ Concluído (Meta) |
+| TRAF-02 | Fase 2 | 🟡 No ar; validar métricas com campanha real (PASSO B) |
+| TRAF-03, TRAF-04, TRAF-05 | Fase 3 | ✅ Concluído |
+| ALRT-01 | Fase 3 | 🟡 Parcial — limiar fixo no código, falta ser configurável por cliente |
+| ALRT-02, ALRT-05 | Fase 3 | ✅ Concluído |
+| ALRT-03, ALRT-04 | Fase 4 | ✅ Concluído |
+| FIN-01, FIN-02, FIN-03 | Fase 4 | ✅ Concluído |
+| REL-01, REL-02, REL-03 | Fase 5 | ✅ Concluído |
+| REL-04 | Fase 5 | 🔴 Falta — comparação semana-vs-semana no texto |
+| DASH-01, DASH-02 | Fase 6 | ✅ Concluído |
+| CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01 | Entregue via quick tasks | ✅ Concluído (funcionais, com dados reais — não são mais scaffold) |
 
-**Cobertura:**
-- Requisitos v1: 32 no total (27 originais + 5 adicionados em 2026-07-10: CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01)
-- Mapeados para fases: 27
-- Não mapeados: 5 (CONT-01, CHK-01, ACOMP-01, VBA-01, FUN-01 — aguardando fase própria)
+**Cobertura (2026-07-24):**
+- Requisitos v1: 32 no total
+- ✅ Concluídos: 29
+- 🟡/🔴 Pendentes: 3 — **TRAF-02** (validar dado real), **ALRT-01** (limiar configurável), **REL-04** (comparação no relatório)
+- Percentual v1: **~95%** (essencialmente entregue e em produção)
 
-**Decisão (2026-07-10):** Integração com Google Ads (TRAF-02) despriorizada — nenhum cliente ativo hoje usa Google Ads, todos usam apenas Meta Ads. Implementar Meta Ads primeiro; Google Ads só quando houver cliente real que precise.
+**Escopo ALÉM do v1 já construído (bônus):** CRM comercial + prospecção fria, agenda (Google Calendar), assinatura de contratos (Autentique), cobrança automática (Asaas), chat com IA, CAC/LTV, ferramentas. Ver `v1.0-MILESTONE-AUDIT.md`.
+
+**As 3 pendências para fechar o v1 em 100%:**
+1. **TRAF-02** — subir campanha Google real, sincronizar e conferir spend/leads/roas/ctr; depois liberar Google em Relatórios/Saúde/Alertas.
+2. **ALRT-01** — adicionar limiar de verba configurável por cliente (hoje `THRESHOLD_CRITICO_SALDO=50` / `THRESHOLD_ATENCAO_SALDO=100` fixos em `src/lib/alertas/avaliar.ts`).
+3. **REL-04** — puxar a comparação com o período anterior para o texto do relatório (janelas "anterior" já existem em `src/lib/relatorios/engine.ts`).
 
 ---
 *Requisitos definidos em: 2026-07-10*
-*Última atualização: 2026-07-10 — scope expandido (Contratos/Checklist/Acompanhamento/Verbas Ads/Funil) e priorização Meta-first, a pedido do usuário*
+*Última atualização: 2026-07-24 — rastreabilidade reconciliada com o código real (29/32 concluídos; 3 pendências mapeadas). Antes: 2026-07-10 (scope expandido + priorização Meta-first).*

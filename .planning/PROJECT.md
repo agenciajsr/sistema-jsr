@@ -12,19 +12,22 @@ Dar à equipe da JSR visibilidade em tempo real da saúde de cada cliente (verba
 
 ### Validated
 
-(None yet — ship to validate)
+Entregues e em produção (reconciliado com o código em 2026-07-24 — ver `REQUIREMENTS.md`):
 
-### Active
+- [x] Dashboard geral com visão de clientes ativos, valores e briefing do negócio
+- [x] Painel de tráfego pago por cliente: status das contas de anúncio (Meta 100%; Google no ar, validando dado real), verba disponível, campanhas ativas/pausadas
+- [x] Visão de performance de campanhas e criativos por cliente (o que está performando bem vs. mal)
+- [x] Alertas de contratos (vencimento/renovação) + MRR em risco + queda de performance
+- [x] Geração automática de relatório semanal por cliente, segmentado por objetivo, pronto para copiar/colar (WhatsApp)
+- [x] Módulo de clientes com registro de contratos (datas, valores, vigência) — ficha redesenhada
+- [x] Camada financeira: data de cobrança por cliente, receita, MRR de ativos (+ previsão, churn, LTV, CAC — além do v1)
+- [x] Múltiplos usuários internos (equipe da JSR) com acesso ao sistema
 
-- [ ] Dashboard geral com visão de clientes ativos, valores e briefing do negócio
-- [ ] Painel de tráfego pago por cliente: status das contas de anúncio (Meta Ads e Google Ads), verba disponível, campanhas ativas/pausadas
-- [ ] Visão de performance de campanhas e criativos por cliente (o que está performando bem vs. mal)
-- [ ] Alertas dentro do sistema para verba baixa, com limiar configurável por cliente
-- [ ] Alertas de contratos (vencimento/renovação)
-- [ ] Geração automática de relatório semanal por cliente, com dados puxados das APIs de anúncios, segmentado pelo objetivo do cliente (e-commerce, negócio local, infoproduto), em formato pronto para copiar/colar (ex: WhatsApp)
-- [ ] Módulo de clientes com registro de contratos (datas, valores, vigência)
-- [ ] Camada financeira: data de cobrança por cliente, receita, MRR de clientes ativos
-- [ ] Múltiplos usuários internos (equipe da JSR) com acesso ao sistema
+### Active — as 3 pendências para fechar o v1 em 100%
+
+- [ ] **Alerta de verba com limiar configurável por cliente** (hoje o alerta existe mas o limiar é fixo no código)
+- [ ] **Relatório com comparação semana-vs-semana** no texto (hoje só números absolutos)
+- [ ] **Validar métricas do Google Ads com campanha real** e então liberar Google em Relatórios/Saúde/Alertas
 
 ### Out of Scope
 
@@ -55,11 +58,11 @@ Dar à equipe da JSR visibilidade em tempo real da saúde de cada cliente (verba
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| v1 é uso interno da equipe, sem portal de cliente | Reduz escopo inicial, foco na dor real (visibilidade interna) | — Pending |
-| Financeiro (MRR, cobrança) entra já no v1, não fica pra depois | Usuário confirmou que quer isso desde já, não é um "nice to have" futuro | — Pending |
-| Relatório semanal automático gera conteúdo pronto para copiar/colar, não envia sozinho | Reduz complexidade de integração com WhatsApp no v1; ainda economiza o trabalho manual de montar o relatório | — Pending |
-| Relação com ClickUp fica em aberto | Usuário ainda não decidiu se o sistema substitui ou complementa o ClickUp; decisão adiada para não travar o core | — Pending |
-| Limiar de alerta de verba é configurável por cliente, não fixo | Clientes têm portes diferentes de verba; um valor único não faz sentido pra todos | — Pending |
+| v1 é uso interno da equipe, sem portal de cliente | Reduz escopo inicial, foco na dor real (visibilidade interna) | ✅ Confirmado — sistema interno em produção |
+| Financeiro (MRR, cobrança) entra já no v1, não fica pra depois | Usuário confirmou que quer isso desde já, não é um "nice to have" futuro | ✅ Entregue e superado (Asaas, CAC, LTV, previsão) |
+| Relatório semanal automático gera conteúdo pronto para copiar/colar, não envia sozinho | Reduz complexidade de integração com WhatsApp no v1 | ✅ Entregue (envio automático fica p/ v2 — REL-05) |
+| Relação com ClickUp fica em aberto | Usuário ainda não decidiu se substitui ou complementa | 🟡 Em aberto — na prática o sistema já cobre tarefas/checklist/CRM |
+| Limiar de alerta de verba é configurável por cliente, não fixo | Clientes têm portes diferentes de verba; um valor único não serve pra todos | 🔴 PENDENTE (ALRT-01) — hoje o limiar está fixo; falta tornar configurável |
 
 ## Evolution
 
@@ -79,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-10 after initialization*
+*Last updated: 2026-07-24 — reconciliação do histórico com a realidade (v1 ~95% entregue, 29/32 requisitos concluídos, 3 pendências ativas). Antes: 2026-07-10 (initialization).*

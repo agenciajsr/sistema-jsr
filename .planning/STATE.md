@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Concluído quick 260720-urt (CRM: follow-up do funil frio — graduação AUTOMÁTICA 'Qualificado'→Vendas, cadência D1-D6 em 'Abordado' e supressão do SLA de 1h; regressão zero, 630/630 testes). Teste manual depende do seed do frio (trz) aplicado."
-last_updated: "2026-07-22T03:47:00.000Z"
-last_activity: "2026-07-22 - Completed quick task 260722-0s1: Google Ads Parte 2d — abas [Meta] [Google] [Compilado] no painel de /campanhas por ?plataforma= (só clientes com 2 plataformas, default Meta); camada de dados plataforma-aware; aba Google oculta o que a Parte 2b não grava com nota 'em breve'; split Meta/Google nos cards; REGRA DURA cumprida (nenhum número Meta muda, vitest 649/0)"
+status: v1-quase-completo
+stopped_at: "2026-07-24 — Reconciliação do histórico com a realidade (REQUIREMENTS/ROADMAP/STATE/PROJECT). v1 em ~95%: 29/32 requisitos concluídos e em produção. Restam 3 pendências para 100%: TRAF-02 (validar Google com dado real), ALRT-01 (limiar de verba configurável por cliente), REL-04 (comparação semana-vs-semana no relatório)."
+last_updated: "2026-07-24T00:00:00.000Z"
+last_activity: "2026-07-24 - Reconciliação do histórico do projeto + relatório visual de progresso. Antes: redesign da ficha do cliente (260723-v8z) + fotos/privacidade/cadastro blindado (e3507c4), tudo no ar. Bug de deploy GitHub→Vercel resolvido (App = All repositories)."
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 9
-  completed_plans: 8
-  percent: 83
+  scope: v1
+  requisitos_v1_total: 32
+  requisitos_v1_concluidos: 29
+  pendencias: 3   # TRAF-02, ALRT-01, REL-04
+  percent: 95
+  nota: "As 6 fases foram entregues via ~90 quick tasks (não pelo fluxo formal fase-a-fase). Produto em produção, muito além do escopo v1 (CRM, agenda, assinatura, cobrança, IA, CAC/LTV)."
 ---
 
 # Project State
@@ -21,16 +22,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** Dar à equipe da JSR visibilidade em tempo real da saúde de cada cliente (verba, campanhas, contratos, financeiro) em um único painel, com alertas proativos.
-**Current focus:** Fase 1 — Fundação (Acesso, Clientes e Contratos)
+**Current focus:** Fechar as 3 pendências do v1 (TRAF-02, ALRT-01, REL-04) para chegar a 100%.
 
 ## Current Position
 
-Phase: 1 of 6 (Fundação — Acesso, Clientes e Contratos)
-Plan: 9 of 9 in current phase
-Status: Ready to execute
-Last activity: 2026-07-22 - Completed quick task 260721-xa1: Google Ads Parte 2c (mostrar Google nas telas + vincular conta a cliente)
+Milestone v1: **~95% — essencialmente entregue e em produção** (sistema-jsr.vercel.app).
+29/32 requisitos concluídos. As 6 fases do roadmap foram entregues via ~90 quick tasks (não pelo fluxo formal). Ver `v1.0-MILESTONE-AUDIT.md` e a Rastreabilidade em `REQUIREMENTS.md`.
 
-Progress: [████████░░] 83%
+**Falta para 100% (próxima sessão):**
+1. **TRAF-02** — validar métricas do Google com campanha real (PASSO B) e liberar Google em Relatórios/Saúde/Alertas.
+2. **ALRT-01** — limiar de verba configurável por cliente (hoje fixo em `src/lib/alertas/avaliar.ts`).
+3. **REL-04** — comparação semana-vs-semana no texto do relatório (janelas "anterior" já existem na engine).
+
+Depois disso: fechar o milestone v1 formalmente e abrir o v2 (enriquecer Google, envio automático do relatório, novas plataformas).
+
+Progress: [█████████▓] 95% (v1)
 
 ## Performance Metrics
 
@@ -200,11 +206,15 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-22T03:47:00.000Z
-Stopped at: Concluído quick 260722-0s1 (Google Ads Parte 2d — abas [Meta] [Google] [Compilado] no painel de /campanhas por ?plataforma=, só para clientes com AS DUAS plataformas, default Meta; getPainelCampanhas ganha 3º param plataforma? / getInvestido30dPorCliente por-plataforma / getPlataformasDoCliente; seletor-plataforma.tsx novo; aba Google reusa componentes e oculta Conjuntos/Anúncios/Demografia/Regiões/Criativos com nota 'em breve'; split Meta/Google nos cards; REGRA DURA cumprida — nenhum número Meta muda; tsc/eslint/vitest 649/0). Antes: 260721-xa1 (Parte 2c — 9 queries de exibição unificadas meta+google, conta Google linkável a cliente). Antes: 260721-s9t (lead frio do webhook nasce em "Abordado" + carimba 1º contato). Antes: 260721-ogt (recorrência rola mês a mês) — limpeza `--apply` (42 futuras removidas) e migration 0041 (índice único ux_transacoes_pai_data) JÁ APLICADAS em 2026-07-21. Nenhuma migration pendente. Deploy de todos os quicks de 2026-07-21 já pushado (master sincronizado). seed-prospeccao-fria.ts (260720-trz) já aplicado (14 leads no funil frio). Pendente de teste manual: acompanhar D1 dos leads em "Abordado" após 24h.
+Last session: 2026-07-24
+Stopped at: Reconciliação do histórico do projeto com a realidade — REQUIREMENTS/ROADMAP/STATE/PROJECT atualizados (v1 ~95%, 29/32 concluídos, 3 pendências mapeadas: TRAF-02/ALRT-01/REL-04). Relatório visual de progresso entregue (artifact). ANTES nesta sessão: (1) redesign completo da FICHA do cliente (260723-v8z, commit fb451a8) — header em card, aba Visão geral, menu 11→7 abas, logo do cliente com upload, migrations 0044-0046 APLICADAS; (2) fotos com crop/zoom + logos nas campanhas + modo apresentação (olho embaça painel+/financeiro) + cadastro blindado (CPF/CNPJ validado, CEP ViaCEP, wa.me), commit e3507c4. Tudo NO AR. Bug de deploy resolvido: GitHub App da Vercel estava "Only select repositories" e o sistema-jsr caiu fora → mudado para All repositories, webhook voltou a disparar (ver memória [[deploy-vercel]]). Nenhuma migration pendente (última: 0046 tags). Servidor de dev local rodando na porta 3000.
+Próxima sessão: fechar as 3 pendências do v1 para chegar a 100%. As duas de ajuste (ALRT-01 limiar por cliente, REL-04 comparação no relatório) são rápidas; TRAF-02 depende do usuário subir uma campanha Google real.
 Resume file: None
 | 260721-vuc | Google Ads Parte 1 — fluxo OAuth "Conectar Google Ads" SEPARADO da Agenda (não arriscar Calendar): migration 0043 google_ads_credentials (APLICADA); lib/google/ads-oauth.ts (escopo adwords, redirect próprio) + ads-credentials.ts (refresh automático); rotas /api/integrations/google-ads/{start,callback} (cookie state próprio); desconectarGoogleAds; card "Google Ads" na /integracoes. Contexto: MCC 225-515-6295, token nível "Análises"=Explorer (lê produção, sem espera). PENDÊNCIAS DO USUÁRIO p/ conectar: Google Cloud Console (ativar Google Ads API + escopo adwords na consent + redirect URI + test user se Testing); p/ o sync (Parte 2): env GOOGLE_ADS_DEVELOPER_TOKEN + GOOGLE_ADS_LOGIN_CUSTOMER_ID. tsc limpo, eslint 0, vitest 649/0 | 2026-07-21 | 6536ea8 | [260721-vuc-google-ads-parte-1-fluxo-oauth-separado-](./quick/260721-vuc-google-ads-parte-1-fluxo-oauth-separado-/) |
 | 260721-wny | Google Ads Parte 2a — client REST (v21) + "Testar conexão". lib/google/ads-client.ts (getAdsApiVersion default v21 pois v20 descontinuada; adsSearch GAQL googleAds:search com dev-token+login-customer-id+bearer; listarContasDaMcc via customer_client; adsSyncConfigurado); action testarConexaoGoogleAds; botão TestarGoogleAds no card /integracoes (só quando conectado+env). PROVADO local contra MCC 225-515-6295: 2 contas (MCC + "Conta de Anúncios do Jacson" 8074565139). Só LEMOS. Falta env na Vercel p/ produção (GOOGLE_ADS_DEVELOPER_TOKEN + GOOGLE_ADS_LOGIN_CUSTOMER_ID). Sem migration. tsc limpo, eslint 0, vitest 649/0 | 2026-07-21 | b5e74c8 | [260721-wny-google-ads-parte-2a-client-rest-v21-test](./quick/260721-wny-google-ads-parte-2a-client-rest-v21-test/) |
 | 260721-wyt | Google Ads Parte 2b — sync engine + carona no cron. lib/google/ads-sync.ts espelha o Meta gravando em ad_accounts/campaign_insights com plataforma='google': atualizarListaContasGoogle (contas da MCC gerenciadora=false → upsert; customer id em meta_account_id; cliente_id null), syncSingleAccountGoogle (GAQL campaign 30d → mapeia cost_micros/1e6→spend, cpc/cpm/1e6, ctr×100, conversions→actions[lead] uso lead-gen, conversions_value→actionValues[purchase], channel_type→objective, status→effective_status), sincronizarTudoGoogle (degradação graciosa). Cron sync-meta ganha carona (try/catch próprio, só se conectado+env). Testado local: 1 conta gravada, 0 insights (a única conta linkada na MCC não tem campanhas — sync correto). ⚠️ mapeamento de métricas NÃO validado contra conta com dado real (nenhuma linkada). Verbas já mostra a conta google; Campanhas/Dashboard (filtram meta) = Parte 2c. tsc limpo, eslint 0, vitest 649/0 | 2026-07-21 | 8cb2ada | [260721-wyt-google-ads-parte-2b-sync-engine-contas-c](./quick/260721-wyt-google-ads-parte-2b-sync-engine-contas-c/) |
 | 260721-xa1 | Google Ads Parte 2c — mostrar Google nas telas + vincular conta a cliente. Remove filtro `plataforma='meta'` de 9 queries de EXIBIÇÃO (aggregate.ts: getInvestido30dPorCliente/listarClientesComContas/getResumoCliente/getMetricasIntervalo; painel.ts: getResumoLandingPorCliente/getPainelCampanhas; acoes-dia.ts; actions/trafego.ts: getTrafegoData/getContasNaoVinculadas ← faz a conta Google aparecer no dropdown de vínculo). vincularContaAoCliente/getContasDoCliente já agnósticos (intocados). MANTÉM 'meta' em 5 sites client-facing/Meta-específicos, agora com comentário justificando (relatórios 3x + avaliar-campanhas lê ad_insights só do Meta + regras-campanha alertas) — validação de métricas Google = PASSO B. Parse de actions/actionValues CONFIRMADO compatível: Google grava `[{action_type:'lead',value:String(conversions)}]` (com value string) → passa em isActionItem, mapeia lead→leads e purchase→receita sem código novo. Meta inalterado (única conta Google linkada está vazia). 4 warnings eslint pré-existentes (unused-vars) em relatorios registrados em deferred-items.md, não corrigidos (fora de escopo). tsc limpo, eslint 0 nas pastas alteradas, vitest 649/0 | 2026-07-22 | ce2d57c..7b42b90 | [260721-xa1-google-ads-parte-2c-mostrar-google-ads-n](./quick/260721-xa1-google-ads-parte-2c-mostrar-google-ads-n/) |
 | 260722-0s1 | Google Ads Parte 2d — abas de plataforma [Meta] [Google] [Compilado] no painel de /campanhas por `?plataforma=` (server-render, espelha `?periodo=`). Camada de dados plataforma-aware: getPainelCampanhas ganha 3º param plataforma? (predicado `eq(plataforma)` entra no and() só via spread condicional — undefined = todas as contas = byte-a-byte idêntico a hoje); getInvestido30dPorCliente devolve {meta,google} por cliente; getPlataformasDoCliente (distinct das plataformas ATIVAS, decide abas por CONTA existente não por gasto). Novo componente seletor-plataforma.tsx (SeletorPlataforma preserva cliente+periodo; BadgePlataforma). Abas SÓ com 2 plataformas (default Meta); cliente de 1 plataforma idêntico a hoje. Aba Google reusa componentes e OCULTA o que a Parte 2b não grava (Conjuntos/Anúncios via novo prop soloCampanhas na TabelaNiveis; Demografia/Regiões/Criativos via !ehGoogle) com nota "em breve para Google Ads". Cards da tela inicial ganham split "Meta R$X · Google R$Y" (só quando há gasto Google). REGRA DURA cumprida: nenhum número Meta muda; nenhuma função pura tocada. Ambiente do worktree ajustado (FF do master +280 commits, npm ci no checkout principal + junction node_modules). tsc limpo, eslint 0 nos 4 arquivos + novo componente, vitest 649/0 | 2026-07-22 | d8c71be..744b596 | [260722-0s1-google-ads-parte-2d-abas-de-plataforma-m](./quick/260722-0s1-google-ads-parte-2d-abas-de-plataforma-m/) | Verified |
+| 260723-v8z | Redesign da FICHA do cliente (mockup modelo_cliente_novo) — header em card (logo do cliente com upload, contatos com ícones, colunas Cliente desde/Responsável=gestor/Plano/Status com divisores); aba "Visão geral" default (Dados de cadastro c/ segmento/principal serviço/tags coloridas, Observações, Relacionamentos, Acessos e contas c/ logos de marca Meta/Google/IG, Atividades recentes + registrar interação, Pastas e documentos c/ pastas do Drive nomeadas amarelas, Próximas atividades, Histórico); menu de 11→7 abas (Financeiro funde Contrato+Cobrança+Faturas; Processos funde Onboarding+Retenção+Saída; Checklist e Acompanhamento removidos); Alertas viraram aba própria; Excluir cliente saiu do header→"Zona de perigo" no Editar (admin, confirmação digitando o nome); migrations 0044 (logo_url), 0045 (segmento/principal_servico/pastas/foto_url), 0046 (tags) APLICADAS. tsc limpo, vitest 658/0 | 2026-07-24 | fb451a8 | [260723-v8z-redesenhar-pagina-de-detalhe-do-cliente-](./quick/260723-v8z-redesenhar-pagina-de-detalhe-do-cliente-/) | Verified |
+| (feature) | Fotos + privacidade + cadastro blindado — CropFotoDialog (react-easy-crop: zoom/enquadrar, saída JPEG 512px corrige troca de foto que falhava >2MB) na logo do cliente e foto de perfil; foto do usuário na sidebar; logo do cliente nos cards de /campanhas; modo apresentação (hook useValoresVisiveis, olho embaça KPIs do painel + Resumo Financeiro + Clientes Ativos + LTV e a página /financeiro inteira); paridade criar/editar (segmento/principal serviço/tags no criar); CPF/CNPJ com máscara + validação de dígitos (lib documento.ts, 9 testes); CEP com ViaCEP; telefone da ficha vira link wa.me. tsc limpo, vitest 658/0 | 2026-07-24 | e3507c4 | — (feature batch) | Verified |
+| (docs) | Reconciliação do histórico do projeto com a realidade — REQUIREMENTS/ROADMAP/STATE/PROJECT atualizados: 29/32 requisitos v1 concluídos (~95%), 3 pendências mapeadas (TRAF-02 validar Google, ALRT-01 limiar por cliente, REL-04 comparação no relatório); milestone v1 mantido ABERTO até fechar as 3. Relatório visual de progresso gerado (artifact). Bug de deploy resolvido: GitHub App da Vercel estava "Only select repositories" → All repositories (webhook voltou) — ver [[deploy-vercel]] | 2026-07-24 | — | — | Done |

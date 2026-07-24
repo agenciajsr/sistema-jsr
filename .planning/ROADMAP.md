@@ -12,12 +12,14 @@ O sistema nasce de dentro para fora: primeiro a base (login, cadastro de cliente
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Fundação — Acesso, Clientes e Contratos** - Equipe consegue logar e manter o cadastro de clientes/contratos como base de tudo
-- [ ] **Phase 2: Integração com Meta Ads e Google Ads** - Sistema sincroniza automaticamente dados das contas de anúncio dos clientes
-- [ ] **Phase 3: Painel de Tráfego Pago e Alertas de Verba** - Equipe acompanha diariamente a saúde das contas de anúncio sem entrar manualmente no gerenciador
-- [ ] **Phase 4: Contratos e Financeiro** - Equipe recebe alertas de vencimento de contrato e enxerga a saúde financeira da agência
-- [ ] **Phase 5: Relatório Semanal Automático** - Relatório por cliente é gerado automaticamente, pronto para copiar e colar
-- [ ] **Phase 6: Painel Geral Unificado** - Equipe enxerga, numa única tela, o que precisa de atenção imediata em todos os clientes
+> **Nota de reconciliação (2026-07-24):** as 6 fases foram entregues na prática via ~90 quick tasks, não pelo fluxo formal fase-a-fase. Os checkboxes abaixo refletem o **estado real do código** (ver `REQUIREMENTS.md` e `v1.0-MILESTONE-AUDIT.md`), não a execução formal de PLAN/VERIFICATION.
+
+- [x] **Phase 1: Fundação — Acesso, Clientes e Contratos** — ✅ entregue (ficha do cliente redesenhada em 260723-v8z)
+- [x] **Phase 2: Integração com Meta Ads e Google Ads** — ✅ Meta completo · 🟡 Google no ar, faltando validar métricas com campanha real (PASSO B)
+- [x] **Phase 3: Painel de Tráfego Pago e Alertas de Verba** — ✅ entregue · 🟡 ALRT-01 (limiar de verba) ainda fixo, não configurável por cliente
+- [x] **Phase 4: Contratos e Financeiro** — ✅ entregue e superado (contratos c/ assinatura, cobrança Asaas, CAC/LTV, previsão de caixa)
+- [x] **Phase 5: Relatório Semanal Automático** — ✅ entregue · 🔴 REL-04 (comparação semana-vs-semana) ainda ausente no texto
+- [x] **Phase 6: Painel Geral Unificado** — ✅ entregue (painel + atenção imediata + modo apresentação)
 
 ## Phase Details
 
@@ -105,14 +107,17 @@ Plans:
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+**Reconciliado com o código real em 2026-07-24.** A execução real foi via quick tasks (não plans formais por fase), então "Plans Complete" abaixo não se aplica; a coluna Status reflete o produto em produção.
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Fundação — Acesso, Clientes e Contratos | 8/9 | In Progress | - |
-| 2. Integração com Meta Ads e Google Ads | 0/TBD | Not started | - |
-| 3. Painel de Tráfego Pago e Alertas de Verba | 0/TBD | Not started | - |
-| 4. Contratos e Financeiro | 0/TBD | Not started | - |
-| 5. Relatório Semanal Automático | 0/TBD | Not started | - |
-| 6. Painel Geral Unificado | 0/TBD | Not started | - |
+| Phase | Status | Observação |
+|-------|--------|-----------|
+| 1. Fundação — Acesso, Clientes e Contratos | ✅ Concluída | Ficha do cliente redesenhada (260723-v8z) |
+| 2. Integração com Meta Ads e Google Ads | 🟡 Quase | Meta 100%; Google no ar, falta validar dado real (PASSO B) |
+| 3. Painel de Tráfego Pago e Alertas de Verba | 🟡 Quase | Completo; falta ALRT-01 (limiar de verba por cliente) |
+| 4. Contratos e Financeiro | ✅ Concluída | Superou o escopo (assinatura, Asaas, CAC/LTV) |
+| 5. Relatório Semanal Automático | 🟡 Quase | Gera e segmenta; falta REL-04 (comparação c/ período anterior) |
+| 6. Painel Geral Unificado | ✅ Concluída | Painel + atenção imediata + modo apresentação |
+
+**Placar v1:** 29/32 requisitos concluídos (~95%). 3 pendências para 100%: TRAF-02, ALRT-01, REL-04.
+
+**Milestone v1:** aberto — restam as 3 pendências acima. Ao fechá-las, rodar o encerramento formal e abrir o v2 (enriquecer Google, envio automático do relatório, novas plataformas).
