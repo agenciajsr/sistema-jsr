@@ -328,12 +328,29 @@ export default async function ClienteDetalhePage({
                 {cliente.segmento ?? NICHO_LABEL[cliente.nicho]}
               </p>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-sm text-muted-foreground">
-                {cliente.contatoTelefone && (
-                  <span className="flex items-center gap-1.5">
-                    <Phone className="size-4" />
-                    {formatarTelefoneExibicao(cliente.contatoTelefone)}
-                  </span>
-                )}
+                {cliente.contatoTelefone &&
+                  (() => {
+                    const digitos = cliente.contatoTelefone.replace(/\D/g, '')
+                    const temWhats = digitos.length === 10 || digitos.length === 11
+                    const texto = formatarTelefoneExibicao(cliente.contatoTelefone)
+                    return temWhats ? (
+                      <a
+                        href={`https://wa.me/55${digitos}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir conversa no WhatsApp"
+                        className="flex items-center gap-1.5 transition-colors hover:text-foreground hover:underline"
+                      >
+                        <Phone className="size-4" />
+                        {texto}
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="size-4" />
+                        {texto}
+                      </span>
+                    )
+                  })()}
                 {cliente.contatoEmail && (
                   <span className="flex items-center gap-1.5">
                     <Mail className="size-4" />

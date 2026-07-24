@@ -27,6 +27,7 @@ import { withRetry } from '@/lib/utils/with-retry'
 import { rolarRecorrentes } from '@/lib/financeiro/rollover'
 import { hojeBrasilia } from '@/lib/date-br'
 import { progressoDoMes } from '@/lib/financeiro/calculos'
+import { BlocoPrivado, BotaoOlhoValores } from './privacidade-financeiro'
 import { filtrarAReceber } from '@/lib/financeiro/a-receber'
 
 import { TransacaoForm } from './transacao-form'
@@ -241,6 +242,7 @@ export default async function FinanceiroPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BotaoOlhoValores />
           <MonthSelector mes={mes} ano={ano} />
           {isMesCorrente && (
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground tabular-nums">
@@ -249,6 +251,10 @@ export default async function FinanceiroPage({
           )}
         </div>
       </div>
+
+      {/* Modo apresentação: com o olho fechado, tudo abaixo fica embaçado. */}
+      <BlocoPrivado>
+      <div className="space-y-6">
 
       {/* KPIs - sempre visiveis */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -386,6 +392,8 @@ export default async function FinanceiroPage({
         </TabsContent>
       </Tabs>
       </TransacoesProvider>
+      </div>
+      </BlocoPrivado>
     </div>
   )
 }

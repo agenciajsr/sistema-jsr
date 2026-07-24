@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { clienteSchema, SERVICOS_DISPONIVEIS, type ClienteInput } from '@/lib/validations/cliente'
+import { mascararCEP, mascararDocumento, somenteDigitos } from '@/lib/validations/documento'
 import { contratoSchema, type ContratoInput } from '@/lib/validations/contrato'
 
 const clienteComContratoSchema = z.object({
@@ -89,6 +90,10 @@ const ESTADOS_BR = [
 const valoresPadraoCliente: z.input<typeof clienteSchema> = {
   nome: '',
   nicho: 'ecommerce',
+  segmento: '',
+  principalServico: '',
+  tagsTexto: '',
+  pastas: [],
   status: 'ativo',
   interno: false,
   contatoNome: '',
@@ -149,6 +154,32 @@ export function ClienteForm(props: ClienteFormProps) {
 }
 
 const ERRO_PADRAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
+
+// CEP completo → endereço via ViaCEP (grátis, sem chave). Falha silenciosa:
+// se a API não responder, o usuário simplesmente preenche na mão.
+async function buscarEnderecoPorCep(
+  cep: string,
+): Promise<{ endereco: string; cidade: string; estado: string } | null> {
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`)
+    if (!r.ok) return null
+    const j = (await r.json()) as {
+      erro?: boolean
+      logradouro?: string
+      bairro?: string
+      localidade?: string
+      uf?: string
+    }
+    if (j.erro) return null
+    return {
+      endereco: [j.logradouro, j.bairro].filter(Boolean).join(', '),
+      cidade: j.localidade ?? '',
+      estado: j.uf ?? '',
+    }
+  } catch {
+    return null
+  }
+}
 
 // Máscara de telefone BR enquanto digita: (11) 99999-9999 / (11) 9999-9999.
 function formatarTelefone(v: string): string {
@@ -307,9 +338,18 @@ function ClienteFormCriar() {
               <Label htmlFor="cliente.documento">{tipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}</Label>
               <Input
                 id="cliente.documento"
-                placeholder={tipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}
+                placeholder={tipoPessoa === 'fisica' ? '000.000.000-00' : '00.000.000/0000-00'}
                 {...register('cliente.documento')}
+                onChange={(e) =>
+                  setValue(
+                    'cliente.documento',
+                    mascararDocumento(tipoPessoa === 'fisica' ? 'fisica' : 'juridica', e.target.value),
+                  )
+                }
               />
+              {errors.cliente?.documento && (
+                <p className="text-sm text-destructive">{errors.cliente.documento.message}</p>
+              )}
             </div>
           </div>
 
@@ -346,6 +386,34 @@ function ClienteFormCriar() {
             {errors.cliente?.nicho && (
               <p className="text-sm text-destructive">{errors.cliente.nicho.message}</p>
             )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="cliente.segmento">Segmento</Label>
+              <Input
+                id="cliente.segmento"
+                placeholder="Ex: Clínica de Estética"
+                {...register('cliente.segmento')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cliente.principalServico">Principal serviço</Label>
+              <Input
+                id="cliente.principalServico"
+                placeholder="Ex: Emagrecimento"
+                {...register('cliente.principalServico')}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cliente.tagsTexto">Tags</Label>
+            <Input
+              id="cliente.tagsTexto"
+              placeholder="Ex: Estética, Laser, Alto potencial (separadas por vírgula)"
+              {...register('cliente.tagsTexto')}
+            />
           </div>
 
           {/* Perfil interno (agência) — some das métricas de negócio, aparece no tráfego */}
@@ -424,7 +492,27 @@ function ClienteFormCriar() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cliente.cep">CEP</Label>
-            <Input id="cliente.cep" {...register('cliente.cep')} />
+            <Input
+              id="cliente.cep"
+              placeholder="00000-000"
+              {...register('cliente.cep')}
+              onChange={async (e) => {
+                const mascarado = mascararCEP(e.target.value)
+                setValue('cliente.cep', mascarado)
+                const digitos = somenteDigitos(mascarado)
+                if (digitos.length === 8) {
+                  const end = await buscarEnderecoPorCep(digitos)
+                  if (end) {
+                    if (end.endereco) setValue('cliente.endereco', end.endereco)
+                    if (end.cidade) setValue('cliente.cidade', end.cidade)
+                    if (end.estado) setValue('cliente.estado', end.estado)
+                  }
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Digite o CEP completo e o endereço preenche sozinho.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -748,9 +836,18 @@ function ClienteFormEditar({
               <Label htmlFor="documento">{tipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}</Label>
               <Input
                 id="documento"
-                placeholder={tipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}
+                placeholder={tipoPessoa === 'fisica' ? '000.000.000-00' : '00.000.000/0000-00'}
                 {...register('documento')}
+                onChange={(e) =>
+                  setValue(
+                    'documento',
+                    mascararDocumento(tipoPessoa === 'fisica' ? 'fisica' : 'juridica', e.target.value),
+                  )
+                }
               />
+              {errors.documento && (
+                <p className="text-sm text-destructive">{errors.documento.message}</p>
+              )}
             </div>
           </div>
 
@@ -927,7 +1024,27 @@ function ClienteFormEditar({
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="cep">CEP</Label>
-            <Input id="cep" {...register('cep')} />
+            <Input
+              id="cep"
+              placeholder="00000-000"
+              {...register('cep')}
+              onChange={async (e) => {
+                const mascarado = mascararCEP(e.target.value)
+                setValue('cep', mascarado)
+                const digitos = somenteDigitos(mascarado)
+                if (digitos.length === 8) {
+                  const end = await buscarEnderecoPorCep(digitos)
+                  if (end) {
+                    if (end.endereco) setValue('endereco', end.endereco)
+                    if (end.cidade) setValue('cidade', end.cidade)
+                    if (end.estado) setValue('estado', end.estado)
+                  }
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Digite o CEP completo e o endereço preenche sozinho.
+            </p>
           </div>
 
           <div className="space-y-2">

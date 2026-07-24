@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ChevronsUpDown, LogOut, UserCog } from 'lucide-react'
 
 import { signOut } from '@/actions/auth'
-import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,7 @@ import {
 type UserProfileProps = {
   nome: string
   cargo: string
+  fotoUrl?: string | null
 }
 
 function iniciais(nome: string): string {
@@ -27,11 +28,12 @@ function iniciais(nome: string): string {
 }
 
 // Perfil do rodapé da sidebar com ponto verde de online e menu (Sair).
-export function UserProfile({ nome, cargo }: UserProfileProps) {
+export function UserProfile({ nome, cargo, fotoUrl }: UserProfileProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-xl p-1.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center">
         <Avatar className="size-9">
+          {fotoUrl && <AvatarImage src={fotoUrl} alt={`Foto de ${nome}`} className="object-cover" />}
           <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
             {iniciais(nome)}
           </AvatarFallback>

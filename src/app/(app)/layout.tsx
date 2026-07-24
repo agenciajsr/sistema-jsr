@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
+import { eq } from 'drizzle-orm'
 
 import { AppSidebar } from '@/components/app-sidebar'
+import { db } from '@/lib/db'
+import { profiles } from '@/lib/db/schema'
 import { BuscaGlobal } from '@/components/layout/busca-global'
 import { AlertasBell } from '@/components/layout/alertas-bell'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -27,9 +30,15 @@ export default async function AppLayout({
 
   const cargo = CARGO_POR_ROLE[currentUser.role]
 
+  // Foto do usuário para o rodapé da sidebar (nulo = iniciais).
+  const perfil = await db.query.profiles.findFirst({
+    where: eq(profiles.id, currentUser.id),
+    columns: { fotoUrl: true },
+  })
+
   return (
     <SidebarProvider>
-      <AppSidebar nome={currentUser.nome} cargo={cargo} />
+      <AppSidebar nome={currentUser.nome} cargo={cargo} fotoUrl={perfil?.fotoUrl ?? null} />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-border/70 bg-card/70 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-2">

@@ -1,7 +1,10 @@
+'use client'
+
 import Link from 'next/link'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { MASCARA_MOEDA, useValoresVisiveis } from '@/lib/privacidade/use-valores-visiveis'
 import type { ResumoFinanceiroDash } from '@/lib/dashboard/data'
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
@@ -14,6 +17,11 @@ type Props = {
 }
 
 export function ResumoFinanceiro({ dados }: Props) {
+  // Segue o mesmo olho de privacidade dos KPIs do topo do Painel: valores
+  // ocultos por padrão (as barras de % continuam — mostram proporção, não valor).
+  const { visivel } = useValoresVisiveis()
+  const v = (valor: number) => (visivel ? formatadorMoeda.format(valor) : MASCARA_MOEDA)
+
   const receita = dados?.receita ?? 0
   const despesa = dados?.despesa ?? 0
   const lucro = dados?.lucro ?? 0
@@ -34,7 +42,7 @@ export function ResumoFinanceiro({ dados }: Props) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Receitas</span>
-            <span className="font-semibold tabular-nums">{formatadorMoeda.format(receita)}</span>
+            <span className="font-semibold tabular-nums">{v(receita)}</span>
           </div>
           <Progress
             value={Math.min(percentRecebido, 100)}
@@ -46,7 +54,7 @@ export function ResumoFinanceiro({ dados }: Props) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Despesas</span>
-            <span className="font-semibold tabular-nums">{formatadorMoeda.format(despesa)}</span>
+            <span className="font-semibold tabular-nums">{v(despesa)}</span>
           </div>
           <Progress
             value={percentDespesa}
@@ -60,7 +68,7 @@ export function ResumoFinanceiro({ dados }: Props) {
             <span className="text-sm text-muted-foreground">Lucro Líquido</span>
           </div>
           <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
-            {formatadorMoeda.format(lucro)}
+            {v(lucro)}
           </p>
           <p className="text-[11px] text-muted-foreground">Receitas − Despesas do mês atual</p>
         </div>

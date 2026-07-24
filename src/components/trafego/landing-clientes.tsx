@@ -53,6 +53,7 @@ export type ClienteCard = {
   nome: string
   nicho: Nicho
   objetivoPrincipal: string | null
+  logoUrl: string | null
 }
 
 type LandingClientesProps = {
@@ -97,10 +98,11 @@ export function LandingClientes({ clientes, investido30d, periodo, resumo }: Lan
               <Card className="h-full gap-3 border-none p-5 shadow-[var(--shadow-sm)] transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-md)]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    {/* Avatar com ANEL do pior status do semáforo (verde se tudo ok). */}
+                    {/* Avatar (logo do cliente quando cadastrada) com ANEL do
+                        pior status do semáforo (verde se tudo ok). */}
                     <span
                       className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ring-2',
+                        'flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-semibold ring-2',
                         status
                           ? ANEL_STATUS[status]
                           : ativo
@@ -109,7 +111,16 @@ export function LandingClientes({ clientes, investido30d, periodo, resumo }: Lan
                       )}
                       title={status ? TITULO_STATUS[status] : ativo ? 'Ativo no período' : 'Sem gasto no período'}
                     >
-                      {iniciais}
+                      {c.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- URL pública do Supabase Storage
+                        <img
+                          src={c.logoUrl}
+                          alt={`Logo de ${c.nome}`}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        iniciais
+                      )}
                     </span>
                     <span className="truncate font-medium" title={c.nome}>
                       {c.nome}

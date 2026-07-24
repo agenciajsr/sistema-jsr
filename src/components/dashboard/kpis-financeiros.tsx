@@ -1,13 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { Eye, EyeOff, HandCoins, TrendingUp, Wallet } from 'lucide-react'
 
 import { KpiCard } from '@/components/dashboard/kpi-card'
+import { MASCARA_MOEDA, useValoresVisiveis } from '@/lib/privacidade/use-valores-visiveis'
 import type { Tendencia } from '@/lib/mock/dashboard-ref'
-
-const CHAVE_STORAGE = 'jsr:valores-visiveis'
-const MASCARA = 'R$ ••••'
 
 const formatador = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -35,25 +32,9 @@ export function KpisFinanceiros({
   tendencias,
   series,
 }: Props) {
-  const [visivel, setVisivel] = useState(false)
+  const { visivel, alternar } = useValoresVisiveis()
 
-  // Timeout 0: evita setState síncrono no effect (regra react-hooks).
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setVisivel(localStorage.getItem(CHAVE_STORAGE) === '1')
-    }, 0)
-    return () => clearTimeout(t)
-  }, [])
-
-  function alternar() {
-    setVisivel((atual) => {
-      const novo = !atual
-      localStorage.setItem(CHAVE_STORAGE, novo ? '1' : '0')
-      return novo
-    })
-  }
-
-  const v = (valor: number) => (visivel ? formatador.format(valor) : MASCARA)
+  const v = (valor: number) => (visivel ? formatador.format(valor) : MASCARA_MOEDA)
 
   const botaoOlho = (
     <button

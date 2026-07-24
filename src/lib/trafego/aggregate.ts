@@ -127,7 +127,7 @@ export async function getInvestido30dPorCliente(): Promise<Map<string, { meta: n
   return mapa
 }
 
-export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetivoPrincipal: string | null; metaCpa: string | null; metaRoas: string | null; interno: boolean }
+export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetivoPrincipal: string | null; metaCpa: string | null; metaRoas: string | null; interno: boolean; logoUrl: string | null }
 
 /**
  * Lista clientes (id, nome, nicho, objetivo, metas) que possuem ao menos uma conta
@@ -135,7 +135,7 @@ export type ClienteComContas = { id: string; nome: string; nicho: Nicho; objetiv
  */
 export async function listarClientesComContas(): Promise<ClienteComContas[]> {
   const rows = await db
-    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, objetivoPrincipal: clientes.objetivoPrincipal, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas, interno: clientes.interno })
+    .selectDistinct({ id: clientes.id, nome: clientes.nome, nicho: clientes.nicho, objetivoPrincipal: clientes.objetivoPrincipal, metaCpa: clientes.metaCpa, metaRoas: clientes.metaRoas, interno: clientes.interno, logoUrl: clientes.logoUrl })
     .from(clientes)
     .innerJoin(adAccounts, eq(adAccounts.clienteId, clientes.id))
     .where(eq(adAccounts.ativo, true))

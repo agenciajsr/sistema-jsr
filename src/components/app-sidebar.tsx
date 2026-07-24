@@ -107,9 +107,11 @@ const secoes: NavSecao[] = [
 export function AppSidebar({
   nome,
   cargo,
+  fotoUrl,
 }: {
   nome: string
   cargo: string
+  fotoUrl?: string | null
 }) {
   const pathname = usePathname()
 
@@ -172,7 +174,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter className="gap-3">
-        <UserProfile nome={nome} cargo={cargo} />
+        <UserProfile nome={nome} cargo={cargo} fotoUrl={fotoUrl ?? null} />
       </SidebarFooter>
     </Sidebar>
   )

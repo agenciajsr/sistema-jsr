@@ -182,6 +182,7 @@ export default async function CampanhasPage({
             nome: c.nome,
             nicho: c.nicho,
             objetivoPrincipal: c.objetivoPrincipal,
+            logoUrl: c.logoUrl,
           }))}
           investido30d={investido30d ?? new Map()}
           periodo={periodo}

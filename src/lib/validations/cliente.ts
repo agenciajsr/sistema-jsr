@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { somenteDigitos, validarCNPJ, validarCPF } from './documento'
+
 export const SERVICOS_DISPONIVEIS = [
   'meta_ads', 'google_ads', 'site', 'criativos', 'social_media', 'consultoria',
   'gestao_trafego', 'landing_page', 'crm_estruturacao'
@@ -73,6 +75,25 @@ export const clienteSchema = z.object({
       path: ['motivoEncerramento'],
       message: 'Informe o motivo do encerramento',
     })
+  }
+  // Documento alimenta contrato e Asaas: se preenchido, os dígitos verificadores
+  // têm que fechar (CPF p/ pessoa física, CNPJ p/ jurídica).
+  const digitos = somenteDigitos(v.documento ?? '')
+  if (digitos.length > 0) {
+    if (v.tipoPessoa === 'fisica' && !validarCPF(digitos)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['documento'],
+        message: 'CPF inválido — confira os números digitados',
+      })
+    }
+    if (v.tipoPessoa === 'juridica' && !validarCNPJ(digitos)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['documento'],
+        message: 'CNPJ inválido — confira os números digitados',
+      })
+    }
   }
 })
 

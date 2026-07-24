@@ -1,7 +1,8 @@
 'use client'
 
 // Avatar do /perfil com upload da própria foto (lápis sobre o avatar).
-// Mesmo padrão da logo do cliente; usa a action atualizarMinhaFoto.
+// O arquivo escolhido abre o CropFotoDialog (zoom + enquadrar); a saída é
+// sempre JPEG 512×512, então o limite de 2 MB nunca estoura.
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10,6 +11,7 @@ import { toast } from 'sonner'
 
 import { atualizarMinhaFoto } from '@/actions/perfil'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { CropFotoDialog } from '@/components/crop-foto-dialog'
 
 function iniciais(nome: string): string {
   const partes = nome.trim().split(/\s+/).filter(Boolean)
@@ -30,14 +32,24 @@ export function FotoPerfilUpload({
   const inputRef = useRef<HTMLInputElement>(null)
   const [enviando, setEnviando] = useState(false)
   const [urlAtual, setUrlAtual] = useState(fotoUrl)
+  const [arquivoParaCrop, setArquivoParaCrop] = useState<File | null>(null)
 
-  async function aoEscolher(e: React.ChangeEvent<HTMLInputElement>) {
+  function aoEscolher(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    e.target.value = ''
+    e.target.value = '' // permite reescolher o mesmo arquivo
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Envie uma imagem (JPG, PNG ou WebP).')
+      return
+    }
+    setArquivoParaCrop(file)
+  }
+
+  async function enviarRecortada(blob: Blob) {
+    setArquivoParaCrop(null)
     setEnviando(true)
     const fd = new FormData()
-    fd.set('file', file)
+    fd.set('file', new File([blob], 'foto.jpg', { type: 'image/jpeg' }))
     const result = await atualizarMinhaFoto(fd)
     setEnviando(false)
     if ('error' in result) {
@@ -86,6 +98,13 @@ export function FotoPerfilUpload({
         <p className="text-sm font-medium">{nome}</p>
         <p className="text-xs text-muted-foreground">Clique no lápis para trocar sua foto</p>
       </div>
+
+      <CropFotoDialog
+        file={arquivoParaCrop}
+        titulo="Ajustar foto de perfil"
+        onConfirmar={enviarRecortada}
+        onCancelar={() => setArquivoParaCrop(null)}
+      />
     </div>
   )
 }

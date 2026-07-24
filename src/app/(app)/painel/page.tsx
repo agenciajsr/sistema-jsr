@@ -2,11 +2,12 @@ import { Suspense } from 'react'
 import {
   Megaphone,
   MessageCircle,
-  Users,
 } from 'lucide-react'
 
 import { KpiCard } from '@/components/dashboard/kpi-card'
 import { KpisFinanceiros } from '@/components/dashboard/kpis-financeiros'
+import { KpiClientesAtivos } from '@/components/dashboard/kpi-clientes-ativos'
+import { ChipsExecutivos } from '@/components/dashboard/chips-executivos'
 import { PerformanceGeral } from '@/components/dashboard/performance-geral'
 import { CampanhasSaude } from '@/components/dashboard/campanhas-saude'
 import { AgendaHoje } from '@/components/dashboard/agenda-hoje'
@@ -61,7 +62,6 @@ export default async function PainelPage({ searchParams }: Props) {
   // os lotes): resumo executivo de churn/LTV (quick-260719-wwm). null =
   // migration 0038 pendente → os chips simplesmente não aparecem.
   const visaoExecutiva = await getVisaoExecutiva()
-  const formatadorMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
   const primeiroNome = user?.nome?.split(' ')[0] ?? 'Usuário'
 
@@ -110,11 +110,8 @@ export default async function PainelPage({ searchParams }: Props) {
             lucro: exibirSerie(data?.series.lucro),
           }}
         />
-        <KpiCard
-          label="Clientes Ativos"
-          valor={formatadorNumero.format(data?.kpis.clientesAtivos ?? 0)}
-          icon={Users}
-          cor="info"
+        <KpiClientesAtivos
+          total={data?.kpis.clientesAtivos ?? 0}
           tendencia={
             data && data.novosClientesMes > 0
               ? { valor: `${data.novosClientesMes} este mês`, direcao: 'up' }
@@ -143,20 +140,11 @@ export default async function PainelPage({ searchParams }: Props) {
 
       {/* Chips executivos — churn e LTV (visão completa no Financeiro → Visão Analítica) */}
       {visaoExecutiva && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
-            Churn do mês:{' '}
-            {visaoExecutiva.churnMes.percentual === null
-              ? '—'
-              : `${visaoExecutiva.churnMes.percentual}%`}
-            {visaoExecutiva.churn3m.percentual !== null &&
-              ` · 3m ${visaoExecutiva.churn3m.percentual}%`}
-          </span>
-          <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
-            LTV médio:{' '}
-            {visaoExecutiva.ltv ? formatadorMoeda.format(visaoExecutiva.ltv.valor) : '—'}
-          </span>
-        </div>
+        <ChipsExecutivos
+          churnMes={visaoExecutiva.churnMes.percentual}
+          churn3m={visaoExecutiva.churn3m.percentual}
+          ltv={visaoExecutiva.ltv ? visaoExecutiva.ltv.valor : null}
+        />
       )}
 
       {/* Linha do meio — Performance mais larga, Saúde e Agenda ao lado */}

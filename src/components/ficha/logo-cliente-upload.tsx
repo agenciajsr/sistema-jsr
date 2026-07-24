@@ -1,8 +1,8 @@
 'use client'
 
 // Avatar do header da ficha com upload da LOGO do cliente (lápis sobre o
-// avatar). Espelha a UX da foto do lead (crm/ficha-lead.tsx): input file
-// escondido + botão-lápis; ao escolher, envia via server action e atualiza.
+// avatar). O arquivo escolhido abre o CropFotoDialog (zoom + enquadrar); a
+// saída é sempre JPEG 512×512, então o limite de 2 MB nunca estoura.
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 
 import { atualizarLogoCliente } from '@/actions/clientes'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { CropFotoDialog } from '@/components/crop-foto-dialog'
 
 export function LogoClienteUpload({
   clienteId,
@@ -26,17 +27,25 @@ export function LogoClienteUpload({
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [enviando, setEnviando] = useState(false)
-  // Otimista: mostra a nova logo assim que o servidor confirma, sem esperar o
-  // refresh completo repintar o header.
   const [urlAtual, setUrlAtual] = useState(logoUrl)
+  const [arquivoParaCrop, setArquivoParaCrop] = useState<File | null>(null)
 
-  async function aoEscolher(e: React.ChangeEvent<HTMLInputElement>) {
+  function aoEscolher(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = '' // permite reescolher o mesmo arquivo
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Envie uma imagem (JPG, PNG ou WebP).')
+      return
+    }
+    setArquivoParaCrop(file)
+  }
+
+  async function enviarRecortada(blob: Blob) {
+    setArquivoParaCrop(null)
     setEnviando(true)
     const fd = new FormData()
-    fd.set('file', file)
+    fd.set('file', new File([blob], 'logo.jpg', { type: 'image/jpeg' }))
     const result = await atualizarLogoCliente(clienteId, fd)
     setEnviando(false)
     if ('error' in result) {
@@ -78,6 +87,13 @@ export function LogoClienteUpload({
         accept="image/*"
         className="hidden"
         onChange={aoEscolher}
+      />
+
+      <CropFotoDialog
+        file={arquivoParaCrop}
+        titulo="Ajustar logo do cliente"
+        onConfirmar={enviarRecortada}
+        onCancelar={() => setArquivoParaCrop(null)}
       />
     </div>
   )
