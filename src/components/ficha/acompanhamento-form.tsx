@@ -25,7 +25,7 @@ export function AcompanhamentoForm({ clienteId }: { clienteId: string }) {
         toast.error(result.error)
         return
       }
-      toast.success('Nota adicionada.')
+      toast.success('Nota registrada nas Atividades recentes.')
       setNota('')
       router.refresh()
     })

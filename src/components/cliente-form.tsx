@@ -2,18 +2,30 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { z } from 'zod'
+import { Plus, Trash2 } from 'lucide-react'
 
-import { createClienteComContrato, updateCliente, getProfiles } from '@/actions/clientes'
+import { createClienteComContrato, updateCliente, getProfiles, deleteCliente } from '@/actions/clientes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   Select,
   SelectContent,
@@ -116,7 +128,12 @@ type ProfileOption = { id: string; nome: string }
 
 type ClienteFormProps =
   | { mode: 'criar' }
-  | { mode: 'editar'; clienteId: string; defaultValues: z.input<typeof clienteSchema> }
+  | {
+      mode: 'editar'
+      clienteId: string
+      defaultValues: z.input<typeof clienteSchema>
+      isAdmin?: boolean
+    }
 
 export function ClienteForm(props: ClienteFormProps) {
   if (props.mode === 'editar') {
@@ -124,6 +141,7 @@ export function ClienteForm(props: ClienteFormProps) {
       <ClienteFormEditar
         clienteId={props.clienteId}
         defaultValues={props.defaultValues}
+        isAdmin={props.isAdmin ?? false}
       />
     )
   }
@@ -131,6 +149,88 @@ export function ClienteForm(props: ClienteFormProps) {
 }
 
 const ERRO_PADRAO = 'Não foi possível salvar. Verifique os dados e tente novamente.'
+
+// Máscara de telefone BR enquanto digita: (11) 99999-9999 / (11) 9999-9999.
+function formatarTelefone(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length === 0) return ''
+  if (d.length <= 2) return `(${d}`
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
+// Zona de perigo: excluir cliente (admin-only, D-03). Confirmação FORTE — exige
+// digitar o nome exato do cliente. A ideia do sistema é inativar (status), não
+// deletar; por isso a exclusão vive escondida aqui, longe da ficha.
+function ZonaDePerigo({ clienteId, clienteNome }: { clienteId: string; clienteNome: string }) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [confirmacao, setConfirmacao] = useState('')
+  const podeExcluir = confirmacao.trim() === clienteNome.trim() && clienteNome.trim() !== ''
+
+  function excluir() {
+    startTransition(async () => {
+      const result = await deleteCliente(clienteId)
+      if ('error' in result) {
+        toast.error(result.error ?? 'Não foi possível excluir o cliente.')
+        return
+      }
+      toast.success('Cliente excluído.')
+      router.push('/clientes')
+    })
+  }
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="text-destructive">Zona de perigo</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Excluir remove o cliente e todo o histórico permanentemente. O normal é{' '}
+          <strong>inativar</strong> (mude o Status para Encerrado). Só exclua se for realmente
+          necessário.
+        </p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button type="button" variant="destructive">
+              <Trash2 className="size-4" />
+              Excluir cliente
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir cliente permanentemente</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação não pode ser desfeita. O cliente e todo o histórico de contratos
+                vinculados serão removidos. Para confirmar, digite o nome do cliente:{' '}
+                <strong>{clienteNome}</strong>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              value={confirmacao}
+              onChange={(e) => setConfirmacao(e.target.value)}
+              placeholder={clienteNome}
+              autoComplete="off"
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmacao('')}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                type="button"
+                variant="destructive"
+                disabled={!podeExcluir || isPending}
+                onClick={excluir}
+              >
+                {isPending ? 'Excluindo...' : 'Excluir definitivamente'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
+  )
+}
 
 function ClienteFormCriar() {
   const router = useRouter()
@@ -146,6 +246,7 @@ function ClienteFormCriar() {
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<ClienteComContratoFormValues, unknown, ClienteComContratoOutput>({
     resolver: zodResolver(clienteComContratoSchema),
@@ -283,7 +384,14 @@ function ClienteFormCriar() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="cliente.contatoTelefone">Telefone</Label>
-              <Input id="cliente.contatoTelefone" {...register('cliente.contatoTelefone')} />
+              <Input
+                id="cliente.contatoTelefone"
+                placeholder="(11) 99999-9999"
+                {...register('cliente.contatoTelefone')}
+                onChange={(e) =>
+                  setValue('cliente.contatoTelefone', formatarTelefone(e.target.value))
+                }
+              />
             </div>
           </div>
 
@@ -555,9 +663,11 @@ function ClienteFormCriar() {
 function ClienteFormEditar({
   clienteId,
   defaultValues,
+  isAdmin,
 }: {
   clienteId: string
   defaultValues: z.input<typeof clienteSchema>
+  isAdmin: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -572,11 +682,18 @@ function ClienteFormEditar({
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<z.input<typeof clienteSchema>, unknown, ClienteInput>({
     resolver: zodResolver(clienteSchema),
     defaultValues,
   })
+
+  const {
+    fields: pastasFields,
+    append: appendPasta,
+    remove: removePasta,
+  } = useFieldArray({ control, name: 'pastas' })
 
   const tipoPessoa = watch('tipoPessoa')
   const agendamento = watch('agendamentoPosts')
@@ -670,6 +787,34 @@ function ClienteFormEditar({
             {errors.nicho && <p className="text-sm text-destructive">{errors.nicho.message}</p>}
           </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="segmento">Segmento</Label>
+              <Input
+                id="segmento"
+                placeholder="Ex: Clínica de Estética"
+                {...register('segmento')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="principalServico">Principal serviço</Label>
+              <Input
+                id="principalServico"
+                placeholder="Ex: Emagrecimento"
+                {...register('principalServico')}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tagsTexto">Tags</Label>
+            <Input
+              id="tagsTexto"
+              placeholder="Ex: Estética, Laser, Alto potencial (separadas por vírgula)"
+              {...register('tagsTexto')}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
             <Controller
@@ -744,7 +889,12 @@ function ClienteFormEditar({
             </div>
             <div className="space-y-2">
               <Label htmlFor="contatoTelefone">Telefone</Label>
-              <Input id="contatoTelefone" {...register('contatoTelefone')} />
+              <Input
+                id="contatoTelefone"
+                placeholder="(11) 99999-9999"
+                {...register('contatoTelefone')}
+                onChange={(e) => setValue('contatoTelefone', formatarTelefone(e.target.value))}
+              />
             </div>
           </div>
 
@@ -967,11 +1117,57 @@ function ClienteFormEditar({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="linkDrive">Pasta do Google Drive</Label>
+            <Label htmlFor="linkDrive">Pasta do Google Drive (principal)</Label>
             <Input id="linkDrive" placeholder="https://drive.google.com/drive/folders/..." {...register('linkDrive')} />
             {errors.linkDrive && (
               <p className="text-sm text-destructive">{errors.linkDrive.message}</p>
             )}
+          </div>
+
+          {/* Pastas extras nomeadas (Criativos, Relatórios…) — aparecem no card
+              "Pastas e documentos" da ficha com link direto. */}
+          <div className="space-y-2">
+            <Label>Outras pastas do Drive</Label>
+            <div className="space-y-2">
+              {pastasFields.map((f, i) => (
+                <div key={f.id} className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    className="sm:w-1/3"
+                    placeholder="Nome (ex: Criativos)"
+                    {...register(`pastas.${i}.nome`)}
+                  />
+                  <Input
+                    className="flex-1"
+                    placeholder="https://drive.google.com/..."
+                    {...register(`pastas.${i}.url`)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-muted-foreground"
+                    onClick={() => removePasta(i)}
+                    aria-label="Remover pasta"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              {errors.pastas && (
+                <p className="text-sm text-destructive">
+                  Confira o nome e o link de cada pasta.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendPasta({ nome: '', url: '' })}
+              >
+                <Plus className="size-4" />
+                Adicionar pasta
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -980,6 +1176,10 @@ function ClienteFormEditar({
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <ZonaDePerigo clienteId={clienteId} clienteNome={String(defaultValues.nome ?? '')} />
+      )}
 
       <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
         {isPending ? 'Salvando...' : 'Salvar Cliente'}

@@ -1,13 +1,16 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { eq } from 'drizzle-orm'
 import { format, parseISO } from 'date-fns'
-import { Activity, CalendarClock, TrendingUp, Wallet } from 'lucide-react'
-
-import { deleteCliente } from '@/actions/clientes'
+import {
+  CalendarDays,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+} from 'lucide-react'
 import { deleteContrato, getContratosDoCliente } from '@/actions/contratos'
-import { getChecklistDoCliente } from '@/actions/checklist'
 import { getAcompanhamentosDoCliente } from '@/actions/acompanhamento'
 import { getCobrancasDoCliente } from '@/actions/financeiro'
 import { getContasDoCliente, getContasNaoVinculadas } from '@/actions/trafego'
@@ -15,19 +18,19 @@ import { getAlertasDoCliente } from '@/actions/alertas'
 import { listarDocumentos } from '@/actions/documentos'
 import { getResumoCliente, heroiDoObjetivo } from '@/lib/trafego/aggregate'
 import { ContratoForm } from '@/components/contrato-form'
-import { ChecklistCliente } from '@/components/ficha/checklist-cliente'
-import { AcompanhamentoForm } from '@/components/ficha/acompanhamento-form'
 import { CobrancaCliente } from '@/components/ficha/cobranca-cliente'
 import { FaturasCliente } from '@/components/ficha/faturas-cliente'
 import { getFaturasDoCliente } from '@/lib/cobrancas/dados'
 import { getTarefasDoClienteFicha } from '@/lib/tarefas/ficha-cliente'
 import { TarefasCliente } from '@/components/ficha/tarefas-cliente'
+import { VisaoGeralCliente } from '@/components/ficha/visao-geral-cliente'
+import { LogoClienteUpload } from '@/components/ficha/logo-cliente-upload'
+import { InstagramLogo } from '@/components/ficha/brand-logos'
 import { asaasDisponivel } from '@/lib/asaas/client'
 import { VincularContaFicha } from '@/components/ficha/vincular-conta-ficha'
 import { MetasCliente } from '@/components/ficha/metas-cliente'
 import { UploadDocumento } from '@/components/upload-documento'
 import { DocumentosLista } from '@/components/documentos-lista'
-import { StatCard } from '@/components/stat-card'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,14 +42,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getCurrentUser } from '@/lib/auth/session'
 import { db } from '@/lib/db'
-import { clientes, tarefas, tarefaChecklistItems } from '@/lib/db/schema'
+import { clientes, profiles, tarefas, tarefaChecklistItems } from '@/lib/db/schema'
 import { asc, and, inArray, or, sql } from 'drizzle-orm'
 import {
   OnboardingCliente,
@@ -84,6 +87,18 @@ const NICHO_LABEL: Record<Cliente['nicho'], string> = {
   infoproduto: 'Infoproduto',
 }
 
+const SERVICO_LABELS: Record<string, string> = {
+  meta_ads: 'Meta Ads',
+  google_ads: 'Google Ads',
+  site: 'Site / Landing Page',
+  criativos: 'Criativos',
+  social_media: 'Social Media',
+  consultoria: 'Consultoria',
+  gestao_trafego: 'Gestão de Tráfego',
+  landing_page: 'Landing Page',
+  crm_estruturacao: 'CRM / Estruturação',
+}
+
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
@@ -93,8 +108,22 @@ function formatarData(data: string): string {
   return format(parseISO(data), 'dd/MM/yyyy')
 }
 
-function formatarDataHora(data: Date): string {
-  return format(data, 'dd/MM/yyyy HH:mm')
+// Telefone BR para exibição: 10-11 dígitos viram (11) 99999-9999; qualquer
+// outro formato é mostrado como foi digitado.
+function formatarTelefoneExibicao(v: string): string {
+  const d = v.replace(/\D/g, '')
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return v
+}
+
+// Iniciais do avatar: primeira letra da primeira e da última palavra do nome.
+function iniciaisDoNome(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean)
+  if (partes.length === 0) return '?'
+  return [partes[0], partes[partes.length - 1]]
+    .map((p) => p.charAt(0).toUpperCase())
+    .join('')
 }
 
 // Status da conta de anúncio (Meta accountStatus) → rótulo + cor semântica do StatCard.
@@ -116,14 +145,6 @@ const SEVERIDADE_BORDA: Record<'critico' | 'atencao' | 'info', string> = {
 // Server Actions inline: mantêm a checagem role === 'admin' e a copy exata de
 // confirmação diretamente neste arquivo (D-03), sem extrair para um client
 // component separado.
-async function excluirClienteAction(clienteId: string) {
-  'use server'
-  const resultado = await deleteCliente(clienteId)
-  if (!('error' in resultado)) {
-    redirect('/clientes')
-  }
-}
-
 async function excluirContratoAction(contratoId: string) {
   'use server'
   await deleteContrato(contratoId)
@@ -150,7 +171,6 @@ export default async function ClienteDetalhePage({
     contasDoCliente,
     naoVinculadas,
     resumo,
-    checklist,
     acompanhamentos,
     alertas,
     docsCliente,
@@ -161,7 +181,6 @@ export default async function ClienteDetalhePage({
     getContasDoCliente(id),
     getContasNaoVinculadas(),
     getResumoCliente(id, '30d'),
-    getChecklistDoCliente(id),
     getAcompanhamentosDoCliente(id),
     getAlertasDoCliente(id),
     listarDocumentos(id),
@@ -174,6 +193,24 @@ export default async function ClienteDetalhePage({
   // nunca em Promise.all — quick-260717-i26).
   const tarefasFicha = await getTarefasDoClienteFicha(id)
   const asaasConfigurado = asaasDisponivel()
+
+  // Gestor responsável (D-header): o membro da JSR que gere o cliente — NÃO o
+  // contato do cliente. Query leve e sequencial (columns só nome).
+  const gestor = cliente.gestorId
+    ? await db.query.profiles.findFirst({
+        where: eq(profiles.id, cliente.gestorId),
+        columns: { nome: true, fotoUrl: true },
+      })
+    : null
+  const gestorNome = gestor?.nome ?? null
+  const gestorFoto = gestor?.fotoUrl ?? null
+
+  // Serviços contratados (jsonb) → tags/plano na Visão geral.
+  const servicos = Array.isArray(cliente.servicosContratados)
+    ? (cliente.servicosContratados as string[])
+    : []
+  const planoLabel =
+    servicos.length > 0 ? (SERVICO_LABELS[servicos[0]] ?? servicos[0]) : null
 
   // Processos (gp5): a fonte única é a TAREFA do processo (etiqueta técnica
   // processo:{tipo} em tarefas.etiquetas) + o checklist dela. 2 queries
@@ -250,161 +287,178 @@ export default async function ClienteDetalhePage({
   // D-06: histórico exclui o contrato vigente, que já é exibido em destaque acima.
   const registrosAnteriores = historico.filter((contrato) => contrato.id !== contratoAtual?.id)
 
-  // KPI "Próxima cobrança": entre as não-pagas, a de data futura mais próxima;
-  // se nenhuma futura, a não-paga mais recente.
-  const naoPagas = cobrancas.filter((c) => c.status !== 'pago')
-  const hojeStr = new Date().toISOString().slice(0, 10)
-  const futuras = naoPagas
-    .filter((c) => c.data >= hojeStr)
-    .sort((a, b) => a.data.localeCompare(b.data))
-  const proximaCobranca =
-    futuras[0] ??
-    [...naoPagas].sort((a, b) => b.data.localeCompare(a.data))[0] ??
-    null
-
-  // KPI "Status da conta": deriva da primeira conta vinculada (se houver).
-  const statusConta = contasDoCliente.length > 0
-    ? derivarStatusConta(contasDoCliente[0].accountStatus)
-    : null
-
   return (
     <div className="space-y-6">
-      <BotaoVoltar href="/clientes" label="Clientes" />
-      {/* Cabeçalho estilo Painel */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight">{cliente.nome}</h1>
-          <div className="flex items-center gap-2">
-            <Badge
-              style={{ backgroundColor: STATUS_COLOR[cliente.status] }}
-              className="text-white"
-            >
-              {STATUS_LABEL[cliente.status]}
-            </Badge>
-            <span className="text-sm text-muted-foreground">
-              {NICHO_LABEL[cliente.nicho]}
-            </span>
-          </div>
-          {(cliente.contatoNome || cliente.contatoTelefone || cliente.contatoEmail) && (
-            <p className="text-sm text-muted-foreground">
-              Contato responsável: {[cliente.contatoNome, cliente.contatoTelefone, cliente.contatoEmail]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
-          )}
-          {cliente.notas && <p className="text-sm text-muted-foreground">{cliente.notas}</p>}
-        </div>
-
+      {/* Barra superior: voltar + ações (fora do card) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <BotaoVoltar href="/clientes" label="Clientes" />
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {cliente.linkDrive && (
-            <Button asChild variant="outline">
-              <a href={cliente.linkDrive} target="_blank" rel="noopener noreferrer">
-                Pasta do Drive
-              </a>
-            </Button>
-          )}
           <Button asChild variant="outline">
-            <Link href={`/clientes/${id}/editar`}>Editar</Link>
+            <Link href={`/clientes/${id}/editar`}>
+              <Pencil className="size-4" />
+              Editar cliente
+            </Link>
           </Button>
-          {isAdmin && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">Excluir cliente</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir cliente</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {'Esta ação não pode ser desfeita. O cliente e todo o histórico de contratos vinculados serão removidos permanentemente. Deseja continuar?'}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <form action={excluirClienteAction.bind(null, id)}>
-                    <AlertDialogAction type="submit" variant="destructive">
-                      Excluir cliente
-                    </AlertDialogAction>
-                  </form>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
         </div>
       </div>
 
-      {/* Faixa de alertas do cliente */}
-      {alertas.length > 0 && (
-        <div className="space-y-2">
-          {alertas.map((alerta) => (
-            <div
-              key={alerta.id}
-              className={`rounded-lg border border-l-4 bg-secondary/40 p-3 ${SEVERIDADE_BORDA[alerta.severidade]}`}
-            >
-              <p className="text-sm font-medium">{alerta.titulo}</p>
-              <p className="text-sm text-muted-foreground">{alerta.detalhe}</p>
+      {/* Header rico em card (mockup modelo_cliente_novo) */}
+      <Card>
+        <CardContent className="flex flex-col gap-6 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <LogoClienteUpload
+              clienteId={id}
+              nome={cliente.nome}
+              logoUrl={cliente.logoUrl}
+              iniciais={iniciaisDoNome(cliente.nome)}
+            />
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight">
+                  {cliente.nome}
+                </h1>
+                <Badge
+                  style={{ backgroundColor: STATUS_COLOR[cliente.status] }}
+                  className="text-white"
+                >
+                  {STATUS_LABEL[cliente.status]}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {cliente.segmento ?? NICHO_LABEL[cliente.nicho]}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-sm text-muted-foreground">
+                {cliente.contatoTelefone && (
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="size-4" />
+                    {formatarTelefoneExibicao(cliente.contatoTelefone)}
+                  </span>
+                )}
+                {cliente.contatoEmail && (
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="size-4" />
+                    {cliente.contatoEmail}
+                  </span>
+                )}
+                {cliente.instagram && (
+                  <span className="flex items-center gap-1.5">
+                    <InstagramLogo className="size-4" />
+                    {cliente.instagram}
+                  </span>
+                )}
+                {(cliente.cidade || cliente.estado) && (
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="size-4" />
+                    {[cliente.cidade, cliente.estado].filter(Boolean).join(', ')}
+                  </span>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
 
-      {/* Faixa de KPIs */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="MRR do cliente"
-          value={contratoAtual ? formatadorMoeda.format(Number(contratoAtual.valorMensal)) : '—'}
-          icon={Wallet}
-          color="success"
-          helper="receita mensal recorrente"
-        />
-        <StatCard
-          label="Próxima cobrança"
-          value={proximaCobranca ? formatarData(proximaCobranca.data) : '—'}
-          icon={CalendarClock}
-          color="primary"
-          helper={
-            proximaCobranca
-              ? proximaCobranca.status === 'vencido'
-                ? 'Vencida'
-                : 'Pendente'
-              : 'sem cobranças em aberto'
-          }
-        />
-        <StatCard
-          label="Verba rodando"
-          value={resumo?.temDados ? formatadorMoeda.format(resumo.totais.spend) : '—'}
-          icon={TrendingUp}
-          color="warning"
-          helper="últimos 30 dias"
-        />
-        <StatCard
-          label="Status da conta"
-          value={statusConta ? statusConta.label : '—'}
-          icon={Activity}
-          color={statusConta ? statusConta.color : 'primary'}
-          helper="saúde das contas de anúncio"
-        />
-      </div>
+          {/* Colunas de resumo (mockup) — divisores verticais, só em telas grandes */}
+          <div className="hidden shrink-0 lg:flex lg:items-center">
+            <div className="space-y-1 border-l pl-6 pr-6">
+              <p className="text-xs text-muted-foreground">Cliente desde</p>
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <CalendarDays className="size-4 text-muted-foreground" />
+                {format(cliente.createdAt, 'dd/MM/yyyy')}
+              </p>
+            </div>
+            <div className="space-y-1 border-l pl-6 pr-6">
+              <p className="text-xs text-muted-foreground">Responsável</p>
+              {gestorNome ? (
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Avatar className="size-6">
+                    {gestorFoto && <AvatarImage src={gestorFoto} alt={gestorNome} />}
+                    <AvatarFallback className="text-[10px]">
+                      {iniciaisDoNome(gestorNome)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {gestorNome}
+                </span>
+              ) : (
+                <p className="text-sm font-medium">—</p>
+              )}
+            </div>
+            <div className="space-y-1 border-l pl-6 pr-6">
+              <p className="text-xs text-muted-foreground">Plano</p>
+              {planoLabel ? (
+                <Badge variant="secondary">{planoLabel}</Badge>
+              ) : (
+                <p className="text-sm font-medium">—</p>
+              )}
+            </div>
+            <div className="space-y-1 border-l pl-6">
+              <p className="text-xs text-muted-foreground">Status</p>
+              <Badge
+                style={{ backgroundColor: STATUS_COLOR[cliente.status] }}
+                className="text-white"
+              >
+                {STATUS_LABEL[cliente.status]}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Corpo em abas */}
-      <Tabs defaultValue="contrato" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="contrato">📄 Contrato &amp; Cobrança</TabsTrigger>
-          <TabsTrigger value="faturas">💰 Faturas</TabsTrigger>
+      <Tabs defaultValue="visao-geral" className="space-y-4">
+        <TabsList variant="line" className="flex-wrap">
+          <TabsTrigger value="visao-geral">🏠 Visão geral</TabsTrigger>
+          <TabsTrigger value="alertas">
+            🔔 Alertas{alertas.length > 0 && ` (${alertas.length})`}
+          </TabsTrigger>
+          <TabsTrigger value="financeiro">💰 Financeiro</TabsTrigger>
           <TabsTrigger value="contas">📊 Contas de anúncio</TabsTrigger>
-          <TabsTrigger value="checklist">✅ Checklist</TabsTrigger>
           <TabsTrigger value="tarefas">
             🗒️ Tarefas{tarefasFicha.abertas.length > 0 && ` (${tarefasFicha.abertas.length})`}
           </TabsTrigger>
-          <TabsTrigger value="onboarding">🚀 Onboarding</TabsTrigger>
-          <TabsTrigger value="retencao">
-            {cliente.status === 'em_aviso' ? '🚨' : '🛟'} Retenção
+          <TabsTrigger value="processos">
+            {cliente.status === 'em_aviso' ? '🚨' : '🔄'} Processos
           </TabsTrigger>
-          <TabsTrigger value="acompanhamento">📝 Acompanhamento</TabsTrigger>
           <TabsTrigger value="documentos">📎 Documentos</TabsTrigger>
         </TabsList>
 
-        {/* Aba: Contrato & Cobrança (dados REAIS) */}
-        <TabsContent value="contrato" className="space-y-6">
+        {/* Aba: Visão geral (dados REAIS já carregados) */}
+        <TabsContent value="visao-geral" className="space-y-4">
+          <VisaoGeralCliente
+            cliente={cliente}
+            clienteId={id}
+            segmentoLabel={cliente.segmento ?? NICHO_LABEL[cliente.nicho]}
+            gestorNome={gestorNome}
+            gestorFoto={gestorFoto}
+            servicos={servicos}
+            contratoAtual={contratoAtual}
+            historico={historico}
+            contas={contasDoCliente}
+            acompanhamentos={acompanhamentos}
+            tarefasAbertas={tarefasFicha.abertas}
+            documentos={docsCliente}
+          />
+        </TabsContent>
+
+        {/* Aba: Alertas (notificações do cliente, antes empilhadas no topo) */}
+        <TabsContent value="alertas" className="space-y-3">
+          {alertas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nenhum alerta ativo para este cliente.
+            </p>
+          ) : (
+            alertas.map((alerta) => (
+              <div
+                key={alerta.id}
+                className={`rounded-lg border border-l-4 bg-secondary/40 p-3 ${SEVERIDADE_BORDA[alerta.severidade]}`}
+              >
+                <p className="text-sm font-medium">{alerta.titulo}</p>
+                <p className="text-sm text-muted-foreground">{alerta.detalhe}</p>
+              </div>
+            ))
+          )}
+        </TabsContent>
+
+        {/* Aba: Financeiro — contrato + cobrança + faturas (dados REAIS) */}
+        <TabsContent value="financeiro" className="space-y-6">
           <section className="space-y-4 rounded-xl border bg-secondary/40 p-6">
             <div className="flex items-center gap-2">
               <h2 className="text-[20px] leading-tight font-semibold">Contrato Atual</h2>
@@ -556,11 +610,8 @@ export default async function ClienteDetalhePage({
             <h2 className="text-[20px] leading-tight font-semibold">💳 Cobrança</h2>
             <CobrancaCliente clienteId={id} modoCobranca={cliente.modoCobranca} cobrancas={cobrancas} />
           </section>
-        </TabsContent>
 
-        {/* Aba: Faturas (tabela cobrancas — Fase 5, dados REAIS) */}
-        <TabsContent value="faturas" className="space-y-4">
-          <section className="space-y-4">
+          <section className="space-y-4 border-t pt-6">
             <h2 className="text-[20px] leading-tight font-semibold">Faturas</h2>
             <FaturasCliente
               clienteId={id}
@@ -682,31 +733,14 @@ export default async function ClienteDetalhePage({
           )}
         </TabsContent>
 
-        {/* Aba: Checklist (dados REAIS, persistidos) */}
-        <TabsContent value="checklist" className="space-y-4">
-          <ChecklistCliente
-            clienteId={id}
-            itens={checklist.map((i) => ({
-              id: i.id,
-              tarefa: i.tarefa,
-              frequencia: i.frequencia,
-              concluido: i.concluido,
-            }))}
-          />
-        </TabsContent>
-
         {/* Aba: Tarefas do cliente (dados REAIS — tabela tarefas) */}
         <TabsContent value="tarefas" className="space-y-4">
           <TarefasCliente abertas={tarefasFicha.abertas} historico={tarefasFicha.historico} />
         </TabsContent>
 
-        {/* Aba: Onboarding (Fase 6 do funil) */}
-        <TabsContent value="onboarding" className="space-y-4">
+        {/* Aba: Processos — Onboarding + Retenção + Saída (fluxos guiados) */}
+        <TabsContent value="processos" className="space-y-4">
           <OnboardingCliente clienteId={cliente.id} processo={processoOnboarding} />
-        </TabsContent>
-
-        {/* Aba: Retenção / gestão de crise */}
-        <TabsContent value="retencao" className="space-y-4">
           <RetencaoCliente
             clienteId={cliente.id}
             clienteNome={cliente.nome}
@@ -720,36 +754,6 @@ export default async function ClienteDetalhePage({
             motivoEncerramento={cliente.motivoEncerramento}
             processo={processoSaida}
           />
-        </TabsContent>
-
-        {/* Aba: Acompanhamento (dados REAIS, persistidos) */}
-        <TabsContent value="acompanhamento" className="space-y-4">
-          {acompanhamentos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum registro de acompanhamento ainda.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {acompanhamentos.map((registro) => (
-                <li key={registro.id} className="flex gap-3 rounded-lg border bg-background p-3">
-                  <Avatar className="size-8 shrink-0">
-                    <AvatarFallback>{registro.autorNome.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-1">
-                    <p className="text-sm">
-                      <span className="font-medium">{registro.autorNome}</span>{' '}
-                      <span className="text-muted-foreground">
-                        · {formatarDataHora(registro.createdAt)}
-                      </span>
-                    </p>
-                    <p className="text-sm text-muted-foreground">{registro.nota}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <AcompanhamentoForm clienteId={id} />
         </TabsContent>
 
         {/* Aba: Documentos */}

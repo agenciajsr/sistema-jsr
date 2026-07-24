@@ -10,6 +10,13 @@ export const clienteSchema = z.object({
   nicho: z.enum(['ecommerce', 'negocio_local', 'infoproduto'], {
     message: 'Selecione um nicho válido',
   }),
+  // Ramo específico do cliente (ex: "Clínica de Estética") e o que ele vende
+  // (ex: "Emagrecimento") — texto livre, um nível abaixo do nicho.
+  segmento: z.string().optional(),
+  principalServico: z.string().optional(),
+  // Tags livres separadas por vírgula no form (ex: "Estética, Laser, Alto
+  // potencial") — convertidas para array em clienteParaDb (coluna jsonb tags).
+  tagsTexto: z.string().optional(),
   status: z.enum(['ativo', 'pausado', 'encerrado', 'aguardando_inicio', 'em_aviso']).default('ativo'),
   // Perfil interno da agência (perfil mãe): fica fora das métricas de negócio.
   interno: z.boolean().default(false),
@@ -49,6 +56,16 @@ export const clienteSchema = z.object({
   origemCliente: z.string().optional(),
   objetivoPrincipal: z.string().optional(),
   linkDrive: z.string().url('Link inválido').optional().or(z.literal('')),
+  // Pastas do Drive nomeadas: [{nome, url}]. Cada linha exige nome + URL válida;
+  // remova linhas vazias antes de salvar (o form mostra o erro por linha).
+  pastas: z
+    .array(
+      z.object({
+        nome: z.string().min(1, 'Informe o nome da pasta'),
+        url: z.string().url('Link inválido'),
+      }),
+    )
+    .default([]),
 }).superRefine((v, ctx) => {
   if (v.status === 'encerrado' && !v.motivoEncerramento?.trim()) {
     ctx.addIssue({

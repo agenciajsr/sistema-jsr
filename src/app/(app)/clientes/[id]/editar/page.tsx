@@ -5,6 +5,7 @@ import { ClienteForm } from '@/components/cliente-form'
 import { BotaoVoltar } from '@/components/ui/botao-voltar'
 import { db } from '@/lib/db'
 import { clientes } from '@/lib/db/schema'
+import { getCurrentUser } from '@/lib/auth/session'
 
 // Backstop contra o timeout de 300s da Vercel: nunca deixa a função rodar
 // mais que 25s. Coerente com connect_timeout(10s) + statement_timeout(12s).
@@ -17,12 +18,14 @@ export default async function EditarClientePage({
 }) {
   const { id } = await params
 
-  const cliente = await db.query.clientes.findFirst({
-    where: eq(clientes.id, id),
-  })
+  const [cliente, usuario] = await Promise.all([
+    db.query.clientes.findFirst({ where: eq(clientes.id, id) }),
+    getCurrentUser(),
+  ])
   if (!cliente) {
     notFound()
   }
+  const isAdmin = usuario?.role === 'admin'
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-8">
@@ -33,9 +36,13 @@ export default async function EditarClientePage({
       <ClienteForm
         mode="editar"
         clienteId={cliente.id}
+        isAdmin={isAdmin}
         defaultValues={{
           nome: cliente.nome,
           nicho: cliente.nicho,
+          segmento: cliente.segmento ?? '',
+          principalServico: cliente.principalServico ?? '',
+          tagsTexto: (Array.isArray(cliente.tags) ? (cliente.tags as string[]) : []).join(', '),
           status: cliente.status,
           // Preserva o perfil interno ao editar — sem isto o campo cairia no
           // default (false) do Zod e salvar desmarcaria o perfil mãe.
@@ -65,6 +72,8 @@ export default async function EditarClientePage({
           notas: cliente.notas ?? '',
           origemCliente: cliente.origemCliente ?? '',
           objetivoPrincipal: cliente.objetivoPrincipal ?? '',
+          linkDrive: cliente.linkDrive ?? '',
+          pastas: ((cliente.pastas ?? []) as { nome: string; url: string }[]),
         }}
       />
     </div>

@@ -15,6 +15,9 @@ export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(), // == auth.users.id, setado explicitamente no insert
   nome: text('nome').notNull(),
   role: roleEnum('role').notNull().default('membro'),
+  // URL PÚBLICA da foto do usuário (bucket crm-fotos, path perfis/{id}.{ext}).
+  // Exibida no /perfil e como "Responsável" na ficha do cliente. Migration 0045.
+  fotoUrl: text('foto_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -22,6 +25,12 @@ export const clientes = pgTable('clientes', {
   id: uuid('id').primaryKey().defaultRandom(),
   nome: text('nome').notNull(),
   nicho: nichoEnum('nicho').notNull(),
+  // Segmento = ramo ESPECÍFICO do negócio do cliente (ex: "Clínica de Estética"),
+  // um nível abaixo do nicho (negocio_local). Texto livre. Migration 0045.
+  segmento: text('segmento'),
+  // O que o CLIENTE vende (ex: "Emagrecimento") — NÃO confundir com os serviços
+  // que a AGÊNCIA presta (esses ficam em servicos_contratados). Migration 0045.
+  principalServico: text('principal_servico'),
   status: clienteStatusEnum('status').notNull().default('ativo'),
   /** Cliente INTERNO = a própria agência (perfil mãe). Aparece no tráfego/campanhas
    *  (a conta de anúncio dela é vinculada aqui), mas fica FORA das métricas de
@@ -48,6 +57,16 @@ export const clientes = pgTable('clientes', {
   // Online
   instagram: text('instagram'),
   siteUrl: text('site_url'),
+  // URL PÚBLICA da logo do cliente (bucket crm-fotos, path clientes/{id}.{ext},
+  // upsert — trocar a logo sobrescreve). Exibida no avatar do header da ficha
+  // (mockup modelo_cliente_novo). Migration 0044.
+  logoUrl: text('logo_url'),
+  // Pastas do Drive nomeadas: jsonb [{nome, url}] — cadastradas no editar e
+  // exibidas no card "Pastas e documentos" com link direto. Migration 0045.
+  pastas: jsonb('pastas'),
+  // Tags livres do cliente (jsonb array de strings, ex: ["Estética","Laser"]) —
+  // badges no card Dados de cadastro. Migration 0046.
+  tags: jsonb('tags'),
   // Pagamento
   formaPagamento: formaPagamentoEnum('forma_pagamento'),
   diaPagamento: integer('dia_pagamento'),
